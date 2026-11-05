@@ -30,7 +30,7 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
       ['2026-10-03', -zl(12.5), '', 'impuls']
     ])
     expect(rows[1]!.category).toBe('Jedzenie · zakupy spożywcze')
-    expect(operationsCsv(rows).split('\r\n')[2]).toBe('2026-10-03;09:15;mBank;Wydatek;-12,50;Jedzenie · zakupy spożywcze;Biedronka;;;impuls;;')
+    expect(operationsCsv(rows).split('\r\n')[2]).toBe('2026-10-03;09:15;mBank;Wydatek;-12,50;Jedzenie · zakupy spożywcze;Biedronka;;;impuls;;;;')
     expect(operationsSheet(rows).rows[1]![4]).toBe(-12.5)
     expect(xlsxParts([operationsSheet(rows)]).map((p) => p.path)).toContain('xl/worksheets/sheet1.xml')
     // An income carrying two members' money (D81): whose it is, no categories of its parts.
@@ -48,9 +48,10 @@ describe('eksport (E8): CSV dla polskiego Excela, Excel, raport do PDF', () => {
     const t = tx('2026-10-05', -zl(20), { tags: ['Wakacje 2027'], splits: [split(['wakacje 2027', 'Paliwo']), split()] })
     const rows = operationRows([t], s.categories, s.accounts, '2026-10-01', '2026-10-31', s.household.members)
     expect(rows[0]!.tags).toBe('#Wakacje 2027 #Paliwo')
-    expect(operationsCsv(rows).split('\r\n')[0]!.endsWith(';Notatka;Tagi')).toBe(true)
-    expect(operationsCsv(rows).split('\r\n')[1]!.endsWith(';#Wakacje 2027 #Paliwo')).toBe(true)
-    expect(operationsSheet(rows).rows[0]!.at(-1)).toBe('#Wakacje 2027 #Paliwo')
+    // AP-48: the amount in a currency after the tags.
+    expect(operationsCsv(rows).split('\r\n')[0]!.endsWith(';Notatka;Tagi;Kwota w walucie;Waluta')).toBe(true)
+    expect(operationsCsv(rows).split('\r\n')[1]!.endsWith(';#Wakacje 2027 #Paliwo;;')).toBe(true)
+    expect(operationsSheet(rows).rows[0]!.at(-3)).toBe('#Wakacje 2027 #Paliwo')
   })
 
   it('miesiące: pensja, koszty, wpływy, na plus', () => {

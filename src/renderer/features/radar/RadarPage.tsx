@@ -27,10 +27,11 @@ import { useMembers } from '../household/actions'
 import { isOpeningItem, memberName, openText } from '@shared/calc/household'
 import { openOperation, openRefundables } from '../operations/state'
 import { closeReturn, useReturns } from '../sensors/state'
-import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, type NewLoan } from './actions'
+import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, typedLoanRate, type NewLoan } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 import { useFocusRecord } from '../../components/focus'
 import { BuoysPanel, NewBuoyPanel } from './Buoys'
+import { PayoffPanel } from './Payoff'
 import { useFuture } from './future'
 import { RadarCalendar } from './Calendar'
 import { KIND_LABEL } from './labels'
@@ -125,6 +126,8 @@ export function RadarPage() {
                 )}
               </div>
             </Panel>
+            {/* The taken loans' payoff (AP-41): shown while one is open – a proposal, nothing stored. */}
+            <PayoffPanel fleet={fleet} readOnly={readOnly} />
             {!readOnly && <NewLoanPanel today={fleet.today} />}
             <Panel title="Należności" testId="radar-receivables">
               <div className="flex flex-col gap-1 text-[12px]">
@@ -476,7 +479,8 @@ function NewLoanPanel({ today }: { today: string }) {
     installments: 1,
     firstDue: sameDayNextMonth(today),
     withOperation: true,
-    withContainer: true
+    withContainer: true,
+    rate: null
   })
   // Kept while another screen is looked at (N36).
   const [o, setO, clearO] = useDraft<NewLoan>('radar:newLoan', blank)
@@ -518,6 +522,26 @@ function NewLoanPanel({ today }: { today: string }) {
         {taken && (
           <Field label="Do spłaty razem" labelWidth={130} hint="Z odsetkami; puste = kwota pożyczki.">
             <AmountField className="h-[24px] w-[120px]" value={o.total || null} allowEmpty onChange={(v) => set({ total: v ?? 0 })} aria-label="Do spłaty razem" data-testid="loan-total" />
+          </Field>
+        )}
+        {taken && (
+          <Field label="Oprocentowanie" labelWidth={130} hint="Roczne z umowy, w procentach – tylko dla planu spłaty; puste = nieznane.">
+            <div className="flex items-center gap-1.5">
+              <NumberField
+                className="h-[24px] w-[70px]"
+                value={o.rate ?? null}
+                decimals={2}
+                step={0.25}
+                range={[0, 100]}
+                isValid={(v) => v == null || (v >= 0 && v <= 100)}
+                commitOnBlur
+                onChange={(v) => set({ rate: typedLoanRate(v) })}
+                placeholder="—"
+                aria-label="Oprocentowanie roczne"
+                data-testid="loan-rate"
+              />
+              <span className="text-muted">% rocznie</span>
+            </div>
           </Field>
         )}
         <Field label="Data i konto" labelWidth={130}>

@@ -51,6 +51,8 @@ paths:
   zapisuj (1.15.9 by je zgubiło). Tożsamość – cały wiersz pliku (`rowText`, w limicie 2000 z odciskiem), nigdy role
   kolumn; rodzaj operacji słowami, które czyta `classify.ts` (`readsOperation`, `operationOf`) – nowe słowo rozpoznania
   dodaj w `classify.ts` (`isTransferOperation`…), nie listą w `csv.ts`.
+- Kwota w walucie (AP-48, T494): import jej nie pisze – znane pliki mBanku jej nie mają (wiersz w innej walucie pominięty);
+  usuwana kopia oddaje ją zostającej operacji (`takeUserData`), jak notatkę.
 
 ## Rozpoznanie
 - Kolejność: reguła (`findRule`: marka → cała nazwa → „zawiera” → słowo użytkownika; tryb `amount` z `maxAmount`) →

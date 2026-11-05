@@ -4108,3 +4108,196 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zdanie o zasadzie „tylko do odczytu, nie zapisuj, gdy aplikacja działa” i „Opis formatu folderu i przykładowy skrypt ›”,
   otwiera w przeglądarce `FOLDER_FORMAT_PAGE` (plik w publicznym repozytorium – D61; `shared/update.ts`). Opisu nie ma
   w aplikacji (bez sieci link się nie otworzy) – w Ustawieniach, nie w F1, bo dotyczy folderu.
+- **T480** Plan spłaty pożyczek (1.17.0, R2 – AP-41, D101 (2) – bez kart kredytowych i rat 0 %): tylko pożyczki wzięte,
+  otwarte (bez `closedAt`, do spłaty > 0), najstarsza pierwsza; udzielone to należności – poza planem. Panel „Plan spłaty
+  pożyczek” na Radarze pod „Pożyczki”, gdy jest choć jedna taka pożyczka. Propozycja: liczy czysta funkcja
+  `calc/payoff.ts` z `LoanState` silnika (do spłaty, raty niepokryte – to samo pokrycie rat spłatami co wiersz Radaru), nic
+  nie jest zapisywane, silnik, warstwy, dług w zasięgu i kontenery rat w Ładowni bez zmian. Bez „Zastosuj”: boja nadpłaty
+  po „Wykonaj teraz” byłaby wydatkiem z energii, nie spłatą pożyczki – nadpłatę zapisuje się jak dotąd w wierszu pożyczki
+  („zapłać ratę”, przy racie w Ładowni „z osłon (nadpłata)”). Wejście: „Nadpłata co miesiąc” i „jednorazowo teraz” (szkic
+  okna – zostaje przy przejściu do innego ekranu, do zmiany folderu albo restartu), przy „wolnym do decyzji” > 0 – „Osłony ·
+  wolne do decyzji … – wstaw jako jednorazową” (tylko propozycja). Wynik: przy pożyczce do spłaty, następna rata i
+  oprocentowanie; porównanie „bez nadpłat / lawina / kula śnieżna” – spłata wszystkich (mm.rrrr, „nigdy”), odsetki, mniej
+  odsetek, krócej o, nadpłata najpierw, spłata każdej pożyczki; miesiąc po miesiącu wybranego wariantu (wpłata, w tym
+  nadpłata, zostaje, „spłacona”; po 100). Bez kwoty nadpłat – tylko harmonogram i zdanie, co wpisać. Ukryte kwoty – maska.
+  Telefon: ten sam panel (Radar to ekran komputera – mieści się w szerokości iPhone'a, oprocentowanie idzie na OneDrive).
+- **T481** Odsetki i zaokrąglenia planu spłaty (1.17.0, R2 – AP-41): oprocentowanie nominalne roczne w procentach – pole
+  `rate` pożyczki (T484), brak = nieznane. Raty harmonogramu zawierają odsetki, więc kapitał na start planu (bieżący miesiąc)
+  to wartość obecna rat niepokrytych przy tym oprocentowaniu – wstecz od ostatniego miesiąca, do grosza w każdym:
+  (zostaje po miesiącu + raty miesiąca) × 120 000 ÷ (120 000 + punkty bazowe, 1 % = 100); bez oprocentowania (albo 0 %)
+  i bez harmonogramu – do spłaty. Co miesiąc najpierw odsetki od tego, co zostało: saldo × punkty bazowe ÷ 120 000
+  (oprocentowanie ÷ 12), do grosza, połówki w górę – także pełny pierwszy miesiąc; potem raty miesiąca (rata z miesiąca
+  przed planem – zaległa – w pierwszym); ostatnia rata harmonogramu płaci całą resztę (różnica zaokrągleń – reszta w
+  ostatniej części: 2 × 100,23 zł przy 12 % to 100,23 + 100,24 zł), potem nadpłata (T482). Wariant bez nadpłat to więc
+  harmonogram; odsetki tylko z pożyczek z oprocentowaniem („—”, gdy żadna go nie ma). Uproszczenie: miesiąc = 1/12 roku,
+  nie dni jak w banku – liczby banku mogą różnić się o grosze. Przegląd R2: oprocentowanie wpisane dokładniej niż 0,01 %
+  zaokrągla się połówką w górę od wpisanej liczby dziesiętnej (7,255 → 7,26 %, `loanRateOf`) i nigdy po cichu – przy polu
+  komunikat „Oprocentowanie liczy się z dokładnością do 0,01 % – przyjęte 7,26%.” (plan i „Nowa pożyczka”, zapis po
+  wyjściu z pola – AP-15).
+- **T482** Strategie planu spłaty (1.17.0, R2 – AP-41): lawina – najpierw najwyższe oprocentowanie (nieznane = 0 %), przy
+  równym mniejsze do spłaty; kula śnieżna – najpierw najmniejsze do spłaty (kwota z Radaru, z odsetkami harmonogramu), przy
+  równym wyższe oprocentowanie; dalej starsza pożyczka, id; kolejność stała przez cały plan. Ponad raty każdego miesiąca
+  idzie nadpłata co miesiąc, w pierwszym także jednorazowa, i raty, które harmonogram ma jeszcze dla pożyczek spłaconych
+  wcześniej (oraz część raty niepotrzebna pożyczce, którą miesiąc kończy) – kula się toczy; po kolei, każdej najwyżej to,
+  co zostało. Plan nigdy nie chce w miesiącu więcej niż harmonogram + nadpłata (+ jednorazowa w pierwszym): pożyczka
+  spłacona zgodnie z harmonogramem nie zostawia raty na następne (jej kontener wychodzi z Ładowni, pieniądze wracają do
+  budżetu) – do potwierdzenia (klasyczna kula trzyma całą miesięczną sumę rat do spłaty wszystkich). Bez nadpłaty i
+  jednorazowej strategie to harmonogram (nic, także grosz reszty, nie przechodzi na inną pożyczkę). „Nigdy”: pożyczka bez
+  harmonogramu bez nadpłat albo odsetki nie mniejsze niż pieniądze ponad raty – plan kończy się na tym miesiącu (najwyżej
+  600 miesięcy). Przegląd R2: koniec planu pożyczka po pożyczce, nigdy po sumie sald – po ostatniej racie harmonogramów
+  płaci już tylko nadpłata co miesiąc, cała pierwszej otwartej pożyczce w kolejności (dalszym dopiero po jej spłacie);
+  plan kończy się, gdy nadpłaty nie ma albo odsetki tej pożyczki nie są mniejsze od niej (ona i dalsze – „nigdy”). Mała
+  pożyczka spłacana nadpłatą ma więc datę, choć duża obok rośnie (100 000 zł przy 24 % i 3 000 zł, 1 500 zł miesięcznie:
+  kula – 3 000 zł w drugim miesiącu, 100 000 zł „nigdy”; lawina – obie „nigdy”), a każda pożyczka, którą pula zmniejsza,
+  ma tę samą datę co liczenie przez cały horyzont (test własności na losowych zestawach). Plan bez końca nie ma sumy
+  odsetek – „Odsetki” i „Mniej odsetek” to „—”.
+- **T483** Oprocentowanie w oknie (1.17.0, R2 – AP-41): pole „% rocznie” przy pożyczce w planie (zapis po wyjściu z pola
+  albo Enter, Esc cofa; folder tylko do odczytu albo wpis nowszej wersji – sam tekst) i „Oprocentowanie” w „Nowa pożyczka”
+  przy „Biorę pożyczkę” (puste = nieznane, przy udzielonej nie ma pola). Zapis w rekordzie pożyczki (`setLoanRate`) do
+  0,01 %, poza 0–100 – odmowa z komunikatem przy polu; poprzednia wartość w historii wpisu (zwykła zmiana pola, bez toastu
+  „Cofnij”). Plan liczy się z `useFleet` (`fleet.loans`, `fleet.month`) – razem z silnikiem, bez osobnego klucza.
+- **T484** Pole `rate` pożyczki (1.17.0, R2 – AP-41): `loans/ULID.json` – opcjonalna liczba 0–100 albo `null`, addytywnie,
+  bez podbijania `SCHEMA_VERSION`; plik bez niego zostaje bez zmian, starsza wersja go zachowuje (`z.looseObject`) i nie
+  czyta; wartość błędna – nieznane (`catch`). Nie jest kwotą (poza `AMOUNT_FIELDS`); w historii i konfliktach
+  „Oprocentowanie (% rocznie)”; w `docs/format-folderu.md`. Silnik (`computeFleet`) i wyrocznia go nie czytają – test:
+  ten sam stan silnika z polem i bez niego.
+- **T485** Prognoza wieloletnia (1.17.0, R2 – AP-44, D99: bez IKE / IKZE / PPK – F32 odrzucone, D88): `calc/forecast.ts`
+  `forecast` – czysta, deterministyczna, 1–10 lat (`FORECAST_YEARS`), trzy scenariusze (ostrożny, bazowy, optymistyczny).
+  **Rok 1 to kurs na 12 miesięcy** (`course` z tym samym wejściem `courseInputOf` – stan silnika teraz, resztka miesiąca
+  z energii, boje, spłaty pożyczek udzielonych; wpływy z pracy – mediana 12 miesięcy jak kurs „bez wypłat z XTB”, dostawy
+  scenariusza); test: 12 pierwszych miesięcy = miesiące kursu. Każdy następny rok – te same reguły miesięcy kursu (pensja
+  z osłon 1. dnia, raty celów, koszty po średniej, dokowanie D13) od końca roku poprzedniego, z założeniami roku: wpływy
+  z pracy × (1 + wzrost)^(rok − 1), koszty i pensja planu × (1 + inflacja)^(rok − 1) (pensja płaci koszty – jak propozycja
+  pensji ze średnich kosztów; cele warstw rosną z nią), dostawy z ICTTJ rocznie ÷ 12 co miesiąc – **tylko założenie
+  kapitana** (domyślnie „bez dostaw”; prognoza nie czyta ICTTJ ani wyników tradingu), wydatki jednorazowe rocznie
+  w ostatnim miesiącu roku z osłon (kadłub, gdy brakuje – jak zakup manewru), w cenach dziś (× inflacja). Boje w swoich
+  miesiącach na cały horyzont (roczna co roku, kwoty bez inflacji – wpisane przez kapitana), jak w kursie.
+- **T486** Prognoza – pieniądze poza warstwami kursu, ładownia i pożyczki (1.17.0, R2 – AP-44): reszta warstw (energia,
+  zbiorniki, depozyt domowników, łupy, cele bez pobierania) zostaje na stanie dziś – zbiorniki na koniec roku w tym samym
+  punkcie cyklu, płatności opłat są w średnich kosztach; minus to, co resztka miesiąca jeszcze wyda z energii
+  (`min(needs, left)` – T390) i ze zbiorników (opłaty tego miesiąca – `feesDue`, wydzielone z `restNeeds` bez zmiany jego
+  wyniku). Pożyczka udzielona: raty harmonogramu nieopłacone wracają w swoich miesiącach (zaległa – w tym, jak kurs),
+  należność maleje o nie. Pożyczka wzięta: rata to opłata ładowni – w roku 1 w średnich kosztach (reguła kursu), od roku 2
+  w miesiącach harmonogramu, a koszty bez części, którą średnia ma z rat (`loanCosts`: płatności kontenerów pożyczek
+  wziętych w miesiącach średniej ÷ ich liczba, także spłaconej już pożyczki; przyjęte koszty – 0) – inaczej po ostatniej
+  racie prognoza płaciłaby ją dalej. Dług na koniec roku – jak zasięg kursu (dług minus raty do miesiąca).
+  **Przegląd R2 (zmienia zdanie o racie w roku 1; także kurs):** pożyczka wzięta bez kontenera (spłata z osłon) w roku 1
+  nie wychodziła z pieniędzy, a dług malał – siła floty rosła o raty. Teraz rata każdej pożyczki wziętej wychodzi w swoim
+  miesiącu w każdym roku, w kursie też (`courseInputOf` → `extras`; zaległa – w tym miesiącu; rata tego miesiąca pożyczki
+  z kontenerem w ładowni to jego termin w `restNeeds`, nie drugi raz), a miesiące kursu i prognozy wydają średnie koszty
+  bez części, którą są płatności kontenerów pożyczek wziętych (`CourseInput.loanCosts`; kontenery z `courseInputOf`,
+  indeks płatności kontenerów po miesiącu raz na listę operacji – `containerCostsByMonth`, jak `costsByMonth`). Zasięg
+  i cel kadłuba w kursie czytają średnią całą (Mostek), od roku 2 prognozy – koszty roku bez rat. Testy: kurs = silnik
+  w miesiącu z ratą (spłata z osłon i rata z kontenera), scenariusz recenzji (12 000 zł, 12 rat: siła floty 8 000 zł po
+  roku, nie 20 000).
+  **Przegląd R2, runda 2 (zmienia „rata tego miesiąca … w `restNeeds`” i „od roku 2 – koszty roku bez rat”):**
+  (1) stan opłat (`cargoStatuses`) pomija kontenery pożyczek, więc `restNeeds` raty tego miesiąca nie miał – rata
+  z kontenera znikała z kursu (a dług malał). Pieniądze pożyczek idą teraz osobno od boi: `CourseInput.loanFlows`
+  (`loanFlowsOf` – na miesiąc `out` – rata operacją pożyczki, z osłon; `cargo` – rata kontenera w ładowni, z energii
+  miesiąca ponad nią z osłon, jak `spendEnergy` silnika; `back` – rata pożyczki udzielonej wraca do osłon, bez dokowania
+  – T70); rata kontenera tego miesiąca (także zaległa) – w resztce miesiąca razem z `energy.needs` (`restEnergy`, ta sama
+  liczba w prognozie: „wyda z energii”). (2) Przyjęte koszty (`costs.source` 'assumed') zastępują średnią – mają w sobie
+  ratę: `loanCosts` = rata każdego kontenera pożyczki wziętej w ładowni (niezarchiwizowanego, przed końcem) w tym
+  miesiącu (albo w pierwszym, gdy zaczyna się później) – inaczej miesiąc wydawał przyjęte koszty całe i ratę. (3) Od
+  roku 2 prognoza podaje kursowi całą średnią × inflacja i `loanCosts` = cała − wydatki bez rat: cel kadłuba i zasięg jak
+  w roku 1 (Mostek), bez skoku na granicy roku. (4) Rata wzięta i spłata udzielona w jednym miesiącu nie znoszą się
+  (dawniej jedna suma `extras` – kurs nie widział ani raty, ani spłaty, a silnik płaci z osłon/kadłuba i oddaje do osłon):
+  najpierw płatności (najniższy punkt po nich), potem to, co wraca. Testy: `forecast-r2-review2.test.ts` (kurs = silnik
+  w listopadzie z ratą kontenera i w grudniu z ratą i spłatą, przyjęte koszty, cel kadłuba roku 2).
+- **T487** Siła floty netto na koniec roku (1.17.0, R2 – AP-44): jak przegląd roczny (F24, T449) – pieniądze na kontach
+  (osłony, kadłub i cele z kursu + reszta warstw – T486 – minus rezerwa podatkowa: PIT-38 płatny w ciągu roku) + należności
+  (saldo domowników jak dziś, pożyczki udzielone jeszcze otwarte) − dług − **wszystkie braki dotąd** (`short` kursu:
+  miesiąc kończy osłony na zerze, a tego, czego zabrakło, kapitan i tak nie ma – siła floty może spaść pod zero). „Teraz”
+  = konta + należności − dług (test: = przegląd roczny przez `netAdjustments`). Wynik też: miesiąc osiągnięcia każdego celu
+  (pierwszy w całej prognozie; pełny teraz – „teraz”), „Osłony do zera” – pierwszy miesiąc z najniższym punktem osłon 0
+  (resztę płaci kadłub albo brakuje), „Brakuje na koszty od” – pierwszy miesiąc z brakiem (resztka tego miesiąca – „teraz”),
+  zasięg na koniec roku. **Przegląd R2:** „Osłony do zera” – „teraz”, gdy resztka tego miesiąca je opróżnia (najniższy
+  punkt osłon w resztce – `Course.restLow`: po tym, co płaci z nich, przed tym, co wpływa), spójnie z „Brakuje na koszty od”.
+- **T488** Założenia scenariuszy w `fi.json` (1.17.0, R2 – AP-44; addytywnie, bez podbijania `SCHEMA_VERSION`):
+  `settings.intel.forecast.{cautious|base|optimistic}` = `{ wages, inflation, deliveries, oneOff }` (procenty rocznie
+  od −50 do 100; grosze ≥ 0), brak scenariusza – jego założenia domyślne (`FORECAST_DEFAULTS`: ostrożny 0 % / 5 %, bazowy
+  4 % / 3 %, optymistyczny 7 % / 2,5 %, bez dostaw i wydatków jednorazowych); pole spoza zakresu – cały scenariusz
+  domyślnie (`.catch(undefined)`), nieznane pola zachowane (`z.looseObject`). W `fi.json`, nie na komputerze: założenia to
+  plan kapitana jak plan miesiąca i CPI wpisane ręcznie (`settings.intel.cpi`) – mają być te same na każdym komputerze
+  i w folderze na OneDrive; zmiana przez scalanie trójstronne jak inne ustawienia (nazwy pól w `merge.ts`, kwoty
+  w `AMOUNT_FIELDS`, opis w `docs/format-folderu.md`). Liczba lat na ekranie (3 / 5 / 10, domyślnie 5) to wybór widoku –
+  na tym komputerze (`localStorage`, jak linia majątku). Pole zapisuje po wyjściu z pola; „domyślne” pod zmienionym
+  scenariuszem z „Cofnij” (cofa tylko, gdy scenariusz nadal jest domyślny – AP-22). **Przegląd R2 (zmienia „pole spoza
+  zakresu – cały scenariusz domyślnie”):** scenariusz nieczytelny zostaje w pliku w swojej postaci (schemat
+  `z.union([założenia, z.unknown()])` – następny zapis `fi.json` go nie gubi), prognoza liczy go z założeniami domyślnymi
+  i mówi to pod tabelą założeń (`unreadableScenarios`), „domyślne” jest i pod nim. Pola kwot odmawiają ponad granicę
+  schematu (`FORECAST_MAX_AMOUNT` – 100 000 000 zł) z komunikatem, procenty – zakres schematu (`FORECAST_PCT_RANGE`), nic
+  nie zapisuje się po to, by przy odczycie wrócić do domyślnych. Pola nowszej wersji w scenariuszu (obok czterech) zostają:
+  zapis pola zmienia tylko cztery, „domyślne” zapisuje założenia domyślne obok nich (bez nich – scenariusz znika), „Cofnij”
+  przywraca scenariusz w całości (gdy nadal jest taki, jak „domyślne” go zostawiło).
+- **T489** Zaokrąglenia i ekran prognozy (1.17.0, R2 – AP-44): każda kwota roku zaokrąglana raz do grosza (`Math.round`)
+  od dzisiejszej – czynnik roku jako liczba zmiennoprzecinkowa, nigdy zaokrąglona kwota roku poprzedniego × wzrost (test:
+  rok 4); dostawy rocznie ÷ 12 do grosza (rok może różnić się od wpisanej kwoty o kilka groszy); pensja, koszty, wpływy
+  i wydatek jednorazowy roku – tak samo; dalej grosze jak w kursie. Wywiad – panel „Prognoza wieloletnia” pod kursem na
+  12 miesięcy: siła floty netto teraz i na końcu horyzontu w każdym scenariuszu, wykres SVG (bazowy – ciągła jasna linia,
+  ostrożny i optymistyczny – przerywana i kropkowana, pasmo między najniższym a najwyższym, legenda, dymki punktów), tabela
+  lat (dymek: konta, warstwy, należności, dług, braki, wpływy, koszty, zasięg), wiersze celów, „Osłony do zera”, „Brakuje
+  na koszty od”, zasięg na koniec, tabela założeń do edycji i podpis „Prognoza – nie gwarancja. Założenia: …” z założeniami
+  każdego scenariusza, zasadą roku 1 i granicą ICTTJ. Ukryte kwoty (Ctrl+$) – maska w tabeli, polach, dymkach i na osi.
+- **T490** Sankey miesiąca – liczby (1.17.0, R2 – AP-46; zmienia „Sankey – nie” z T294): wykres tylko układa liczby,
+  które już są (`calc/sankey.ts`), nic nie liczy od nowa. Dwa widoki: „Przychód i koszty” – przychody z pracy i dostawy
+  z ICTTJ (praca i trading netto z Bilansu paliwa), zwroty ponad zakupy kategorii (część kosztów poniżej zera – źródło,
+  nigdy wstęga ujemna) i – gdy koszty były wyższe od przychodu – „Z osłon i kadłuba” (na czerwono) → „Miesiąc” → kategorie
+  główne pod nagłówkami „Koperty codzienne” (z „Bez kategorii” – pula codzienna), „Koperty planowe”, „Bez koperty”
+  (wiersze debriefingu), „Ładownia” i „Dołożone do okrętu” (na zielono); bilans = przychód − koszty netto debriefingu
+  (= Bilans paliwa, te same operacje do dnia budżetu – AP-36). Pod nagłówkiem „Poza przychodem i kosztami” – od źródła
+  prosto do celu, obok miesiąca: zakupy ze środków celów, zakupy domowników (`financed` debriefingu), wpłaty domowników
+  (to, czego `incomeParts` nie liczy jako przychód, bez pożyczek i puli „Podatek”: zaliczki z księgi domowników do
+  depozytu, reszta do osłon i kadłuba), pożyczki (wypływy; wpływy do długu – `loanBacks`, odsetki są przychodem – T70),
+  przelewy własne poza budżet i spoza niego (dwustronny – nic; para jednostronnych w budżecie – netto) i dopłaty do XTB
+  ponad wypłaty miesiąca (trading netto poniżej zera – N4). „Pensja i energia” – energia debriefingu: pensja od siebie
+  i łupy poprzedniego miesiąca → energia → odkładki do zbiorników, raty celów, wydane (z energii i ponad nią), zostało;
+  wynik energii poniżej zera – źródło „Ponad energię – z osłon”. Poza wykresem: pula „Podatek” i PIT-38 (poza budżetem),
+  korekty sald, wpływ ujemny. Miesiąc w toku – do dziś, nazwy „(do dziś)”, „Ponad koszty (do dziś)” zamiast „Dołożone”.
+  Kategorie poniżej 1% wszystkich pieniędzy wykresu – „Pozostałe” swojej grupy (z nazwami w dymku), gdy są co najmniej
+  dwie. Test: każdy węzeł zbilansowany, koszty, przychód, bilans paliwa i energia co do grosza
+  (`tests/unit/sankey-ap46.test.ts`). Przegląd R2: czerwony „Z osłon i kadłuba” przy miesiącu to tylko jego deficyt (= Bilans
+  paliwa na minus) – pożyczki, przelewy i dopłaty do XTB z osłon mają własne źródło „Z osłon i kadłuba” pod nagłówkiem
+  „Poza przychodem i kosztami”; w kolumnie najpierw przepływy miesiąca (kategorie, Ładownia, okręt), potem ten nagłówek,
+  jego źródła w kolejności swoich celów – wstęgi się nie krzyżują; „Dostawy z ICTTJ (netto)”, gdy miesiąc miał dopłaty
+  do XTB; „Pensja i energia” – część ujemna (zwroty ponad wydatki, zwrot odkładek albo rat, pensja lub łupy poniżej zera)
+  po drugiej stronie pod własną nazwą, więc węzeł energii zawsze zbilansowany. Własność „każdy węzeł zbilansowany, sumy
+  = debriefing i Bilans paliwa, wstęgi bez krzyżowania” – na losowych miesiącach (`tests/unit/sankey-r2-review.test.ts`).
+- **T491** Sankey miesiąca – wygląd (1.17.0, R2 – AP-46): własne SVG bez biblioteki (`shared/sankeyLayout.ts` – ta sama
+  geometria na ekranie i w PDF): trzy kolumny (skąd, miesiąc / energia, dokąd), słupek i wstęga proporcjonalne do kwoty,
+  wstęga „poza przychodem i kosztami” przechodzi pod węzłem miesiąca (niewidoczny węzeł kolumny), etykiety z kwotą
+  (źródła po lewej, reszta po prawej, za długa – ucięta „…”), nagłówki grup z sumą. Wstęgi i słupki szare, akcent tylko
+  pod wskaźnikiem, zieleń / czerwień tylko dla kwot na plus / minus, kwoty `.num`, bez gradientów i cieni; dymek – nazwa,
+  kwota i procent wszystkich pieniędzy wykresu. Ukryte kwoty (Ctrl+$) – kwoty `•••`, miejsca na etykiety liczone z
+  prawdziwych kwot, więc słupki się nie ruszają. Miejsce: Raporty → Debriefing, pod „Wynik wobec planu”, miesiąc z
+  wyboru debriefingu, widok przełącznikiem (domyślnie „Przychód i koszty”, wybór do zmiany ekranu). PDF debriefingu –
+  oba widoki po „Wyniku wobec planu”, jasne barwy druku, prawdziwe kwoty (D73; `ReportSection.svg`). Okno węższe niż
+  640 px przewija wykres w bok; Raporty nie są na telefonie (D92). Przegląd R2: za długa etykieta (ekran i PDF) traci
+  koniec nazwy, nigdy kwotę (`labelText`); układ liczony raz na przepływy i szerokość (`layoutOf`) – ruch wskaźnika tylko
+  rysuje.
+- **T492** Kwota w walucie – dane (1.17.0, R2 – AP-48; „kwoty tylko w PLN” bez zmian): pole operacji `foreign`
+  (`{ amount, currency }`, addytywnie, bez podbijania `SCHEMA_VERSION`; starsza wersja je zachowuje – `looseObject`) –
+  tylko informacja dla użytkownika (wyjazd). `amount` – setne części jednostki waluty dla każdej waluty (jak grosze:
+  45,00 EUR = 4500, także waluty bez groszy – 1 500 JPY = 150000; waluty z trzema miejscami zaokrąglane do setnych),
+  zawsze powyżej zera – kierunek daje kwota operacji; `currency` – kod ISO 4217 (trzy wielkie litery); wartość, która
+  nimi nie jest, jest pomijana (`catch`), operacja zostaje. Silnik, warstwy, sumy, raporty i kwoty w złotych eksportów
+  go nie czytają (test: ten sam stan silnika z polem i bez). Kurs = złote ÷ kwota w walucie, tylko pokazywany (cztery
+  miejsca, „kurs 4,3000 zł za 1 EUR”), nigdzie nie zapisywany. Historia i konflikty: polskie nazwy pól, kwota jak pole
+  ją pisze („45,00”, ukryta z kwotami – `ValueText.foreign`), nigdy setne ani złote. Duplikat usunięty przy imporcie oddaje
+  ją zostającej operacji (`takeUserData`), jak notatkę. Przegląd R2: ścieżka kwoty w walucie – ta sama reguła co kwot
+  w groszach (`FOREIGN_AMOUNT_FIELDS` obok `AMOUNT_FIELDS`, jedno dopasowanie ścieżek).
+- **T493** Kwota w walucie – okno (1.17.0, R2 – AP-48): edytor operacji (każdy rodzaj) i szybki wpis (także na
+  telefonie) – przy kwocie zwinięte „+ kwota w walucie” (klik; poza kolejnością Tab – od kwoty do kontrahenta dalej
+  jeden Tab, AP-20, AP-34); rozwinięte: kwota (wpisywana jak złote), kod waluty (lista częstych, dowolne trzy litery;
+  małe litery – wielkimi; PLN albo nie-kod – odmowa jak przy kwocie, zostaje poprzedni – AP-15), kurs i „×” (bez kwoty
+  w walucie). Nowa kwota zaczyna od waluty ostatniej operacji z kwotą w walucie (wyjazd trwa), bez
+  niej – EUR; rozwinięte bez kwoty – szkic okna (AP-8), w szybkim wpisie „Zapisz i następny” zostawia walutę rozwiniętą.
+  Lista Operacji – plakietka „45,00 EUR” w oznaczeniach (dymek z kursem), na telefonie dopisek w drugiej linii karty.
+  Wyszukiwanie – po kodzie waluty i po kwocie w walucie („45,00”). Eksport CSV i Excel „Operacje” – kolumny „Kwota
+  w walucie” (ze znakiem kwoty w złotych) i „Waluta” na końcu (wcześniejsze kolumny na swoich miejscach); „Części” bez
+  zmian. Ukryte kwoty (Ctrl+$) maskują też kwotę w walucie.
+- **T494** Import z mBanku a kwota w walucie (1.17.0, R2 – AP-48): znane formaty (`tests/fixtures/mbank`, `parseMbank`)
+  nie mają kwoty w walucie oryginalnej przy płatności kartą za granicą z rachunku w złotych – kolumna kwoty jest w walucie
+  rachunku; wiersz w innej walucie (rachunek walutowy) jest pomijany jak dotąd („kwota w EUR – FI prowadzi tylko PLN”).
+  Import nic nie zapisuje w `foreign` i nie zgaduje kwoty z opisu – do zrobienia, gdy pojawi się zanonimizowany plik
+  z taką płatnością, w którym bank ją podaje.

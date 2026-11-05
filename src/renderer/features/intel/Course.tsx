@@ -14,12 +14,12 @@ import { Field, NumberField, Panel, Segmented, Toggle, cx } from '../../componen
 import { useData } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
-import { monthLabel } from '../../lib/format'
+import { monthLabel, plMonth } from '../../lib/format'
 import { useCargoStatuses } from '../cargo/status'
 import { setSalary } from '../month/actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
-const mm = (m: string | null) => (m ? `${m.slice(5, 7)}.${m.slice(0, 4)}` : '—')
+const mm = (m: string | null) => (m ? plMonth(m) : '—')
 /** A month of the course: this month – „teraz” (a layer or a goal full now, PR sp. 8). */
 const eta = (m: string | null, now: string) => (m === now ? 'teraz' : mm(m))
 const monthsText = (v: readonly string[]) => (v.length ? v.map(mm).join(', ') : 'nie')
@@ -34,8 +34,13 @@ export function useCourseInput(fleet: FleetState | null): CourseInput | null {
   const goals = useRecordList('goals')
   const scheduled = useRecordList('scheduled')
   const transactions = useRecordList('transactions')
+  const containers = useRecordList('containers')
   const cargo = useCargoStatuses()
-  return useMemo(() => (fleet && settings ? courseInputOf(fleet, { settings, plans, goals, scheduled, transactions, cargo }) : null), [fleet, settings, plans, goals, scheduled, transactions, cargo])
+  // The containers (T486): a taken loan's one pays its installments – the months spend the average without them.
+  return useMemo(
+    () => (fleet && settings ? courseInputOf(fleet, { settings, plans, goals, scheduled, transactions, cargo, containers }) : null),
+    [fleet, settings, plans, goals, scheduled, transactions, cargo, containers]
+  )
 }
 
 /**
@@ -130,7 +135,7 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
           </table>
           <span className="text-[11px] text-dim">
             Pensja z osłon 1. dnia (brakuje – z kadłuba, a bez obu – pensja częściowa), koszty po średniej (nad pensję – z osłon, nigdy poniżej zera: reszta to „brakuje na koszty”), wpływy dokowane: osłony
-            → kadłub → cele; boje i spodziewane spłaty w swoich miesiącach. Resztka tego miesiąca: koperty i opłaty jeszcze do zapłaty z energii miesiąca, ponad nią – z osłon. Kadłub od 99 % celu liczy się jako
+            → kadłub → cele; boje, spodziewane spłaty i raty pożyczek wziętych w swoich miesiącach (średnie koszty bez rat). Resztka tego miesiąca: koperty i opłaty jeszcze do zapłaty z energii miesiąca, ponad nią – z osłon. Kadłub od 99 % celu liczy się jako
             pełny. Wpływy: mediana albo średnia z 12 miesięcy (panel Przychody).
           </span>
         </div>

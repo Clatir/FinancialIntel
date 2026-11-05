@@ -33,6 +33,8 @@ import { ShareEditor } from '../household/ShareEditor'
 import { useMembers } from '../household/actions'
 import { AnomalyNote, AwaitReturnBox } from '../sensors/EditorBoxes'
 import { TitleRuleAction } from './TitleRuleAction'
+import { ForeignField } from './ForeignField'
+import { lastCurrencyOf } from '@shared/foreign'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
 import { BrandYearLine } from '../intel/Drill'
@@ -88,6 +90,10 @@ export function OperationEditor({ id }: { id: string }) {
   // A share typed not covering the whole (AP-37, T156): refused as the quick entry refuses it – never written; kept in the
   // window's memory (another screen, another operation keep it) until it sums to 100 % or is dropped.
   const [refusedShare, setRefusedShare, clearRefusedShare] = useDraft<Share | null>(`operation-share:${id}`, () => null)
+  // AP-48 (T493): „+ kwota w walucie” opened before its amount is typed – in the window's memory, as every draft (AP-8).
+  const [foreignOpen, setForeignOpen, clearForeignOpen] = useDraft<{ currency: string } | null>(`operation-foreign:${id}`, () => null)
+  // The currency a new amount starts with (a primitive – the editor renders again only when it changes).
+  const lastCurrency = useData((s) => lastCurrencyOf(listOf(s.records.transactions)))
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
   const t = entry.record
   const readOnly = folderReadOnly || entry.readOnly
@@ -289,6 +295,19 @@ export function OperationEditor({ id }: { id: string }) {
               Kwota 0,00 zł – operacja nie zmienia sald ani energii.
             </p>
           )}
+          <ForeignField
+            value={t.foreign ?? null}
+            pln={t.amount}
+            currency={foreignOpen?.currency ?? lastCurrency}
+            open={!!foreignOpen}
+            onOpen={(open, currency) => (open ? setForeignOpen({ currency: currency ?? foreignOpen?.currency ?? lastCurrency }) : clearForeignOpen())}
+            onChange={(foreign) => {
+              if (foreign || t.foreign) patch({ foreign: foreign ?? undefined })
+              if (foreign) clearForeignOpen()
+            }}
+            disabled={readOnly}
+            testId="operation-foreign"
+          />
         </Field>
         {!expense && whenAndWhere}
         <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'} hint={isDraft ? undefined : <BrandYearLine t={t} />}>

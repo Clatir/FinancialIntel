@@ -230,6 +230,22 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.intel` | obiekt | domyślnie pusty obiekt | Wywiad. |
 | `settings.intel.tagGoals` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Cel tagu na Mapie gwiezdnej: klucz tagu → identyfikator celu. |
 | `settings.intel.cpi` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Inflacja CPI z GUS wpisana ręcznie: miesiąc RRRR-MM → zmiana rok do roku w procentach (liczba). |
+| `settings.intel.forecast` | obiekt | opcjonalne | Założenia prognozy wieloletniej (Wywiad) – brak scenariusza: jego założenia domyślne. Prognoza nie czyta wyników tradingu z ICTTJ. |
+| `settings.intel.forecast.cautious` | obiekt albo dowolna wartość | opcjonalne | Scenariusz ostrożny: cztery założenia (inne pola zostają). Zapis nieczytelny zostaje w pliku – prognoza liczy go z założeniami domyślnymi i mówi o tym. |
+| `settings.intel.forecast.cautious.wages` | liczba | wymagane | Wzrost wpływów z pracy w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.cautious.inflation` | liczba | wymagane | Inflacja kosztów i pensji planu w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.cautious.deliveries` | grosze (liczba całkowita) | wymagane | Dostawy z ICTTJ do budżetu rocznie – założenie kapitana (0 = bez dostaw). |
+| `settings.intel.forecast.cautious.oneOff` | grosze (liczba całkowita) | wymagane | Wydatki jednorazowe rocznie w cenach dzisiejszych (w ostatnim miesiącu każdego roku prognozy). |
+| `settings.intel.forecast.base` | obiekt albo dowolna wartość | opcjonalne | Scenariusz bazowy: cztery założenia (inne pola zostają). Zapis nieczytelny zostaje w pliku – prognoza liczy go z założeniami domyślnymi i mówi o tym. |
+| `settings.intel.forecast.base.wages` | liczba | wymagane | Wzrost wpływów z pracy w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.base.inflation` | liczba | wymagane | Inflacja kosztów i pensji planu w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.base.deliveries` | grosze (liczba całkowita) | wymagane | Dostawy z ICTTJ do budżetu rocznie – założenie kapitana (0 = bez dostaw). |
+| `settings.intel.forecast.base.oneOff` | grosze (liczba całkowita) | wymagane | Wydatki jednorazowe rocznie w cenach dzisiejszych (w ostatnim miesiącu każdego roku prognozy). |
+| `settings.intel.forecast.optimistic` | obiekt albo dowolna wartość | opcjonalne | Scenariusz optymistyczny: cztery założenia (inne pola zostają). Zapis nieczytelny zostaje w pliku – prognoza liczy go z założeniami domyślnymi i mówi o tym. |
+| `settings.intel.forecast.optimistic.wages` | liczba | wymagane | Wzrost wpływów z pracy w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.optimistic.inflation` | liczba | wymagane | Inflacja kosztów i pensji planu w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.optimistic.deliveries` | grosze (liczba całkowita) | wymagane | Dostawy z ICTTJ do budżetu rocznie – założenie kapitana (0 = bez dostaw). |
+| `settings.intel.forecast.optimistic.oneOff` | grosze (liczba całkowita) | wymagane | Wydatki jednorazowe rocznie w cenach dzisiejszych (w ostatnim miesiącu każdego roku prognozy). |
 
 ### Operacje – `transactions/RRRR/RRRR-MM-DD_ULID.json`
 
@@ -286,6 +302,9 @@ Jedna operacja w pliku; folder roku i data w nazwie to data warszawska operacji.
 | `awaitReturn.closedAt` | chwila ISO 8601 (UTC) | domyślnie `null`, może być `null` | Zamknięty ręcznie; `null` – otwarty. |
 | `tags` | lista: tekst | opcjonalne | Tagi (wyprawa, projekt). |
 | `explained` | tak / nie (`true` / `false`) | opcjonalne | Korekta salda wyjaśniona przez użytkownika. |
+| `foreign` | obiekt | opcjonalne, może być `null` | Kwota w walucie, w której zapłacono (wyjazd) – tylko informacja; budżet liczy złote z `amount`. |
+| `foreign.amount` | liczba całkowita | wymagane | W setnych częściach jednostki waluty (jak grosze: 45,00 EUR = 4500), zawsze dodatnia – kierunek daje `amount`. |
+| `foreign.currency` | tekst | wymagane | Kod waluty ISO 4217 – trzy wielkie litery, np. `EUR`. |
 
 ### Kontenery Ładowni – `containers/ULID.json`
 
@@ -416,6 +435,7 @@ Pożyczka udzielona (należność) albo wzięta (dług) z harmonogramem; spłaty
 | `schedule[].date` | data RRRR-MM-DD | wymagane | Termin. |
 | `schedule[].amount` | grosze (liczba całkowita) | wymagane | Kwota. |
 | `closedAt` | chwila ISO 8601 (UTC) | domyślnie `null`, może być `null` | Kiedy zamknięta; `null` – otwarta. |
+| `rate` | liczba | opcjonalne, może być `null` | Oprocentowanie nominalne w procentach rocznie (np. `7.5`), informacyjnie – czyta je tylko plan spłaty pożyczek wziętych, nie budżet; brak albo `null` – nieznane. |
 | `note` | tekst | domyślnie `""` | Notatka. |
 
 ### Salda kont – `balances/RRRR/RRRR-MM-DD_ULID.json`

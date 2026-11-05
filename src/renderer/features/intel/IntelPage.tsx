@@ -4,7 +4,7 @@
  * the killzones of spending, the FVG of the envelopes (plan against fact), the spending over time with the cargo as the
  * Order Block – to the detail (F20) –, the brands, a month against its averages, the range forecast without any payout,
  * the expeditions (F17), the personal inflation (F36), the captain's log; the shields and the hull at each month's end
- * (AP-31).
+ * (AP-31); the forecast for years beside the course (AP-44).
  */
 import { useMemo, useState } from 'react'
 import { addDays, addMonths, isoWeekOf, monthOf, monthRange } from '@shared/calc/dates'
@@ -30,6 +30,7 @@ import { openOperation } from '../operations/state'
 import { KillzoneMap, WealthChart } from './charts'
 import { CoursePanel, ManeuverPanel, useCourseInput } from './Course'
 import { CushionPanel } from './Cushion'
+import { ForecastPanel } from './Forecast'
 import { useNetWorth, useWealth } from './wealth'
 import { ComparisonPanel, SpendingTable, TargetsPanel } from './Drill'
 import { ExpeditionsPanel } from './Expeditions'
@@ -254,6 +255,8 @@ export function IntelPage() {
               </div>
             </Panel>
             <CoursePanel fleet={fleet} input={courseInput} />
+            {/* AP-44: the forecast for years beside the course – its first year is the course. */}
+            <ForecastPanel fleet={fleet} input={courseInput} />
             <ManeuverPanel fleet={fleet} input={courseInput} />
             <ExpeditionsPanel />
             <InflationPanel fleet={fleet} />

@@ -1,5 +1,5 @@
 // adapted from ICTTJ src/shared/merge.ts @ 84a8339
-import { countLabel, formatPln, plDate, plDateTime } from './format'
+import { countLabel, formatPln, plDate, plDateTime, plMonth } from './format'
 import { ICTJ_POOL_LABEL } from './ictj'
 import { TX_KIND_LABEL } from './schema/records'
 /**
@@ -287,6 +287,7 @@ const LABELS: Record<string, string> = {
   'schedule.date': 'Harmonogram – data',
   'schedule.amount': 'Harmonogram – kwota',
   closedAt: 'Zamknięta',
+  rate: 'Oprocentowanie (% rocznie)',
   pool: 'Pula ICTTJ',
   split: 'Podział dostawy',
   'split.shields': 'Podział dostawy – osłony',
@@ -480,6 +481,16 @@ const LABELS: Record<string, string> = {
   'settings.anomalies': 'Anomalie',
   'settings.anomalies.ok': 'Anomalie – w porządku',
   'settings.intel': 'Wywiad',
+  // AP-44 (T488): the forecast for years – each scenario, each assumption.
+  'settings.intel.forecast': 'Prognoza wieloletnia',
+  'settings.intel.forecast.cautious': 'Prognoza wieloletnia – scenariusz ostrożny',
+  'settings.intel.forecast.base': 'Prognoza wieloletnia – scenariusz bazowy',
+  'settings.intel.forecast.optimistic': 'Prognoza wieloletnia – scenariusz optymistyczny',
+  // The assumption's own key under any scenario (`partsAfter`).
+  wages: 'Wzrost wpływów z pracy (%/rok)',
+  inflation: 'Inflacja kosztów (%/rok)',
+  deliveries: 'Dostawy z ICTTJ rocznie',
+  oneOff: 'Wydatki jednorazowe rocznie',
   'settings.import.rules.updatedAt': 'Reguły importu – zmieniona',
   'loot.decidedAt': 'Podział łupów – zdecydowano',
   'bank.format': 'Dane z banku – format pliku',
@@ -492,6 +503,10 @@ const LABELS: Record<string, string> = {
   'awaitReturn.amount': 'Czeka na zwrot – kwota',
   'awaitReturn.until': 'Czeka na zwrot – do',
   'awaitReturn.closedAt': 'Czeka na zwrot – zamknięty',
+  // AP-48 (T492): an amount in another currency – its hundredths written as the field writes them, never raw.
+  foreign: 'Kwota w walucie',
+  'foreign.amount': 'Kwota w walucie – kwota',
+  'foreign.currency': 'Kwota w walucie – waluta',
   inflowKind: 'Rodzaj wpływu',
   coversOpeningMembers: 'Spłaca saldo na start – domownicy',
   priceIgnored: 'Nowa cena pominięta',
@@ -623,14 +638,28 @@ const AMOUNT_FIELDS = [
   'settings.import.rules.loanAmount',
   // AP-45: a rule's condition „kwota od–do”.
   'settings.import.rules.conditions.min',
-  'settings.import.rules.conditions.max'
+  'settings.import.rules.conditions.max',
+  // AP-44 (T488): the forecast's assumptions a year.
+  'settings.intel.forecast.*.deliveries',
+  'settings.intel.forecast.*.oneOff'
 ].map((f) => f.split('.'))
 
-/** Is the field at `path` an amount in grosze (B7)? Items of lists (`#id`, `[n]`) do not count as keys. */
-export function isAmountPath(path: Path): boolean {
+/** Does the field at `path` match one of `fields`? Items of lists (`#id`, `[n]`) do not count as keys; `*` – any key. */
+function pathIn(fields: ReadonlyArray<readonly string[]>, path: Path): boolean {
   const named = path.filter((p) => !p.startsWith('#') && !/^\[\d+\]$/.test(p))
-  return AMOUNT_FIELDS.some((f) => f.length === named.length && f.every((k, i) => k === '*' || k === named[i]))
+  return fields.some((f) => f.length === named.length && f.every((k, i) => k === '*' || k === named[i]))
 }
+
+/** Is the field at `path` an amount in grosze (B7)? */
+export function isAmountPath(path: Path): boolean {
+  return pathIn(AMOUNT_FIELDS, path)
+}
+
+/** The amounts in another currency (AP-48, T492): hundredths of its unit, never złoty – written as the field writes them. */
+export const FOREIGN_AMOUNT_FIELDS = ['foreign.amount'].map((f) => f.split('.'))
+
+/** Is the field at `path` an amount in another currency? The amounts' one rule of paths (R2 review, item 14). */
+export const isForeignAmountPath = (path: Path): boolean => pathIn(FOREIGN_AMOUNT_FIELDS, path)
 
 /** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */
 export const isAmountKey = (key: string): boolean => isAmountPath(key.replace(/\[\d+\]/g, '').split('.').filter(Boolean))
@@ -641,6 +670,8 @@ export interface ValueText {
   path?: Path
   /** An amount in grosze as the window writes it (masked with the amounts); default `formatPln` + „ zł”. */
   amount?: (grosze: number) => string
+  /** An amount in a currency's hundredths (AP-48 – `foreign.amount`) as the window writes it (masked); default `formatPln`. */
+  foreign?: (hundredths: number) => string
   names?: ReadonlyMap<string, string>
 }
 
@@ -654,7 +685,7 @@ const ISO_MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
  */
 export function dateValueText(v: string): string | null {
   if (ISO_DATE.test(v)) return plDate(v)
-  if (ISO_MONTH.test(v)) return `${v.slice(5)}.${v.slice(0, 4)}`
+  if (ISO_MONTH.test(v)) return plMonth(v)
   if (ISO_MOMENT.test(v) && !Number.isNaN(Date.parse(v))) return plDateTime(v)
   return null
 }
@@ -669,6 +700,7 @@ export function formatValue(v: unknown, max = 80, opts: ValueText = {}): string 
   if (v === undefined) return '—'
   if (v === null || v === '') return 'puste'
   if (typeof v === 'number' && opts.path && isAmountPath(opts.path)) return opts.amount ? opts.amount(v) : `${formatPln(v)} zł`
+  if (typeof v === 'number' && opts.path && isForeignAmountPath(opts.path)) return opts.foreign ? opts.foreign(v) : formatPln(v)
   if (typeof v === 'string') return opts.names?.get(v) ?? valueLabel(opts.path, v) ?? dateValueText(v) ?? cut(v)
   // As written, never rounded: the comma and the typographic minus (AP-23).
   if (typeof v === 'number') return String(v).replace(/^-/, '−').replace('.', ',')

@@ -11,6 +11,7 @@ import { daysInMonth, warsawNow } from '@shared/calc/dates'
 import { loanChoices } from '@shared/calc/loans'
 import { categoryIndex } from '@shared/calc/operations'
 import { newId } from '@shared/ids'
+import { foreignOf, lastCurrencyOf } from '@shared/foreign'
 import { shareSplits } from '@shared/calc/share'
 import { envelopeKind, inflowOf, SCHEMA_VERSION, shareSchema, transactionSchema, ulidSchema, type Share, type Transaction } from '@shared/schema'
 import { rememberInflows, sureCoversOf } from '../features/household/actions'
@@ -88,7 +89,8 @@ export function quickData(): QuickData | null {
     folder: s.status?.dataDir ?? null,
     ...quickTemplates(listOf(s.records.transactions)),
     knownTags: knownTagsOf(listOf(s.records.transactions)),
-    lastTag: lastTagOf(listOf(s.records.transactions), warsawNow().date)
+    lastTag: lastTagOf(listOf(s.records.transactions), warsawNow().date),
+    lastCurrency: lastCurrencyOf(listOf(s.records.transactions))
   }
 }
 
@@ -131,6 +133,11 @@ export interface QuickDraft {
   advanceChosen?: boolean
   /** Its tags (F17); „#słowo” in the counterparty or the note adds one too. */
   tags?: string[]
+  /**
+   * Its amount in another currency (AP-48, T493 – information only): open with no amount yet – `amount` 0; saved only
+   * with an amount and a currency's code other than PLN.
+   */
+  foreign?: { amount: number; currency: string } | null
 }
 
 /** The operation of a quick draft (or why not). */
@@ -169,6 +176,8 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
           }))
         : []
   const refundable = d.kind === 'refundable' && !splits.length
+  // AP-48: the amount in a currency – with both its parts only (a code refused is said by its field before).
+  const foreign = d.foreign ? foreignOf(d.foreign.amount, d.foreign.currency) : null
   // F17: the tags of the field and the „#słowo” typed in the counterparty (taken out of the name) or the note.
   const counterparty = withoutHashTags(d.counterparty)
   const tags = withTags(Array.isArray(d.tags) ? d.tags.filter((x): x is string => typeof x === 'string') : [], [...hashTags(d.counterparty), ...hashTags(d.note)])
@@ -194,7 +203,8 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
     note: d.note,
     ...(tags.length ? { tags } : {}),
     impulse: income ? null : d.impulse,
-    logNote: d.logNote
+    logNote: d.logNote,
+    ...(foreign ? { foreign } : {})
   })
   return parsed.success ? parsed.data : 'Nie udało się odczytać wpisu.'
 }

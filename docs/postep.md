@@ -30,8 +30,8 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | ✅ wydane 04.11 18:02 (wpis w archiwum `postep-od-1.15.4.md`) | #52 | ok. 10,5 h zegara (07:15–18:02, z przerwą 14:00–14:20) |
 | N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | ✅ wydane 04.11 21:40 (wpis w archiwum `postep-od-1.15.4.md`) | #53 | ok. 9 h zegara (12:09–21:40, z przerwą) |
 | N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | ✅ wydane 05.11 02:28 (wpis w archiwum `postep-od-1.15.4.md`) | #54 | ok. 13 h zegara (12:45–02:28, z przerwą) |
-| R1 Rozwojowe 1 | 1.16.0 | `claude/1.16.0-rozwojowe` | 🔄 przegląd xhigh + runda poprawek; PR, CI, wydanie | – | – |
-| R2 Rozwojowe 2 | 1.17.0 | `claude/1.17.0-rozwojowe` | 🔄 3 strumienie gotowe i scalone (AP-41, AP-44, AP-46 + AP-48); przegląd po wydaniu R1 | – | – |
+| R1 Rozwojowe 1 | 1.16.0 | `claude/1.16.0-rozwojowe` | ✅ wydane 05.11 06:05 | #55 | – |
+| R2 Rozwojowe 2 | 1.17.0 | `claude/1.17.0-rozwojowe` | 🔄 kod, przegląd xhigh + 2 rundy poprawek, wersja i CHANGELOG gotowe, scalone z `main` 1.16.0; PR, CI, wydanie | – | od ok. 02:40 |
 
 ## Stan ciągu (wznowione 04.11.2026 ok. 14:20 po przerwie na prośbę użytkownika)
 
@@ -46,7 +46,14 @@ notatki, dalej od pierwszej grupy niewydanej.
 - **R1 (1.16.0)** – gałąź integracji `claude/1.16.0-rozwojowe` (drzewo `FI-wt\n5`, od `main` 1.15.9); strumienie (baza 9d285e3 = 1.15.9):
   `claude/1.16.0-r1a` (`FI-wt\n5e` – AP-43 dowolny CSV, AP-35 Web Worker, T460–T466), `claude/1.16.0-r1c` (`FI-wt\n5f` – AP-45
   reguły I / LUB, T467–T471), `claude/1.16.0-r1d` (`FI-wt\n5b` – AP-42 kalendarz Radaru, AP-47 opis folderu, T472–T476).
-- **R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; bez karty kredytowej – D101).
+- **R1 (1.16.0)** – ✅ wydane 05.11 06:05 (PR #55).
+- **R2 (1.17.0)** – gałąź integracji `claude/1.17.0-rozwojowe` (drzewo `FI-wt\n5d`): AP-41 plan spłaty pożyczek (T480–T484),
+  AP-44 prognoza wieloletnia (T485–T489), AP-46 Sankey miesiąca (T490–T491), AP-48 kwota w walucie (T492–T494). Przegląd
+  xhigh (15 uwag) i `/code-review` high na poprawkach (8 uwag) poprawione z testami (`fixa`, `fixb`, `fixb2`, `fixc`,
+  `fixc2`). Scalone z `main` 1.16.0 (konflikt tylko w `.claude/rules/import.md`, `npm run docs:format`). Lokalnie na
+  Node 24 z `.tools`: typecheck, build, `npm test` 1865/1866 (jedyny czerwony – `folder-speed` ZIP64, limit 60 s przy
+  równoległym zestawie; osobno 12/12 zielone). E2E – na CI (Linux, Windows); lokalnie nieprzepuszczone na zintegrowanej
+  gałęzi. Notatki i „do potwierdzenia”: `_notatki/notatki-r2.md`, uwagi: `r2-review1.md`, `r2-review2.md`.
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
 całości + jeden high na poprawkach, dalej tylko przy poważnych uwagach; numery T przydzielaj podagentom z góry.
