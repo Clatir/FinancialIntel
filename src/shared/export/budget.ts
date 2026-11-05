@@ -4,9 +4,10 @@
  * nothing loaded from outside). Always the real amounts – the hidden amounts are the screen's (D73).
  */
 import type { Account, Category, HouseholdMember } from '../schema/budget'
-import type { Container, MonthPlan, Transaction } from '../schema/records'
+import type { Container, Loan, MonthPlan, Transaction } from '../schema/records'
 import { TX_KIND_LABEL } from '../schema/records'
 import { financersText, incomeShares, memberName } from '../calc/household'
+import { loanParts } from '../calc/loans'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from '../calc/income'
 import { amountOn, categoryIndex, isTwoSided, sum, touchesAccount, upToDay } from '../calc/operations'
 import { tagsText } from '../calc/tags'
@@ -63,9 +64,10 @@ export function operationRows(
   accounts: readonly Account[],
   from: string,
   to: string,
-  members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = []
+  members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = [],
+  loans: ReadonlyArray<Pick<Loan, 'id' | 'name'>> = []
 ): OperationRow[] {
-  return operationRowsOf(operationsOfPeriod(transactions, from, to), categories, accounts, members)
+  return operationRowsOf(operationsOfPeriod(transactions, from, to), categories, accounts, members, null, loans)
 }
 
 /** The operations of a period in the export's order: by date, time, entry. */
@@ -84,7 +86,8 @@ export function operationRowsOf(
   categories: readonly Category[],
   accounts: readonly Account[],
   members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = [],
-  view: string | null = null
+  view: string | null = null,
+  loans: ReadonlyArray<Pick<Loan, 'id' | 'name'>> = []
 ): OperationRow[] {
   const cats = categoryIndex(categories)
   const accountName = new Map(accounts.map((a) => [a.id, a.name]))
@@ -103,7 +106,7 @@ export function operationRowsOf(
     category: t.kind === 'income' ? '' : t.splits.length ? t.splits.map((s) => cats.label(s.categoryId)).join(' + ') : cats.label(t.categoryId),
     counterparty: t.counterparty,
     title: t.title,
-    financed: whose(t, members),
+    financed: whose(t, members, loans),
     log: t.impulse ? IMPULSE_LABEL[t.impulse] : '',
     // The receipt lines' notes after the operation's (D89), each with its line's category – the column „Kategoria” lists
     // every line, the notes only the described ones.
@@ -119,11 +122,20 @@ export function operationRowsOf(
 /** The money of a row: on the list's account (a transfer's side – F18), else the operation's amount. */
 const rowAmount = (t: Transaction, view: string | null): number => (view && touchesAccount(t, view) ? amountOn(t, view) : t.amount)
 
+function loanLabel(loanId: string | null | undefined, loans: ReadonlyArray<Pick<Loan, 'id' | 'name'>>): string {
+  if (!loanId) return ''
+  const name = loans.find((l) => l.id === loanId)?.name
+  return name ? `Pożyczka: ${name}` : 'spłata pożyczki'
+}
+
 /** Whose an operation is (D80, D81): who finances a purchase, whose money an income is (its parts' members too). */
-function whose(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>): string {
+function whose(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>, loans: ReadonlyArray<Pick<Loan, 'id' | 'name'>> = []): string {
+  if (t.kind === 'loan') return loanLabel(t.loanId, loans)
   if (t.kind === 'income') {
     const ids = [...new Set(incomeShares(t).map((x) => x.memberId).filter((x): x is string => !!x))]
-    return ids.length ? `od: ${ids.map((id) => memberName(id, members)).join(', ')}` : ''
+    const from = ids.length ? `od: ${ids.map((id) => memberName(id, members)).join(', ')}` : ''
+    const repays = [...new Set(loanParts(t).map((x) => loanLabel(x.loanId, loans)).filter(Boolean))]
+    return [from, ...repays].filter(Boolean).join(' · ')
   }
   return financersText(t, members)
 }
@@ -195,10 +207,11 @@ export function partRowsOf(
   categories: readonly Category[],
   accounts: readonly Account[],
   members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = [],
-  view: string | null = null
+  view: string | null = null,
+  loans: ReadonlyArray<Pick<Loan, 'id' | 'name'>> = []
 ): PartRow[] {
   const cats = categoryIndex(categories)
-  const main = operationRowsOf(transactions, categories, accounts, members, view)
+  const main = operationRowsOf(transactions, categories, accounts, members, view, loans)
   const out: PartRow[] = []
   transactions.forEach((t, i) => {
     const row = main[i]!
@@ -217,20 +230,37 @@ export function partRowsOf(
         part: `${j + 1} z ${n}`,
         amount: s.amount,
         category: label(s.categoryId),
-        financed: lineWhose(t, s, members),
+        financed: lineWhose(t, s, members, loans),
         note: s.note.trim(),
         // The operation's tags are each line's too (F17), then the line's own.
         tags: tagsText({ tags: t.tags, splits: [s] })
       })
     })
-    if (rest) out.push({ ...head, part: `${n} z ${n}`, amount: rest, category: label(t.categoryId), financed: '', note: '', tags: tagsText({ tags: t.tags, splits: [] }) })
+    if (rest)
+      out.push({
+        ...head,
+        part: `${n} z ${n}`,
+        amount: rest,
+        category: label(t.categoryId),
+        financed: t.kind === 'income' && t.memberId && !t.splits.some((s) => s.memberId) ? `od: ${memberName(t.memberId, members)}` : '',
+        note: '',
+        tags: tagsText({ tags: t.tags, splits: [] })
+      })
   })
   return out
 }
 
 /** Whose a line is (D80, D81, D83): a purchase's member – a gift marked –, an income part's sender; '' – mine. */
-function lineWhose(t: Transaction, s: Transaction['splits'][number], members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>): string {
-  if (t.kind === 'income') return s.memberId ? `od: ${memberName(s.memberId, members)}` : ''
+function lineWhose(
+  t: Transaction,
+  s: Transaction['splits'][number],
+  members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>,
+  loans: ReadonlyArray<Pick<Loan, 'id' | 'name'>> = []
+): string {
+  if (t.kind === 'income') {
+    const parts = [s.memberId ? `od: ${memberName(s.memberId, members)}` : '', s.loanId ? loanLabel(s.loanId, loans) : ''].filter(Boolean)
+    return parts.join(' · ')
+  }
   if (t.kind !== 'expense' || !s.refundable) return ''
   return `${memberName(s.memberId, members)}${s.gift ? ' (prezent)' : ''}`
 }

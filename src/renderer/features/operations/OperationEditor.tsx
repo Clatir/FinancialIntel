@@ -84,9 +84,6 @@ export function OperationEditor({ id }: { id: string }) {
   const knownTags = useKnownTags()
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
-  // A new entry being written (the editor opened on it as a draft – keyed by the operation): its whole first writing is
-  // the user's own, a purchase typed in with a past day too – nothing to ask.
-  const [fresh] = useState(isDraft)
   // A share typed not covering the whole (AP-37, T156): refused as the quick entry refuses it – never written; kept in the
   // window's memory (another screen, another operation keep it) until it sums to 100 % or is dropped.
   const [refusedShare, setRefusedShare, clearRefusedShare] = useDraft<Share | null>(`operation-share:${id}`, () => null)
@@ -107,13 +104,13 @@ export function OperationEditor({ id }: { id: string }) {
     else run()
   }
   // A new entry is the user's own first writing (no confirmed balance knows it yet as it is).
-  const update = (fn: (r: Transaction) => Transaction): boolean => updateOperation(id, fn, isDraft || fresh)
+  const update = (fn: (r: Transaction) => Transaction): boolean => updateOperation(id, fn, isDraft)
   const confirmed = confirmedPeriodOf(t, balances)
   const patch = (p: Partial<Transaction>) => update((r) => ({ ...r, ...p }))
   // Another kind (N-PC-4, T362): an unlinked goal or container said once the change is written, with „Cofnij”.
   const changeKind = (k: TxKind) => {
     setZeroSign(null)
-    changeOperationKind(id, k, isDraft || fresh)
+    changeOperationKind(id, k, isDraft)
   }
   // F8: an expense without a category – what the officer knows of its brand (history, the import's rule, the chain).
   const officer =

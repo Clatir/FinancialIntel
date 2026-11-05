@@ -70,7 +70,7 @@ export function InboxPage() {
               <Panel key={kind} title={INBOX_TITLE[kind]} name={INBOX_TITLE[kind]} testId={`inbox-${kind}`}>
                 <div className="flex flex-col gap-1 text-[12px]">
                   {list.map((item) => (
-                    <Report key={item.key} item={item} onOpen={() => open(item)} />
+                    <Report key={item.key} item={item} onOpen={() => open(item)} onPreview={() => setPairs(true)} />
                   ))}
                   {HINT[kind] && <p className="text-[11px] text-dim">{HINT[kind]}</p>}
                 </div>
@@ -84,7 +84,7 @@ export function InboxPage() {
   )
 }
 
-function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
+function Report({ item, onOpen, onPreview }: { item: InboxItem; onOpen: () => void; onPreview: () => void }) {
   return (
     <div className="flex items-baseline gap-3" data-testid="inbox-item" data-kind={item.kind}>
       <span className="min-w-0 flex-1 text-fg">{item.text}</span>
@@ -124,7 +124,7 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
         </button>
       )}
       {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}
-      {item.kind === 'transfers' && item.ref && <TransferButtons item={item} />}
+      {item.kind === 'transfers' && item.ref && <TransferButtons item={item} onPreview={onPreview} />}
       <button type="button" className="btn h-[22px] shrink-0" onClick={onOpen} data-testid="inbox-open">
         {item.action}
       </button>
@@ -139,7 +139,7 @@ function showReturned(id: string): void {
 }
 
 /** A transfer's report (F10): its operation, and „zostaw tak” – also the phone's Meldunki (T311, bigger buttons). */
-export function TransferButtons({ item, size = 'h-[22px] shrink-0' }: { item: InboxItem; size?: string }) {
+export function TransferButtons({ item, size = 'h-[22px] shrink-0', onPreview }: { item: InboxItem; size?: string; onPreview?: () => void }) {
   const show = () => {
     const issue = transferIssueOf(item)
     if (issue) openOperation(issue.kind === 'lone' ? issue.tx : issue.keep)
@@ -150,6 +150,11 @@ export function TransferButtons({ item, size = 'h-[22px] shrink-0' }: { item: In
   }
   return (
     <>
+      {onPreview && (
+        <button type="button" className={cx('btn btn-ghost', size)} onClick={onPreview} data-testid="inbox-transfer-preview">
+          Podgląd
+        </button>
+      )}
       <button type="button" className={cx('btn btn-ghost', size)} onClick={show} data-testid="inbox-transfer-show">
         Pokaż
       </button>

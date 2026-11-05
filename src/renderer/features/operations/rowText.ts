@@ -41,6 +41,7 @@ export function operationRowText(t: Transaction, o: RowContext): RowText {
   // Its parts repaying a loan (D100): which loans.
   const repays = [...new Set(loanParts(t).map((x) => o.loans?.find((l) => l.id === x.loanId)?.name ?? 'pożyczka'))]
   const loanText = repays.length ? `spłata pożyczki: ${repays.join(', ')}` : ''
+  const loanName = t.kind === 'loan' && t.loanId ? o.loans?.find((l) => l.id === t.loanId)?.name : undefined
   // A purchase financed by several people (D83): its category and who.
   const share = t.kind === 'expense' ? shareOf(t) : null
   const category = whose.length
@@ -52,7 +53,9 @@ export function operationRowText(t: Transaction, o: RowContext): RowText {
           ? `${t.splits.length} ${plural(t.splits.length, 'część', 'części', 'części')}`
           : t.kind === 'expense'
             ? o.categories.label(t.categoryId)
-            : TX_KIND_LABEL[t.kind])
+            : loanName
+              ? `Pożyczka: ${loanName}`
+              : TX_KIND_LABEL[t.kind])
   const none = t.kind === 'expense' && !t.categoryId && !t.splits.length
   const shown = none ? (t.refundable ? 'domownik' : t.containerId ? 'ładownia' : t.goalId ? 'z celu' : 'bez kategorii') : category
   const nameOf = (id: string | null) => o.accounts.find((a) => a.id === id)?.name ?? '?'

@@ -114,6 +114,7 @@ export function monthComparison(transactions: readonly Transaction[], categories
   const yearAgo = (values: number[]) => (have.has(months[0]!) ? values[0]! : null)
   const rows = s.rows.map((r) => ({ id: r.id, value: r.values[12]!, avg3: avg(r.values, 3), avg12: avg(r.values, 12), yearAgo: yearAgo(r.values) }))
   rows.push({ id: 'cargo', value: s.cargo[12]!, avg3: avg(s.cargo, 3), avg12: avg(s.cargo, 12), yearAgo: yearAgo(s.cargo) })
+  if (rows.every((r) => !r.value)) return []
   return rows.filter((r) => r.value || r.avg3 || r.avg12 || r.yearAgo).sort((a, b) => b.value - a.value)
 }
 
@@ -121,7 +122,7 @@ export function monthComparison(transactions: readonly Transaction[], categories
 export const OVER_SHARE = 0.1
 
 /** Above the average (or the year before) by more than 10%. */
-export const isOver = (value: number, base: number | null): boolean => base != null && base > 0 && value > base * (1 + OVER_SHARE)
+export const isOver = (value: number, base: number | null): boolean => base != null && (base > 0 ? value > base * (1 + OVER_SHARE) : value > 0)
 
 export interface BrandYear {
   year: string

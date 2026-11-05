@@ -251,6 +251,7 @@ function useDebrief(month: string) {
   const transactions = useRecordList('transactions')
   const plans = useRecordList('months')
   const containers = useRecordList('containers')
+  const loans = useRecordList('loans')
   const game = useGameView()
   return useMemo(() => {
     const brief = debriefing(month, { transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today })
@@ -576,6 +577,7 @@ function ExportPanel() {
   const transactions = useRecordList('transactions')
   const plans = useRecordList('months')
   const containers = useRecordList('containers')
+  const loans = useRecordList('loans')
   // The period as last chosen on this computer (AP-29): another tab, a restart keep it.
   const [period, setPeriod] = useState(() => readExportPeriod(fleet.today))
   const { from, to } = period
@@ -583,9 +585,9 @@ function ExportPanel() {
     setPeriod(next)
     storeExportPeriod(next.from, next.to, fleet.today)
   }
-  const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members)
+  const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members, loans)
   // The operations' lines (AP-29) in the order of „Operacje” – the same operations, so „Nr operacji” is its row.
-  const parts = () => partRowsOf(operationsOfPeriod(transactions, from, to), settings.categories, settings.accounts, settings.household.members)
+  const parts = () => partRowsOf(operationsOfPeriod(transactions, from, to), settings.categories, settings.accounts, settings.household.members, null, loans)
   const months = () =>
     monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`

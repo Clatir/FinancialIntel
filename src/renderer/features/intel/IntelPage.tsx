@@ -126,7 +126,7 @@ export function IntelPage() {
         <Columns id="intel" tracks={['minmax(460px,3fr)', 'minmax(360px,2fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
             <Panel title="Krzywa majątku" testId="intel-wealth">
-              {wealth.length < 2 ? (
+              {wealth.length < 3 ? (
                 <Empty>Za mało danych – krzywa pojawi się po dwóch tygodniach historii.</Empty>
               ) : (
                 <div className="flex flex-col gap-2 text-[12px]">

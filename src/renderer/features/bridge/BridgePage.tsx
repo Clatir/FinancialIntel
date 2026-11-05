@@ -287,7 +287,7 @@ function BridgeWealthChart({ today }: { today: string }) {
     return { points, marks: wealth.marks.filter((m) => m.date >= from) }
   }, [wealth])
   const last = shown.points.at(-1)
-  if (shown.points.length < 2 || !last) return <Empty>Za mało danych – krzywa pojawi się po dwóch tygodniach historii.</Empty>
+  if (shown.points.length < 3 || !last) return <Empty>Za mało danych – krzywa pojawi się po dwóch tygodniach historii.</Empty>
   return (
     <div className="flex flex-col gap-1.5 text-[12px]">
       <span className="text-muted">

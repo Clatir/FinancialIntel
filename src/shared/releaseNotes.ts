@@ -17,6 +17,8 @@ export function changelogSections(text: string): ChangelogSection[] {
   return heads.map((h, n) => ({ version: h.version, body: lines.slice(h.i + 1, heads[n + 1]?.i ?? lines.length).join('\n').trim() }))
 }
 
+const stripCodes = (s: string) => s.replace(/\s*\((?:[DBFTNW]|N-PC-|AP-|AF-)\d+[^)]*\)/g, '')
+
 /**
  * The notes of `version`, and – after an update from `from` – of every version between them (skipped ones too), as
  * the release's notes write them; '' = the changelog has no section of this version.
@@ -28,7 +30,7 @@ export function notesOf(text: string, version: string, from?: string | null): st
   const between = from
     ? sections.filter((s) => s.version !== version && s.body && safeNewer(s.version, from) && safeNewer(version, s.version))
     : []
-  return [own.body, ...between.map((s) => `### ${s.version}\n\n${s.body}`)].join('\n\n')
+  return stripCodes([own.body, ...between.map((s) => `### ${s.version}\n\n${s.body}`)].join('\n\n'))
 }
 
 function safeNewer(a: string, b: string): boolean {

@@ -12,6 +12,7 @@ import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, narrow
 import type { Transaction } from '@shared/schema'
 import { foreignText } from '@shared/foreign'
 import { listOf, useData } from '@renderer/store/data'
+import { useRecordList } from '@renderer/store/records'
 import { useMinute } from '@renderer/store/fleet'
 import { plnText, signedPln } from '@renderer/components/fields'
 import { Empty, cx } from '@renderer/components/ui'
@@ -189,13 +190,14 @@ function Card({ t, top, view, picking }: { t: Transaction; top: number; view: st
   const cats = useCategories()
   const accounts = useAccounts()
   const members = useMembers()
+  const loans = useRecordList('loans')
   const orders = useData((s) => s.fi?.settings.orders)
   const draft = useData((s) => !!s.drafts[t.id])
   const flags = useMarkFlags()
   const marks = orders ? marksOf(t, orders, flags) : []
   // What the computer's row says: the category (a member's money, a shared purchase), the transfer's accounts, the
   // money on the list's account; „bez kategorii” in the accent.
-  const { name, shown: what, uncategorized, account, amount } = operationRowText(t, { categories: cats, accounts, members, view })
+  const { name, shown: what, uncategorized, account, amount } = operationRowText(t, { categories: cats, accounts, members, view, loans })
   const tone = amountTone(t)
   const shownMarks = marks.filter((m) => m === 'impulse' || m === 'anomaly' || m === 'awaiting' || m === 'pending' || m === 'owed')
   return (
