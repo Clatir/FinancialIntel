@@ -43,7 +43,8 @@ export interface MbankRow {
 }
 
 export interface MbankFile {
-  format: 'lista' | 'historia'
+  /** mBank's list of operations or account history, or another bank's CSV read by the account's mapping (AP-43). */
+  format: 'lista' | 'historia' | 'csv'
   /** The account holder (`#Klient`): transfers to and from them are own transfers. */
   client: string | null
   account: string | null
@@ -179,7 +180,7 @@ function sameName(before: string, part: string): boolean {
 const headerName = (cell: string) => cell.trim().replace(/^#/, '').trim().toLowerCase()
 
 /** Read an mBank CSV export (already decoded – `decodeText`). Throws MbankFormatError when it is not one. */
-export function parseMbank(text: string): MbankFile {
+export function parseMbank(text: string): MbankFile & { format: 'lista' | 'historia' } {
   const rows = parseCsv(text, ';')
   const firstCell = (r: string[] | undefined) => (r?.[0] ?? '').trim()
   const after = (label: RegExp): string[] | null => {
@@ -291,13 +292,13 @@ export function rowIdentity(row: Pick<MbankRow, 'date' | 'description' | 'amount
  * rows of the file (two „Bolt 12,49” the same day are two operations). The same row of a later file – overlapping
  * periods, a pending row settled with the same content – gets the same key.
  */
-export function rowKeys(rows: readonly MbankRow[], accountId: string): string[] {
+export function rowKeys(rows: readonly MbankRow[], accountId: string, kind: KeyKind = 'mbank'): string[] {
   const seen = new Map<string, number>()
   return rows.map((r) => {
     const id = rowIdentity(r)
     const n = seen.get(id) ?? 0
     seen.set(id, n + 1)
-    return keyOnAccount(accountId, id, n)
+    return keyOnAccount(accountId, id, n, kind)
   })
 }
 
@@ -335,8 +336,20 @@ export function accountForNumber(
   return (pick(mbank) ?? pick(known))?.id ?? null
 }
 
+/**
+ * Whose row a key is (AP-43, T461): mBank's files (`mbank:`) or another bank's CSV (`csv:` – its rows' identity is of the
+ * mapped columns, another than mBank's description). The key – kept by every version – tells the format of the row.
+ */
+export type KeyKind = 'mbank' | 'csv'
+
+/** The kind of a row's key (`KeyKind`). */
+export const keyKindOf = (key: string): KeyKind => (key.startsWith('csv:') ? 'csv' : 'mbank')
+
+/** The kind of keys of a file's rows. */
+export const keyKindOfFile = (format: MbankFile['format']): KeyKind => (format === 'csv' ? 'csv' : 'mbank')
+
 /** The key a row has on an account (`rowKeys`): its identity (`rowIdentity`) and its occurrence among identical rows. */
-export const keyOnAccount = (accountId: string, identity: string, n: number): string => `mbank:${fingerprint(`${accountId}|${identity}`)}:${n}`
+export const keyOnAccount = (accountId: string, identity: string, n: number, kind: KeyKind = 'mbank'): string => `${kind}:${fingerprint(`${accountId}|${identity}`)}:${n}`
 
 /** The occurrence of a row's key (its last part; 0 when it cannot be read). */
 export const keyOccurrence = (key: string): number => Number(key.slice(key.lastIndexOf(':') + 1)) || 0

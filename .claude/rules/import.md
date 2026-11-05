@@ -44,6 +44,9 @@ paths:
   decyzja albo pieniądze tych samych domowników – `takesCovers`), a kopia, której zakupów operacja tutaj nie przejmie,
   nie jest zaznaczona (`coversOtherwise`, `dropsCovers`; T321, T333).
 - Pliki z banku w Pobranych: `main/bankFiles.ts` + `shared/import/bankFiles.ts`.
+- CSV innego banku (AP-43, T460–T462): `csv.ts` (`guessCsv`, `parseMappedCsv`, `mappingFits`) – mapowanie przy koncie
+  (`csvMapping`), plik jako `MbankFile` 'csv', dalej ten sam plan. Format wiersza mówi przedrostek klucza (`csv:` –
+  `keyKindOf`); **pułapka:** `bank.format` zostaje 'mbank', `bank.source` dla CSV nie zapisuj (1.15.9 by je zgubiło).
 
 ## Rozpoznanie
 - Kolejność: reguła (`findRule`: marka → cała nazwa → „zawiera” → słowo użytkownika; tryb `amount` z `maxAmount`) →

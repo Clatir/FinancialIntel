@@ -28,6 +28,7 @@ const text = (x: unknown): string => (typeof x === 'string' ? x : '')
 
 /** A deleted row as it votes for the format of its import. */
 const formatBank = (b: Row): FormatBank => ({
+  key: text(b.key),
   source: b.source === 'lista' || b.source === 'historia' ? b.source : undefined,
   operation: text(b.operation),
   description: text(b.description),

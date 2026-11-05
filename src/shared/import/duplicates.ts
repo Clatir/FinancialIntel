@@ -14,7 +14,7 @@
 import { addDays } from '../calc/dates'
 import type { Docking, Transaction } from '../schema/records'
 import { conflicting, userContent, type DuplicateKind } from './copies'
-import { keyOccurrence, keyOnAccount, rowIdentity } from './mbank'
+import { keyKindOf, keyOccurrence, keyOnAccount, rowIdentity } from './mbank'
 import { formatsOf, joinable, looseMatch, looseSure, MATCH_DAYS, similarCounterparty, type LooseMatch } from './reconcile'
 
 export { mergeDuplicate } from './copies'
@@ -108,7 +108,7 @@ export function findDuplicates(
   const byIdentity = new Map<string, Transaction[]>()
   for (const t of txs) {
     if (!t.bank?.description || inRowGroups.has(t.id)) continue
-    const k = keyOnAccount('*', rowIdentity({ date: t.date, description: t.bank.description, amount: t.amount }), keyOccurrence(t.bank.key))
+    const k = keyOnAccount('*', rowIdentity({ date: t.date, description: t.bank.description, amount: t.amount }), keyOccurrence(t.bank.key), keyKindOf(t.bank.key))
     const list = byIdentity.get(k)
     if (list) list.push(t)
     else byIdentity.set(k, [t])

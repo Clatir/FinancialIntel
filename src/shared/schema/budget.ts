@@ -29,12 +29,64 @@ function lenientList<T extends z.ZodType>(item: T) {
 export const ACCOUNT_KINDS = ['bank', 'wallet', 'cash', 'other'] as const
 export type AccountKind = (typeof ACCOUNT_KINDS)[number]
 
+/** The cells' separators of a bank's CSV the mapping offers (AP-43). */
+export const CSV_SEPARATORS = [';', ',', '\t', '|'] as const
+/** How a bank's CSV is decoded: 'auto' – as mBank's (`decodeText`: BOM, UTF-8, else Windows-1250). */
+export const CSV_ENCODINGS = ['auto', 'utf-8', 'windows-1250'] as const
+/** The dates a bank writes (RRRR = year). */
+export const CSV_DATE_FORMATS = ['RRRR-MM-DD', 'DD.MM.RRRR', 'DD-MM-RRRR', 'DD/MM/RRRR', 'MM/DD/RRRR', 'RRRR.MM.DD', 'RRRR/MM/DD'] as const
+/** The decimal mark of the amounts: ',' – „1 234,56” (also „1.234,56”), '.' – „1,234.56” (also „1234.56”). */
+export const CSV_DECIMALS = [',', '.'] as const
+
+const csvColumn = z.number().int().min(0).max(199)
+
+/**
+ * What the columns of another bank's CSV are (AP-43, T460): set once in the import's wizard, kept at the account – its
+ * next files are read by it. `credit` / `debit` – a bank writing money in and out in two columns instead of one signed
+ * amount. A newer version's values (another separator, date format) are kept as they are (`openEnum`).
+ */
+export const csvColumnsSchema = z.looseObject({
+  date: csvColumn,
+  /** The day the bank booked it (its balance's place – `MbankRow.booked`). */
+  booked: csvColumn.nullable().default(null),
+  amount: csvColumn.nullable().default(null),
+  credit: csvColumn.nullable().default(null),
+  debit: csvColumn.nullable().default(null),
+  description: csvColumn.nullable().default(null),
+  counterparty: csvColumn.nullable().default(null),
+  operation: csvColumn.nullable().default(null),
+  balance: csvColumn.nullable().default(null),
+  accountNo: csvColumn.nullable().default(null),
+  currency: csvColumn.nullable().default(null)
+})
+export type CsvColumns = z.infer<typeof csvColumnsSchema>
+
+export const csvMappingSchema = z.looseObject({
+  separator: openEnum(CSV_SEPARATORS).default(';'),
+  encoding: openEnum(CSV_ENCODINGS).default('auto'),
+  /** Rows before the header (the bank's name, the account's data). */
+  skipRows: z.number().int().min(0).max(200).default(0),
+  /** The row after them names the columns; false – the operations start there. */
+  header: z.boolean().default(true),
+  /** The header's cells as the bank writes them: a file of the same layout is recognized by them. */
+  headers: z.array(z.string().max(200)).max(200).default([]),
+  dateFormat: openEnum(CSV_DATE_FORMATS).default('RRRR-MM-DD'),
+  decimal: openEnum(CSV_DECIMALS).default(','),
+  columns: csvColumnsSchema
+})
+export type CsvMapping = z.infer<typeof csvMappingSchema>
+
 export const accountSchema = z.looseObject({
   id: ulidSchema,
   name: z.string().trim().min(1).max(40),
   kind: openEnum(ACCOUNT_KINDS).default('bank'),
-  /** The bank export the import reads for this account (E2). */
-  importFormat: openEnum(['mbank'] as const).nullable().default(null),
+  /** The bank export the import reads for this account (E2): mBank's, or another bank's CSV by `csvMapping` (AP-43). */
+  importFormat: openEnum(['mbank', 'csv'] as const).nullable().default(null),
+  /**
+   * The columns of the account's CSV of another bank (AP-43, T460). One this version cannot read is left out of the
+   * account, never the account itself (the settings stay readable).
+   */
+  csvMapping: csvMappingSchema.optional().catch(undefined),
   archived: z.boolean().default(false)
 })
 export type Account = z.infer<typeof accountSchema>

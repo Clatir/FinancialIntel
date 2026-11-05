@@ -25,7 +25,7 @@ import { transactionSchema, type BankRow, type Share, type Split, type Transacti
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isAtmOperation, isCashExpenseRule, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
-import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
+import { accountNumberOf, keyKindOf, keyKindOfFile, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
 /** Days around the bank's date a manual entry may be (spec: ±3). */
@@ -113,8 +113,8 @@ export function looseMatch(own: { amount: number; date: string; counterparty: st
 export const looseSure = (m: Pick<LooseMatch, 'similar' | 'strong' | 'days'>, operation: string): boolean =>
   (m.similar && m.strong) || (m.days <= 1 && /^(ZAKUP|BLIK ZAKUP|PŁATNOŚĆ|PLATNOSC)/.test(operation))
 
-/** What a bank's row tells of the file it came from (`formatOfBanks`). */
-export type FormatBank = Pick<BankRow, 'source' | 'operation' | 'description' | 'importedAt'>
+/** What a bank's row tells of the file it came from (`formatOfBanks`); `key` – another bank's CSV (`csv:`, T461). */
+export type FormatBank = Pick<BankRow, 'source' | 'operation' | 'description' | 'importedAt'> & { key?: string }
 
 /**
  * The file format of bank's rows (B5): a row's own (`bank.source`, 1.4.2), else the format of the import it came with –
@@ -123,13 +123,15 @@ export type FormatBank = Pick<BankRow, 'source' | 'operation' | 'description' | 
  */
 export function formatOfBanks(banks: Iterable<FormatBank | null | undefined>): (bank: FormatBank | null | undefined) => MbankFile['format'] {
   const votes = new Map<string, number>()
+  const csv = (b: FormatBank) => !!b.key && keyKindOf(b.key) === 'csv'
   for (const b of banks) {
-    if (!b || b.source) continue
+    if (!b || b.source || csv(b)) continue
     const op = b.operation.trim().toUpperCase()
     const history = !!op && b.description.trim().toUpperCase().startsWith(op)
     votes.set(b.importedAt, (votes.get(b.importedAt) ?? 0) + (history ? 1 : -1))
   }
-  return (b) => b?.source ?? ((votes.get(b?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')
+  // Another bank's CSV (AP-43) by its row's key – written by every version, `source` of it is none (T461).
+  return (b) => (b && csv(b) ? 'csv' : (b?.source ?? ((votes.get(b?.importedAt ?? '') ?? 0) > 0 ? 'historia' : 'lista')))
 }
 
 /** The file format of each bank's operation (B5, `formatOfBanks`). */
@@ -418,13 +420,14 @@ function budgetedOf(existing: readonly Transaction[], accountId: string): Budget
   return out
 }
 
-/** The keys of a file's rows on an account (`rowKeys`), once per file and account (W18). */
+/** The keys of a file's rows on an account (`rowKeys` – of mBank's or another bank's CSV), once per file and account (W18). */
 const keysMemo = new WeakMap<readonly MbankRow[], Map<string, string[]>>()
-function keysOf(rows: readonly MbankRow[], accountId: string): string[] {
+function keysOf(rows: readonly MbankRow[], accountId: string, format: MbankFile['format']): string[] {
   let byAccount = keysMemo.get(rows)
   if (!byAccount) keysMemo.set(rows, (byAccount = new Map()))
-  let keys = byAccount.get(accountId)
-  if (!keys) byAccount.set(accountId, (keys = rowKeys(rows, accountId)))
+  const kind = keyKindOfFile(format)
+  let keys = byAccount.get(`${kind}|${accountId}`)
+  if (!keys) byAccount.set(`${kind}|${accountId}`, (keys = rowKeys(rows, accountId, kind)))
   return keys
 }
 
@@ -444,9 +447,9 @@ export interface DeletedRow {
   format?: MbankFile['format']
 }
 
-/** The key a bank's operation has on an account (B35): its date, the bank's description and amount, its occurrence. */
+/** The key a bank's operation has on an account (B35): its date, the bank's description and amount, its occurrence – of its kind (T461). */
 const keyOnFor = (account: string, t: Transaction): string =>
-  keyOnAccount(account, rowIdentity({ date: t.date, description: t.bank!.description, amount: t.amount }), keyOccurrence(t.bank!.key))
+  keyOnAccount(account, rowIdentity({ date: t.date, description: t.bank!.description, amount: t.amount }), keyOccurrence(t.bank!.key), keyKindOf(t.bank!.key))
 
 /** Every account's operations' formats, once per list of operations (AF-9: the other format on another account). */
 const allFormatsMemo = new WeakMap<readonly Transaction[], (t: Transaction) => MbankFile['format']>()
@@ -477,7 +480,7 @@ export function planImport(
   deletedKeys: ReadonlySet<string> = new Set(),
   deletedRows: readonly DeletedRow[] = []
 ): ImportPlan {
-  const keys = keysOf(file.rows, accountId)
+  const keys = keysOf(file.rows, accountId, file.format)
   const budget = budgetedOf(existing, accountId)
   const { byKey, formatOf } = budget
   const used = new Set<string>()
@@ -1459,7 +1462,8 @@ export function buildImport(
     category: p.row.category,
     pending: p.row.pending,
     importedAt: opts.now,
-    source: plan.format
+    // Another bank's CSV: told by its key (`csv:`, T461) – no value of `source` an older version would drop.
+    ...(plan.format === 'csv' ? {} : { source: plan.format })
   })
   const create: Transaction[] = []
   const update: Transaction[] = []
