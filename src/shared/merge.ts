@@ -287,6 +287,7 @@ const LABELS: Record<string, string> = {
   'schedule.date': 'Harmonogram – data',
   'schedule.amount': 'Harmonogram – kwota',
   closedAt: 'Zamknięta',
+  rate: 'Oprocentowanie (% rocznie)',
   pool: 'Pula ICTTJ',
   split: 'Podział dostawy',
   'split.shields': 'Podział dostawy – osłony',
