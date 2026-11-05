@@ -11,10 +11,12 @@
  * salary (it pays them) × the inflation, the deliveries a year ÷ 12 a month, the one-off expenses in the year's last
  * month from the shields (in today's prices – × the inflation), the buoys in their months (a yearly one every year).
  *
- * T486: the loans by their schedules – a given loan's installments come back in their months (the receivable falls by
- * them), a taken loan's leave the money in their months every year, the first one too (the course's – `courseInputOf`:
- * a loan op from the shields or its cargo container, „własna rata”), the costs without the share the average holds of
- * the loans' containers (`CourseInput.loanCosts`) – never paid twice, nor after the last installment, nor never.
+ * T486: the loans by their schedules (the course's `loanFlows`, every year – R2 review 2) – a given loan's installments
+ * come back in their months (the receivable falls by them), a taken loan's leave the money in their months every year,
+ * the first one too (a loan op from the shields or its cargo container from the month's energy, „własna rata”), the
+ * months spend the costs without the share the average holds of the loans' containers (`CourseInput.loanCosts`) – never
+ * paid twice, nor after the last installment, nor never; the hull's target and the range read the average whole × the
+ * inflation every year, as year 1 (Mostek's) – no jump at a year's boundary.
  *
  * T487: the net worth at each year's end – as the year's review counts it (F24): the money on the accounts (the course's
  * shields, hull and goals, the rest of the layers as they are now, less what this month still spends from the energy and
@@ -25,7 +27,7 @@
 import type { Scheduled, Transaction } from '../schema/records'
 import { FORECAST_SCENARIOS, forecastAssumptionsSchema, type ForecastAssumptions, type ForecastScenario, type ForecastSettings } from '../schema/budget'
 import type { CargoStatus } from './cargoStatus'
-import { COURSE_MONTHS, course, courseIncome, feesDue, type Course, type CourseInput, type CourseMonth } from './course'
+import { COURSE_MONTHS, course, courseIncome, feesDue, restEnergy, type Course, type CourseInput, type CourseMonth } from './course'
 import { addMonths, lastDayOf, monthOf } from './dates'
 import type { FleetState } from './fleet'
 import { sum } from './operations'
@@ -99,16 +101,16 @@ export interface ForecastInput {
   /** The loans given still open, and their installments not covered yet by month (a late one – this month). */
   given: { open: number; repayments: ReadonlyArray<{ month: string; amount: number }> }
   /**
-   * Money of the months after the course's year (signed): the buoys (a yearly one every year), the loans given coming
-   * back, the taken loans' installments going out (T486).
+   * Money of the buoys in the months after the course's year (signed; a yearly one every year). The loans' money of every
+   * year is the course's `loanFlows` (T486, R2 review 2 – an installment out never cancels a repayment in).
    */
   later: ReadonlyMap<string, number>
 }
 
 /**
- * The forecast's input from the engine's state now, the course's input and the records (Wywiad): the money of the later
- * years (the buoys over the whole horizon, the loans' schedules), the loans given, the household, the tanks' part of
- * this month's fees (`cargo` – AP-10's state). The taken loans' share of the average costs is the course's (`loanCosts`).
+ * The forecast's input from the engine's state now, the course's input and the records (Wywiad): the buoys of the later
+ * years, the loans given, the household, the tanks' part of this month's fees (`cargo` – AP-10's state). The loans'
+ * money of every year (`loanFlows`) and the taken loans' share of the average costs (`loanCosts`) are the course's.
  */
 export function forecastInputOf(
   fleet: FleetState,
@@ -124,19 +126,14 @@ export function forecastInputOf(
   // The buoys after the course's year (its own come from `courseInputOf`): their open days, a yearly one each year.
   for (const d of openDays(scheduledDays(r.scheduled, r.transactions, fleet.today, `${addMonths(yearEnd, 1)}-01`, lastDayOf(end))))
     if (d.scheduled.amount != null) add(monthOf(d.date), d.scheduled.amount)
+  // The loans given still open and their installments back, by month – the receivable falls by them (the money comes back
+  // by the course's `loanFlows`; a late one this month, as there).
   const repayments: Array<{ month: string; amount: number }> = []
   let open = 0
   for (const l of fleet.loans) {
-    if (l.loan.closedAt) continue
-    if (l.loan.direction === 'given') {
-      open += l.open
-      // As the course: a late installment this month (`courseInputOf`).
-      for (const i of l.left) {
-        const month = i.date < fleet.today ? fleet.month : monthOf(i.date)
-        repayments.push({ month, amount: i.amount })
-        add(month, i.amount)
-      }
-    } else for (const i of l.left) add(monthOf(i.date), -i.amount)
+    if (l.loan.closedAt || l.loan.direction !== 'given') continue
+    open += l.open
+    for (const i of l.left) repayments.push({ month: i.date < fleet.today ? fleet.month : monthOf(i.date), amount: i.amount })
   }
   return {
     course: input,
@@ -197,10 +194,10 @@ export interface Forecast {
   shortFrom: string | null
 }
 
-/** The money of the months after `from` up to `to`. */
-function between(map: ReadonlyMap<string, number>, from: string, to: string): Map<string, number> {
-  const out = new Map<string, number>()
-  for (const [m, v] of map) if (m > from && m <= to) out.set(m, v)
+/** The money of the months after `from` up to `to` (`from` – the year before's last month, counted by it already). */
+function between<T>(map: ReadonlyMap<string, T> | undefined, from: string, to: string): Map<string, T> {
+  const out = new Map<string, T>()
+  for (const [m, v] of map ?? []) if (m > from && m <= to) out.set(m, v)
   return out
 }
 
@@ -214,7 +211,9 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
   // fees' payments are in the average costs), less what this month still spends from the energy and the tanks, less the
   // tax reserve.
   const layers = c.shields + c.hull + sum(c.goals.map((g) => g.amount))
-  const spentNow = c.energy ? Math.min(c.energy.needs, Math.max(0, c.energy.left)) : 0
+  // What the month's energy still pays: its plan and the hold's loan installments due (R2 review 2 – `restEnergy`).
+  const rest = restEnergy(c)
+  const spentNow = rest ? Math.min(rest.needs, rest.left) : 0
   const other = input.total - layers - spentNow - input.tanksNow - input.taxHold
   const installments = c.installments ?? []
   // As the course's range: the debt less the installments up to the month.
@@ -235,8 +234,12 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
     const oneOff = Math.round(a.oneOff * inflation)
     const purchases = oneOff > 0 ? [{ month: last, goalId: null, amount: oneOff }] : []
     const work = Math.round(input.work * growth)
-    // What the months spend (T486): the average without the taken loans' installments – those leave in their months.
+    // What the months spend (T486): the average without the taken loans' installments – those leave in their months (the
+    // installments as their schedules say, never × the inflation).
     const costs = c.costs == null ? null : Math.max(0, Math.round((c.costs - (c.loanCosts ?? 0)) * inflation))
+    // The hull's target and the range read the average whole × the inflation (R2 review 2 – as year 1, Mostek's): the
+    // course spends `whole − loanCosts` = `costs` above.
+    const whole = c.costs == null ? null : Math.round(c.costs * inflation)
     const from: CourseMonth | null = prev
     const run: Course = !from
       ? course({ ...c, income: { work, trading }, purchases: [...(c.purchases ?? []), ...purchases], horizon: COURSE_MONTHS }, 'noXtb')
@@ -251,11 +254,11 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
               const s = c.salaryOf(m)
               return s == null ? null : Math.round(s * inflation)
             },
-            costs,
-            // The installments are in `later` – the costs above are without them already.
-            loanCosts: 0,
+            costs: whole,
+            loanCosts: whole == null || costs == null ? 0 : whole - costs,
             income: { work, trading },
             extras: between(input.later, start, last),
+            loanFlows: between(c.loanFlows, start, last),
             purchases,
             // The year before ended its months whole: no rest, no maneuver.
             energy: undefined,

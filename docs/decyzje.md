@@ -4147,6 +4147,20 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i cel kadłuba w kursie czytają średnią całą (Mostek), od roku 2 prognozy – koszty roku bez rat. Testy: kurs = silnik
   w miesiącu z ratą (spłata z osłon i rata z kontenera), scenariusz recenzji (12 000 zł, 12 rat: siła floty 8 000 zł po
   roku, nie 20 000).
+  **Przegląd R2, runda 2 (zmienia „rata tego miesiąca … w `restNeeds`” i „od roku 2 – koszty roku bez rat”):**
+  (1) stan opłat (`cargoStatuses`) pomija kontenery pożyczek, więc `restNeeds` raty tego miesiąca nie miał – rata
+  z kontenera znikała z kursu (a dług malał). Pieniądze pożyczek idą teraz osobno od boi: `CourseInput.loanFlows`
+  (`loanFlowsOf` – na miesiąc `out` – rata operacją pożyczki, z osłon; `cargo` – rata kontenera w ładowni, z energii
+  miesiąca ponad nią z osłon, jak `spendEnergy` silnika; `back` – rata pożyczki udzielonej wraca do osłon, bez dokowania
+  – T70); rata kontenera tego miesiąca (także zaległa) – w resztce miesiąca razem z `energy.needs` (`restEnergy`, ta sama
+  liczba w prognozie: „wyda z energii”). (2) Przyjęte koszty (`costs.source` 'assumed') zastępują średnią – mają w sobie
+  ratę: `loanCosts` = rata każdego kontenera pożyczki wziętej w ładowni (niezarchiwizowanego, przed końcem) w tym
+  miesiącu (albo w pierwszym, gdy zaczyna się później) – inaczej miesiąc wydawał przyjęte koszty całe i ratę. (3) Od
+  roku 2 prognoza podaje kursowi całą średnią × inflacja i `loanCosts` = cała − wydatki bez rat: cel kadłuba i zasięg jak
+  w roku 1 (Mostek), bez skoku na granicy roku. (4) Rata wzięta i spłata udzielona w jednym miesiącu nie znoszą się
+  (dawniej jedna suma `extras` – kurs nie widział ani raty, ani spłaty, a silnik płaci z osłon/kadłuba i oddaje do osłon):
+  najpierw płatności (najniższy punkt po nich), potem to, co wraca. Testy: `forecast-r2-review2.test.ts` (kurs = silnik
+  w listopadzie z ratą kontenera i w grudniu z ratą i spłatą, przyjęte koszty, cel kadłuba roku 2).
 - **T487** Siła floty netto na koniec roku (1.17.0, R2 – AP-44): jak przegląd roczny (F24, T449) – pieniądze na kontach
   (osłony, kadłub i cele z kursu + reszta warstw – T486 – minus rezerwa podatkowa: PIT-38 płatny w ciągu roku) + należności
   (saldo domowników jak dziś, pożyczki udzielone jeszcze otwarte) − dług − **wszystkie braki dotąd** (`short` kursu:

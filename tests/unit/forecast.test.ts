@@ -305,20 +305,20 @@ describe('AP-44: wejście prognozy ze stanu silnika', () => {
     expect(fi.work).toBe(courseIncome(f.incomeStats, 'noXtb').work)
     expect(fi.work).toBe(zl(5000))
     // The average costs (3 500 + 500) hold the installment: 500 a month - the course spends without it, the installments
-    // leave in their months; November's is the hold's due this month (its container - `restNeeds`), not an extra.
+    // leave in their months – paid by the container in the hold (`cargo`, from the month's energy, as the engine's);
+    // November's too (R2 review 2: the fees' state leaves the loans' containers out – it is not `restNeeds`).
     expect(f.costs.average).toBe(zl(4000))
     expect(ci.loanCosts).toBe(zl(500))
     expect(ci.extras.get('2026-11') ?? 0).toBe(0)
-    expect([ci.extras.get('2026-12'), ci.extras.get('2027-03'), ci.extras.get('2027-11')]).toEqual([-zl(500), -zl(500) - zl(1200), -zl(500)])
-    // The later years (from December 2027): the buoy every March, the wedding, Tomek's 500 back, the 2 installments left
-    // after November 2027 (December, January).
-    const expected = new Map<string, number>([
-      // Tomek's 500 back and an installment out in one month.
-      ['2027-12', 0],
-      ['2028-01', -zl(500)],
-      ['2029-06', -zl(3000)],
-      ...['2028', '2029', '2030', '2031', '2032', '2033', '2034', '2035', '2036'].map((y): [string, number] => [`${y}-03`, -zl(1200)])
-    ])
+    expect(ci.extras.get('2027-03')).toBe(-zl(1200))
+    const flow = (m: string) => ci.loanFlows?.get(m)
+    expect([flow('2026-11'), flow('2026-12'), flow('2027-11')]).toEqual([0, 0, 0].map(() => ({ out: 0, cargo: zl(500), back: 0 })))
+    // Tomek's 500 back and an installment out in one month – apart, never netted (R2 review 2).
+    expect(flow('2027-12')).toEqual({ out: 0, cargo: zl(500), back: zl(500) })
+    expect(flow('2028-01')).toEqual({ out: 0, cargo: zl(500), back: 0 })
+    expect(flow('2028-02')).toBeUndefined()
+    // The later years' buoys (from December 2027): every March, the wedding.
+    const expected = new Map<string, number>([['2029-06', -zl(3000)], ...['2028', '2029', '2030', '2031', '2032', '2033', '2034', '2035', '2036'].map((y): [string, number] => [`${y}-03`, -zl(1200)])])
     expect(new Map([...fi.later].sort())).toEqual(new Map([...expected].sort()))
     expect(fi.given).toEqual({ open: zl(500), repayments: [{ month: '2027-12', amount: zl(500) }] })
     const fc = forecast(fi, 'base', FORECAST_DEFAULTS.base, 3)
