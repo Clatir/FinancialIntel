@@ -1,28 +1,32 @@
 /**
  * „Meldunki do rozpatrzenia” (F6, D86): one inbox of what waits for the captain's decision – the deliveries from XTB to
- * dock, the data folder's conflicts and files with errors, the expenses without a category, the possible duplicates, the
+ * dock, the top-ups of XTB against the firewall to confirm, the data folder's conflicts and files with errors, the expenses without a category, the possible duplicates, the
  * bank's operations come back after their deletion (AF-1), the refunds still owed, the balances unconfirmed for over 30 days, the loot undecided. Pure; no notifications of its own –
  * the side menu counts the reports, the inbox lists them.
  */
 import { formatPln, plDate, plural } from '../format'
+import { derivedId } from '../ids'
 import { isUncategorized, uncategorizedAmount } from '../operationsView'
-import type { Container, Transaction } from '../schema/records'
+import { SCHEMA_VERSION } from '../schema/common'
+import { dockingSchema, type Container, type Docking, type Transaction } from '../schema/records'
 import { daysBetween, warsawNow } from './dates'
-import { deliveryItem, dm, type AccountConfirmation } from './briefing'
+import { againstFirewall, deliveryItem, dm, type AccountConfirmation } from './briefing'
 import type { Delivery } from './dock'
-import { isOpeningItem, type MemberBalance } from './household'
+import type { Alarm } from './fleet'
+import { isOpeningItem, openText, type MemberBalance } from './household'
 import type { TransferIssue } from './transfers'
 import { deadText, priceText, type DeadContainer, type PriceChange } from './cargoWatch'
 import { anomalyText, type Anomaly } from './anomalies'
 import { lateReturnText, type AwaitedReturn } from './returns'
 
-export type InboxKind = 'dock' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'advances' | 'refunds' | 'returns' | 'cargo' | 'balances'
+export type InboxKind = 'dock' | 'firewall' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'advances' | 'refunds' | 'returns' | 'cargo' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'firewall', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
+  firewall: 'Firewall',
   loot: 'Łupy',
   folder: 'Folder danych',
   uncategorized: 'Bez kategorii',
@@ -57,6 +61,44 @@ export interface InboxItem {
 
 /** A balance not confirmed for longer is a report (D86). */
 export const INBOX_BALANCE_DAYS = 30
+
+/** A top-up of XTB against the firewall waits this long for its confirmation (DO sp. 12, T438) – an older one is history. */
+export const TOPUP_CONFIRM_DAYS = 30
+
+/** A top-up of XTB against the firewall to confirm (DO sp. 12, T438): the engine's alarm of its operation. */
+export interface TopUpToConfirm {
+  txId: string
+  date: string
+  amount: number
+}
+
+/**
+ * The top-ups of XTB against the firewall found only in the bank (DO sp. 12, T438 – spec: „czerwony alarm, potwierdzenie
+ * i poważne naruszenie”): the engine's alarm, no ICTTJ entry of it (one with its entry is confirmed in the docking window),
+ * not confirmed yet (`confirmed` – the operations with a docking record), of the last `TOPUP_CONFIRM_DAYS` days.
+ */
+export function topUpsToConfirm(
+  alarms: readonly Pick<Alarm, 'kind' | 'txId' | 'date' | 'amount'>[],
+  deliveries: readonly Pick<Delivery, 'entry' | 'transaction' | 'state'>[],
+  confirmed: (txId: string) => boolean,
+  today: string
+): TopUpToConfirm[] {
+  const withEntry = new Set(deliveries.filter((d) => d.entry && d.transaction && (d.state === 'pending' || d.state === 'waiting' || d.state === 'docked')).map((d) => d.transaction!.id))
+  return alarms
+    .filter((a) => a.kind === 'firewall' && a.txId && !withEntry.has(a.txId) && !confirmed(a.txId) && daysBetween(a.date, today) <= TOPUP_CONFIRM_DAYS)
+    .map((a) => ({ txId: a.txId!, date: a.date, amount: a.amount }))
+}
+
+/**
+ * „Potwierdź” of such a top-up (DO sp. 12, T438): the docking record of its operation – no ICTTJ entry, pool or split;
+ * one id per operation (two computers write one file). Counted from the operation's arrival (`countedFrom`, as a pair's
+ * docking – T363; przegląd N5 5): the engine's moment of the operation (`cameIn`) stays its own, so a goal's transfer or
+ * a hull top-up of its day made between the operation and the click keeps its place after it (T340, T373) – the
+ * confirmation changes no money, no alarm and no day of the game.
+ */
+export function topUpConfirmation(t: Pick<Transaction, 'id' | 'date' | 'createdAt'>, now: string): Docking {
+  return dockingSchema.parse({ schemaVersion: SCHEMA_VERSION, id: derivedId(t.id, `topup:${t.id}`), createdAt: now, updatedAt: now, date: t.date, transactionId: t.id, ictjEntryId: null, pool: null, split: null, countedFrom: t.createdAt })
+}
 
 /** The advances of a member a report lists by name (AP-4); the rest – their number. */
 const ADVANCES_SHOWN = 4
@@ -102,6 +144,10 @@ export interface InboxInput {
   /** The budget started: before it only the data folder reports. */
   started: boolean
   deliveries: readonly Delivery[]
+  /** The engine's alarms (`FleetState.alarms`): a return to dock said against the firewall only then (DO sp. 6). */
+  alarms?: readonly Pick<Alarm, 'kind' | 'txId' | 'date' | 'amount'>[]
+  /** The top-ups of XTB against the firewall to confirm (DO sp. 12 – `topUpsToConfirm`). */
+  topUps?: readonly TopUpToConfirm[]
   conflicts: number
   problems: number
   uncategorized: Uncategorized
@@ -138,6 +184,13 @@ export interface InboxInput {
   cargo?: { prices: readonly PriceChange[]; dead: readonly DeadContainer[]; containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths' | 'schedule'>> }
 }
 
+/**
+ * The budget's reports wait for its start by the wizard (AP-25, ME sp. 3): a folder with an opening balance and the old
+ * history runs the engine already, but its tasks (uncategorized, balances, duplicates…) come once the budget starts –
+ * before it, only the data folder reports. `budgetStart` – `settings.budget.start`.
+ */
+export const inboxStarted = (engineStarted: boolean, budgetStart: string | null | undefined): boolean => engineStarted && !!budgetStart
+
 const dmy = plDate
 const zlotych = (g: number) => `${formatPln(g)} zł`
 
@@ -147,9 +200,19 @@ export function inboxItems(o: InboxInput): InboxItem[] {
   if (o.started)
     for (const d of o.deliveries) {
       if (d.state !== 'pending') continue
-      const line = deliveryItem(d, o.today, zl)
+      const line = deliveryItem(d, o.today, zl, againstFirewall(o.alarms ?? [], d))
       if (line) out.push({ kind: 'dock', key: `dock:${d.key}`, ref: d.key, text: line.text, action: 'Zadokuj' })
     }
+  // A top-up of XTB against the firewall found only in the bank (DO sp. 12): confirmed here – the violation stays.
+  if (o.started)
+    for (const t of o.topUps ?? [])
+      out.push({
+        kind: 'firewall',
+        key: `firewall:${t.txId}`,
+        ref: t.txId,
+        text: `Dopłata do XTB ${zl(t.amount)} z ${dm(t.date)} wbrew rozkazowi firewall (osłony albo kadłub niepełne) – potwierdź, że to Twoja decyzja.`,
+        action: 'Potwierdź'
+      })
   if (o.started && o.loot.month && o.loot.amount > 0)
     out.push({ kind: 'loot', key: `loot:${o.loot.month}`, text: `Łupy z poprzedniego miesiąca: ${zl(o.loot.amount)} – podział do 7. dnia, potem trafią do osłon.`, action: 'Plan miesiąca' })
   if (o.conflicts || o.problems) {
@@ -232,15 +295,22 @@ export function inboxItems(o: InboxInput): InboxItem[] {
   // The radar of anomalies (F31): each until „w porządku” – its operation to look at (a category: its month in Operacje).
   for (const a of o.anomalies ?? []) out.push({ kind: 'anomalies', key: `anomalies:${a.key}`, ref: a.key, text: anomalyText(a, zl), action: a.txIds.length ? 'Pokaż operację' : 'Pokaż w Operacjach' })
   // A member's money repaid but not assigned to a purchase (D91): which purchases it pays back – its operation's editor.
+  // The balance at the settlements' start is no purchase (SW sp. 9): said apart; a member whose debt the money paid off
+  // is said settled – as the bridge and the radar have it.
   for (const m of o.members)
-    for (const u of m.unassigned)
+    for (const u of m.unassigned) {
+      const open = openText(m.open)
       out.push({
         kind: 'repayments',
         key: `repayments:${u.txId}:${m.memberId}`,
         ref: u.txId,
-        text: `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} – wskaż, które zakupy spłaca${m.open.length ? ` (do oddania: ${m.open.length} ${plural(m.open.length, 'zakup', 'zakupy', 'zakupów')})` : ''}.`,
+        text:
+          m.owed > 0
+            ? `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} – wskaż, co spłaca${open ? ` (do oddania: ${open})` : ''}.`
+            : `${o.memberName(m.memberId)}: zwrot ${zl(u.amount)} z ${dm(u.date)} wyrównał dług – wskaż, co spłaca${open ? `: ${open}` : ''}.`,
         action: 'Przypisz'
       })
+    }
   // A member's advances for the future that left their debt unpaid (AP-4): repay it now, or keep them as they are.
   for (const a of o.advances ?? []) {
     if (a.owed <= 0 || !a.items.length) continue

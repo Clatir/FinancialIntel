@@ -21,7 +21,7 @@ export const ENVELOPE_MONTHS = 3
 /** The salary is proposed in whole hundreds of złoty, up (D70). */
 const SALARY_STEP = 100_00
 /** Envelopes in tens of złoty (D70). */
-const ENVELOPE_STEP = 10_00
+export const ENVELOPE_STEP = 10_00
 
 /** The first month the history covers in whole (`calc/history.ts`: where the bank's history starts – B25). */
 export function firstFullMonth(transactions: readonly Pick<Transaction, 'date' | 'kind' | 'bank'>[]): string | null {
@@ -215,6 +215,8 @@ const MONTH_DAYS = 30.44
 const CYCLE_SLACK_DAYS = 12
 /** The cycles of the history's fees besides the monthly and the yearly one (F23). */
 const MID_CYCLES = [2, 3, 6] as const
+/** A bill of a varying amount besides the monthly one (AP-25, AF-13): every 2 months – the electricity, the gas. */
+const VARIABLE_MID_CYCLES: ReadonlySet<number> = new Set([2])
 /** A variable bill's amounts lie within this share of their median (F23): electricity 150–260 zł – a shop's do not. */
 const VARIABLE_SPREAD = 0.6
 /** The payments of a bill (a variable one, a schedule's) come within this many days of their usual day of the month. */
@@ -244,6 +246,12 @@ function onItsDay(dates: readonly string[], slack = BILL_DAY_SLACK): number | nu
   const days = dates.map(dayOfMonth).sort((a, b) => a - b)
   const day = days[(days.length - 1) >> 1]
   return day != null && days.every((d) => Math.abs(d - day) <= slack) ? day : null
+}
+
+/** Months of the year (sorted) that make one run across the new year – November to July: 1–7 and 11–12. */
+function cyclicRun(months: readonly number[]): boolean {
+  const gaps = months.map((m, i) => (i ? m - months[i - 1]! : m + 12 - months[months.length - 1]!))
+  return gaps.filter((g) => g !== 1).length <= 1
 }
 
 type Detected = Pick<RecurringPayment, 'amount' | 'cycleMonths' | 'schedule' | 'variable' | 'dueMonth' | 'dueDay' | 'payments' | 'last'>
@@ -288,8 +296,16 @@ function detectCycle(sorted: readonly Transaction[], month: string, window: read
     const want = n * MONTH_DAYS
     let run = 1
     for (let i = sorted.length - 1; i > 0 && Math.abs(daysBetween(sorted[i - 1]!.date, sorted[i]!.date) - want) <= CYCLE_SLACK_DAYS; i--) run++
-    if (run < 3 || daysBetween(last.date, start) > want + CYCLE_SLACK_DAYS || !steady(amountsOf(sorted.slice(-run)))) continue
-    return found(n, run, -last.amount)
+    if (run < 3 || daysBetween(last.date, start) > want + CYCLE_SLACK_DAYS) continue
+    const runOf = sorted.slice(-run)
+    if (steady(amountsOf(runOf))) return found(n, run, -last.amount)
+    // A bill of a varying amount every 2 months (AF-13, KR.19 – the electricity, 150–230 zł): on its day of the month,
+    // its amount the 75th percentile of a year up to whole złoty, as a monthly one.
+    const day = VARIABLE_MID_CYCLES.has(n) ? onItsDay(runOf.map((t) => t.date)) : null
+    if (day != null && within(amountsOf(runOf), VARIABLE_SPREAD)) {
+      const year = sorted.filter((t) => t.date >= firstDayOf(addMonths(month, -12)))
+      return found(n, run, Math.ceil(p75(amountsOf(year)) / 100) * 100, { variable: true, dueDay: day })
+    }
   }
   // Once a year: two or three steady payments, each 11–13 months after the one before (no shop visited monthly).
   const gaps = sorted.slice(1).map((t, i) => monthsBetween(monthOf(sorted[i]!.date), monthOf(t.date)))
@@ -301,6 +317,9 @@ function detectCycle(sorted: readonly Transaction[], month: string, window: read
   const year = sorted.filter((t) => t.date >= yearFrom)
   const months = [...new Set(year.map((t) => Number(t.date.slice(5, 7))))].sort((a, b) => a - b)
   if (year.length < 3 || year.length > 11 || months.length !== year.length || !steady(amountsOf(year))) return null
+  // Months one after another (AF-13, KR.19 – a subscription paid every month and cancelled in July): a monthly fee that
+  // stopped or began, never a schedule of months.
+  if (cyclicRun(months)) return null
   const day = onItsDay(year.map((t) => t.date))
   if (day == null) return null
   // Its longest gap between payments: the next one not missed yet.
@@ -579,8 +598,13 @@ export interface Debriefing {
   salary: number | null
   /** What the engine paid as the salary (less in the budget's first month – the part spent before the start). */
   paid: number | null
-  /** Net costs of the month. */
+  /**
+   * Net costs of the month up to the budget's day (AP-36, T421): the whole debriefing reads the operations dated up to
+   * today, as the balances and the engine count them.
+   */
   costs: number
+  /** Net costs of the month's operations dated after the budget's day – „zaplanowane”, apart from the rest (AP-36). */
+  planned: number
   /** The month has ended (today is past it): its result and its loot are final. */
   ended: boolean
   /**
@@ -689,7 +713,10 @@ export function debriefing(
 ): Debriefing {
   const plan = planFor(input.plans, month)
   const cats = categoryIndex(input.categories)
-  const txs = transactionsOfMonth(input.transactions, month)
+  const all = transactionsOfMonth(input.transactions, month)
+  // The month up to the budget's day (AP-36, T421): an operation dated later is planned – apart, never in the costs.
+  const later = month >= monthOf(input.today) ? all.filter((t) => t.date > input.today) : []
+  const txs = later.length ? all.filter((t) => t.date <= input.today) : all
   const costs = sum(txs.map(costOf))
   // Without the containers (an older caller): every linked payment is the cargo's.
   const { spent, cargo, uncategorized } = monthSpending(txs, cats, input.containers ? new Set(input.containers.map((c) => c.id)) : null)
@@ -750,6 +777,7 @@ export function debriefing(
     salary,
     paid: salaries.length ? sum(salaries.map((e) => e.amount)) : null,
     costs,
+    planned: sum(later.map(costOf)),
     ended,
     // Never „na plus” before the month's end (N65) nor with an unreturned energy exhaustion (N-PC-3).
     plus: !ended ? null : energy ? energy.result >= 0 && energy.exhausted === 0 : salary != null && salary > 0 ? costs <= salary : null,
@@ -809,6 +837,16 @@ export function lootApplied(log: readonly FleetEvent[], month: string): { date: 
 
 /** Until when the loot of `month` waits for a decision: the 7th of the next month (then it goes to the shields – D18). */
 export const lootDeadline = (month: string): string => `${addMonths(month, 1)}-07`
+
+/**
+ * The loot changed after its decision (B10, AP-24 – RY sp. 3: a late import of the month): what the decision split and
+ * what the engine split now – the plan's and the debriefing's line; null = the same (or no decision, nothing applied).
+ */
+export function lootChange(decision: MonthPlan['loot'] | null | undefined, applied: { amount: number } | null): { decided: number; now: number } | null {
+  if (!decision || !applied) return null
+  const decided = decision.shields + decision.nextMonth + sum(Object.values(decision.goals)) + sum(Object.values(decision.envelopes ?? {}))
+  return decided === applied.amount ? null : { decided, now: applied.amount }
+}
 
 // ------------------------------------------------------------------ the cargo's simulation
 

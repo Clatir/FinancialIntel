@@ -3,10 +3,11 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { warsawNow } from '@shared/calc/dates'
 import { useData } from '../store/data'
 import { navigate, useUi } from '../store/ui'
-import { startWizard, useWizard, WIZARD_STEPS } from '../features/wizard/state'
+import { finishStart, startLeftText, startWizard, useWizard, WIZARD_STEPS } from '../features/wizard/state'
 import { dismissUpdateNotice, downloadUpdate, restartToUpdate, useUpdate } from '../store/update'
 import { asksAutostart, installWhen, loadTrayPrefs, setTrayPrefs, useTray } from '../store/tray'
 import { openExternalSafe } from '../features/settings/UpdatesTab'
+import { MachineSetupDialog, dismissMachineSetup, openMachineSetup, useMachineSetup } from '../features/settings/MachineSetup'
 import { IconCheck, IconSync, IconWarn } from '../components/icons'
 import { cx } from '../components/ui'
 
@@ -91,6 +92,10 @@ export function Banners() {
   // The wizard under way (AF-11): the banner goes back to it, its answers kept.
   const wizardStep = useWizard((w) => (w.active ? w.step : null))
   const tray = useTray((s) => s.prefs)
+  const machineSetup = useMachineSetup((s) => s.pending)
+  // The budget's start not whole in the folder (T446): what it lacks – „Dokończ” writes it.
+  const startLeft = useData((s) => s.startLeft)
+  const startMissing = useData((s) => s.startMissing)
   useEffect(() => {
     void loadTrayPrefs()
   }, [])
@@ -124,8 +129,23 @@ export function Banners() {
             : 'Budżet jeszcze nie wystartował: kreator startu ustawi salda, pensję, warstwy okrętu i koperty.',
       actions: [{ label: wizardStep != null ? 'Wróć do kreatora' : 'Kreator startu', onClick: startWizard, accent: true, testId: 'banner-wizard-start' }]
     })
+  if (startLeft && startMissing.length && !status?.readOnly)
+    items.push({
+      key: 'start-left',
+      text: startLeftText(startLeft, startMissing),
+      actions: [{ label: 'Dokończ', onClick: () => void finishStart(), accent: true, testId: 'banner-start-finish' }]
+    })
+  // A budget opened on a new computer (AP-28): what is set on every computer apart – the start with Windows among them.
+  const setupHere = machineSetup && !!budgetStart
+  if (setupHere)
+    items.push({
+      key: 'machine-setup',
+      text: 'Pierwsze otwarcie tego budżetu na tym komputerze – ICTTJ, skrót szybkiego wpisu, start z Windows, powiadomienia i token ustawiasz na każdym komputerze osobno.',
+      actions: [{ label: 'Ustaw na tym komputerze', onClick: openMachineSetup, accent: true, testId: 'banner-machine-setup-open' }],
+      onClose: dismissMachineSetup
+    })
   // Another computer with the running budget (N100, D64): the start with Windows asked once – the wizard asked the first.
-  if (asksAutostart(tray, !!budgetStart) && !status?.readOnly)
+  if (asksAutostart(tray, !!budgetStart) && !status?.readOnly && !setupHere)
     items.push({
       key: 'autostart',
       text: 'Uruchamiać Financial Intel z Windows na tym komputerze? Przypomnienia i powiadomienia działają wtedy w tle (ukryta w zasobniku).',
@@ -135,9 +155,10 @@ export function Banners() {
       ]
     })
   items.push(...updates)
-  if (!items.length) return null
+  if (!items.length) return <MachineSetupDialog />
   return (
     <div className="flex flex-col">
+      <MachineSetupDialog />
       {items.map((b) => (
         <div
           key={b.key}

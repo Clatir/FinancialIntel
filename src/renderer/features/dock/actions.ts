@@ -3,8 +3,9 @@
  * pair in the bank, its operation on Portfel XTB. Undone with „Cofnij”; taken back later with „Wycofaj dokowanie”
  * (AP-9 – `undockDelivery`).
  */
-import { asPayout, type Delivery } from '@shared/calc/dock'
+import { asPayout, dockedText, type Delivery } from '@shared/calc/dock'
 import { countsByPool } from '@shared/calc/fleet'
+import { topUpConfirmation } from '@shared/calc/inbox'
 import { dockingIdOf, undockingOf, walletOperationId } from '@shared/calc/undock'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { newId } from '@shared/ids'
@@ -91,7 +92,7 @@ export function dockDelivery(d: Delivery, split: SplitDraft | null): boolean {
   const orphans = d.orphans.filter((o) => o.id !== docking.id)
   for (const o of orphans) deleteOrSay('dockings', o.id)
   playSound('docking')
-  toast(`Zadokowano ${plnText(d.amount)} zł${created ? ' na Portfelu XTB' : ''}.`, 'success', 6000, {
+  toast(dockedText(d, tx, !!created, (g) => `${plnText(g)} zł`), 'success', 6000, {
     label: 'Cofnij',
     run: () => {
       if (before) updateRecord('dockings', before.id, () => before)
@@ -143,7 +144,8 @@ export function undockDelivery(d: Delivery): boolean {
   for (const t of ops) deleteOrSay('transactions', t.id)
   const what = ops.length ? ' i jego operację na Portfelu XTB' : ''
   const then = ops.length ? 'dostawa znowu czeka na dokowanie' : 'operacja z banku zostaje i czeka na ponowne dokowanie'
-  toast(`Wycofano dokowanie ${plnText(d.amount)} zł${what} – ${then}.`, 'success', 8000, {
+  // The amount the layers took (DO sp. 5): the operation's – the bank's when it differs from the entry's.
+  toast(`Wycofano dokowanie ${plnText(d.transaction ? Math.abs(d.transaction.amount) : d.amount)} zł${what} – ${then}.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
       // Docked again meanwhile – the same ids (B17), or another docking of its entry or its operation (one without a fixed
@@ -156,6 +158,24 @@ export function undockDelivery(d: Delivery): boolean {
       for (const t of ops) if (!now.transactions[t.id]) addRecord('transactions', t)
       for (const x of dockings) if (!now.dockings?.[x.id]) addRecord('dockings', x)
     }
+  })
+  return true
+}
+
+/**
+ * A top-up of XTB against the firewall found only in the bank, confirmed (DO sp. 12, T438): a docking record of its
+ * operation without an ICTTJ entry (`topUpConfirmation` – one id per operation, counted from the operation's arrival).
+ * It changes no money – the red alarm and the game's serious violation stay; the report goes. „Cofnij” takes it back.
+ */
+export function confirmTopUp(txId: string): boolean {
+  if (!canWrite()) return false
+  const t = useData.getState().records.transactions[txId]?.record
+  if (!t) return false
+  const docking = topUpConfirmation(t, new Date().toISOString())
+  if (!addRecord('dockings', docking)) return false
+  toast(`Potwierdzono dopłatę do XTB ${plnText(Math.abs(t.amount))} zł – wbrew rozkazowi firewall, w grze zostaje poważnym naruszeniem.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => deleteOrSay('dockings', docking.id)
   })
   return true
 }

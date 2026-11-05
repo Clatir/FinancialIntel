@@ -3,7 +3,7 @@ import { addMonths, warsawNow } from '@shared/calc/dates'
 import { glossaryOf } from '@shared/glossary'
 import { energyAfterLimit, type FleetState } from '@shared/calc/fleet'
 import { capNote } from '@shared/calc/why'
-import { debriefing, envelopeExtraOf, lootApplied, lootDeadline, lootExtraOf, monthAhead, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
+import { debriefing, envelopeExtraOf, lootApplied, lootChange, lootDeadline, lootExtraOf, monthAhead, planFor, proposeEnvelopes, proposeSalary, ratesOf, salarySplit, sinkingOf, type Debriefing } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { fuelSummary, rateText } from '@shared/calc/fuel'
 import { useMembers } from '../household/actions'
@@ -143,7 +143,7 @@ export function MonthPage() {
             {month === current && <DailyPanel fleet={fleet} />}
             <EnvelopesPanel month={month} current={current} fleet={fleet} brief={shownBrief} readOnly={readOnly} />
             {brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? (
-              <DebriefPanel brief={brief} fleet={fleet} today={today} plans={plans} readOnly={readOnly} />
+              <DebriefPanel brief={brief} shown={month} fleet={fleet} today={today} plans={plans} readOnly={readOnly} />
             ) : (
               <Panel title="Debriefing" testId="month-debrief">
                 <Empty>Pierwszy debriefing po pierwszym miesiącu budżetu{fleet.start ? ` – od ${dayLabel(`${addMonths(fleet.start.slice(0, 7), 1)}-01`)}` : ''}.</Empty>
@@ -181,14 +181,18 @@ function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { 
           <AmountField className="w-[140px]" value={plan?.salary ?? null} allowEmpty onChange={(v) => setSalary(month, v ?? 0)} disabled={readOnly} aria-label="Pensja" data-testid="month-salary" />
           <span className="text-muted">zł · wypłata z osłon 1. dnia miesiąca</span>
         </div>
-        {proposal && proposal.amount !== plan?.salary && (
-          <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
+        {/* The average costs always (AP-24, PM sp. 5) – the proposal beside them only when the plan is another amount. */}
+        {proposal && (
+          <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted" data-testid="month-salary-average">
             <span>
-              Średnie koszty z {proposal.months.length} mies.: {zl(proposal.average)} ·
+              Średnie koszty z {proposal.months.length} mies.: {zl(proposal.average)}
+              {proposal.amount !== plan?.salary ? ' ·' : ` – pensja równa propozycji (${zl(proposal.amount)})`}
             </span>
-            <button className="text-accent hover:underline" onClick={() => setSalary(month, proposal.amount)} disabled={readOnly} data-testid="month-salary-propose">
-              przyjmij {zl(proposal.amount)}
-            </button>
+            {proposal.amount !== plan?.salary && (
+              <button className="text-accent hover:underline" onClick={() => setSalary(month, proposal.amount)} disabled={readOnly} data-testid="month-salary-propose">
+                przyjmij {zl(proposal.amount)}
+              </button>
+            )}
           </div>
         )}
         {paid && (
@@ -314,7 +318,14 @@ function SplitPanel({ month, plan, split, readOnly, onPropose }: { month: string
                 </div>
               ))}
             {kind === 'daily' && split.lootExtra > 0 && (
-              <Row className="text-[11.5px]" label={`+ łupy z ${monthGenLabel(addMonths(month, -1))} (decyzja „na następny miesiąc”)`} value={zl(split.lootExtra)} testId="split-loot-extra" />
+              <Row
+                className="text-[11.5px]"
+                label={`+ łupy z ${monthGenLabel(addMonths(month, -1))} (decyzja „na następny miesiąc”)`}
+                // Not the salary's (PM sp. 3): beside the envelopes, outside „Rozdzielone” – the rows add up without it.
+                sub="poza pensją – nie wchodzi do „Rozdzielone”"
+                value={zl(split.lootExtra)}
+                testId="split-loot-extra"
+              />
             )}
             {kind === 'daily' && <div className="mt-0.5 text-[11px] text-dim">Podstawowy przydział: {zl(split.dailyBase)} dziennie</div>}
             {kind === 'daily' && !mains.some((c) => envelopeKind(c) === 'daily') && (
@@ -515,7 +526,7 @@ function Gap({ value }: { value: number }) {
  * (green / red – neutral while the amounts are hidden, B61). */
 function FuelLine({ month, fleet, running }: { month: string; fleet: FleetState; running: boolean }) {
   const transactions = useRecordList('transactions')
-  const s = useMemo(() => fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths), [transactions, fleet.incomeContext, month, fleet.historyMonths])
+  const s = useMemo(() => fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today), [transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today])
   const m = s.month
   if (!m || (!m.income && !m.costs)) return null
   return (
@@ -528,7 +539,9 @@ function FuelLine({ month, fleet, running }: { month: string; fleet: FleetState;
   )
 }
 
-function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debriefing; fleet: FleetState; today: string; plans: MonthPlan[]; readOnly: boolean }) {
+const upperFirst = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+function DebriefPanel({ brief, shown, fleet, today, plans, readOnly }: { brief: Debriefing; shown: string; fleet: FleetState; today: string; plans: MonthPlan[]; readOnly: boolean }) {
   const cats = useCategories()
   const members = useMembers()
   const containers = useRecordList('containers')
@@ -562,8 +575,14 @@ function DebriefPanel({ brief, fleet, today, plans, readOnly }: { brief: Debrief
   const toShields = Math.max(0, lootAmount - next - goalsTotal - keptTotal)
   usePlusFanfare(brief)
   return (
-    <Panel title={`Debriefing – ${monthLabel(brief.month)}`} testId="month-debrief">
+    <Panel title={`Debriefing – ${monthLabel(brief.month)}${brief.month !== shown ? ' (ostatni zamknięty miesiąc)' : ''}`} testId="month-debrief">
       <div className="flex flex-col gap-2 text-[12px]">
+        {/* The month shown is another one (AP-24, PM sp. 4): this month's or a month ahead's plan beside the last month closed. */}
+        {brief.month !== shown && (
+          <p className="text-[11px] text-dim" data-testid="month-debrief-other">
+            {upperFirst(monthLabel(shown))} {shown > fleet.month ? 'jeszcze się nie zaczął' : 'trwa'} – tu debriefing ostatniego zamkniętego miesiąca; debriefing {monthGenLabel(shown)} po jego końcu.
+          </p>
+        )}
         {brief.plus === true && (
           <div className="relative overflow-hidden border border-accent/40 px-3 py-2" data-testid="month-plus">
             <div className="animate-event-in text-[13px] font-medium text-accent">Miesiąc zamknięty na plus</div>
@@ -733,14 +752,16 @@ function LootDecided({ month, decision, fleet }: { month: string; decision: NonN
   const decided = decision.shields + decision.nextMonth + goals + envelopes
   const shown = applied ?? { amount: decided, shields: decision.shields, nextMonth: decision.nextMonth, goals, envelopes }
   const late = decidedOn > lootDeadline(month)
+  // One rule with the debriefing of the reports (AP-24): the loot changed after the decision.
+  const changed = lootChange(decision, applied)
   return (
     <p className="text-[11.5px] text-muted" data-testid="loot-decided">
       Decyzja z {plDate(decidedOn)}: osłony {zl(shown.shields)}, następny miesiąc {zl(shown.nextMonth)}
       {shown.goals ? `, cele ${zl(shown.goals)}` : ''}
       {shown.envelopes ? `, zapas kopert ${zl(shown.envelopes)}` : ''}.
-      {applied && applied.amount !== decided ? (
+      {changed ? (
         <span className="block text-accent" data-testid="loot-changed">
-          Łupy zmieniły się po decyzji (było {zl(decided)}, jest {zl(applied.amount)}) – podział przeliczony: cele, następny miesiąc, reszta do osłon.
+          Łupy zmieniły się po decyzji (było {zl(changed.decided)}, jest {zl(changed.now)}) – podział przeliczony: cele, następny miesiąc, reszta do osłon.
         </span>
       ) : late && applied ? (
         <span className="block text-dim">Decyzja zapisana po {dayLabel(lootDeadline(month))}.</span>

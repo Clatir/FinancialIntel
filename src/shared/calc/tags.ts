@@ -21,8 +21,16 @@ const tidyTag = (s: string): string => s.trim().replace(/^#+/, '').replace(/\s+/
 /** A tag as typed, tidied: no „#”, single spaces, at most 40 characters ('' – none). */
 export const tagLabel = (s: string): string => tidyTag(s).slice(0, MAX_TAG_LENGTH)
 
-/** The tag's identity: „#Wakacje  Chorwacja” = „wakacje chorwacja” (no case, no Polish marks). */
-export const tagKey = (s: string): string => fold(tagLabel(s))
+/**
+ * The tag's identity: „#Wakacje  Chorwacja” = „wakacje chorwacja” (no case, no Polish marks); „-” and „_” are a space
+ * (AP-21, T420): „#słowo” has no space, so „#wakacje-chorwacja” is the tag „Wakacje Chorwacja”. Keys stored before
+ * 1.15.9 (a tag's goal, a saved view's filter) are read through it again – `tagGoalOf`, `filterOf`.
+ */
+export const tagKey = (s: string): string =>
+  fold(tagLabel(s))
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 
 /** One field's text in its tags as typed: split by commas, else by „#” (the one way of `parseTags` and `tagsLost`). */
 const splitTags = (text: string): string[] => (text.includes(',') ? text.split(',') : text.includes('#') ? text.split('#') : [text])
@@ -62,8 +70,8 @@ export function withTags(list: readonly string[], more: readonly string[]): stri
   const seen = new Set<string>()
   for (const t of [...list, ...more]) {
     const label = tagLabel(t)
-    const key = fold(label)
-    if (!label || seen.has(key)) continue
+    const key = tagKey(label)
+    if (!key || seen.has(key)) continue
     seen.add(key)
     out.push(label)
   }
@@ -90,7 +98,7 @@ export const tagsText = (t: Pick<Transaction, 'tags' | 'splits'>): string =>
     .map((x) => `#${x}`)
     .join(' ')
 
-/** Does the operation carry the tag (its own, or a line's of its receipt)? */
+/** Does the operation carry the tag (its own, or a line's of its receipt)? `key` – a `tagKey`. */
 export function hasTag(t: Pick<Transaction, 'tags' | 'splits'>, key: string): boolean {
   if (tagsOf(t).some((x) => tagKey(x) === key)) return true
   return t.splits.some((s) => (s.tags ?? []).some((x) => tagKey(x) === key))
@@ -213,6 +221,22 @@ export function lastTag(transactions: readonly Transaction[], today: string): st
 /** A tag's spending against its goal (F17): „wydano 4 320 z 5 000 zł celu” – the share spent (0–∞). */
 export const tagGoalShare = (spent: number, target: number): number | null => (target > 0 ? spent / target : null)
 
+/** The keys of `tagGoals` that are this tag: its key now and one stored before 1.15.9 („wakacje-chorwacja” – AP-21). */
+export function tagGoalKeys(tagGoals: Readonly<Record<string, string>>, tag: string): string[] {
+  const key = tagKey(tag)
+  return key ? Object.keys(tagGoals).filter((k) => tagKey(k) === key) : []
+}
+
+/** A tag's goal of the star map (F17), also under a key stored before 1.15.9 (AP-21); '' – none. */
+export function tagGoalOf(tagGoals: Readonly<Record<string, string>> | undefined, tag: string): string {
+  if (!tagGoals) return ''
+  const key = tagKey(tag)
+  if (!key) return ''
+  if (tagGoals[key]) return tagGoals[key]
+  for (const k of tagGoalKeys(tagGoals, tag)) if (tagGoals[k]) return tagGoals[k]
+  return ''
+}
+
 /** The first tag of `tags` mapped to a goal in `tagGoals` (N-PC-5); null when none. */
 export function tagGoalMatch(
   tags: readonly string[] | undefined,
@@ -222,7 +246,7 @@ export function tagGoalMatch(
   if (!tags?.length || !tagGoals) return null
   for (const raw of tags) {
     const label = tagLabel(raw)
-    const id = tagGoals[tagKey(label)]
+    const id = tagGoalOf(tagGoals, label)
     if (label && id && (!usable || usable(id))) return { tag: label, goalId: id }
   }
   return null

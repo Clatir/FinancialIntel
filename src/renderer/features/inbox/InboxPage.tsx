@@ -20,10 +20,15 @@ const zl = (g: number) => `${plnText(g)} zł`
 const HINT: Partial<Record<InboxKind, string>> = {
   uncategorized: 'Wydatek bez kategorii liczy się do energii dnia jako codzienny i nie trafia do żadnej koperty.',
   duplicates: 'Ta sama operacja wpisana ręcznie i z banku albo z dwóch komputerów – scalanie z jednym „Cofnij”.',
+  // AP-27 (SA sp. 3): the rule said where it is used – a repeat only from two computers.
+  corrections:
+    'To samo saldo potwierdzone na dwóch komputerach przed synchronizacją daje dwie korekty o tej samej kwocie. Zgłaszamy tylko pary z dwóch różnych komputerów – dwie korekty z jednego komputera to dwie Twoje decyzje.',
   returned:
     'Operacje z banku, które usunąłeś, a import pliku w drugim formacie (lista operacji ↔ historia rachunku) wpisał je znowu jako nowe (przed wersją 1.15.5). „Usuń” usuwa je znowu (z „Cofnij”), „zostaw” – zostają i nie będą zgłaszane.',
   transfers:
     'Od 1.7.0 przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane wcześniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
+  firewall:
+    'Dopłata do konta tradingowego, gdy osłony albo kadłub nie są pełne, łamie rozkaz firewall – czerwony alarm i poważne naruszenie w grze. „Potwierdź” mówi, że to Twoja decyzja (z „Cofnij”); naruszenie zostaje.',
   advances:
     'Wpłaty zapisane jako zaliczka na przyszłość idą w całości do depozytu i nie spłacają długu – do wersji 1.15.5 tak zapisywał się też wybór „reszta jako zaliczka” w imporcie. „Spłać” – najpierw wyrównają to, co osoba ma oddać, reszta zostanie zaliczką (z „Cofnij”); „zostaw” – zostają zaliczką i nie będą zgłaszane.',
   refunds: 'Zakupy finansowane pieniędzmi osłon, których domownik jeszcze nie oddał (Ustawienia → Domownicy).',
@@ -106,6 +111,12 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
           </button>
         </>
       )}
+      {/* A top-up of XTB against the firewall (DO sp. 12): its operation to look at before „Potwierdź”. */}
+      {item.kind === 'firewall' && item.ref && (
+        <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => showReturned(item.ref!)} data-testid="inbox-firewall-show">
+          Pokaż
+        </button>
+      )}
       {/* A member's advances for the future that left the debt unpaid (AP-4): „zostaw” – kept so, never asked again. */}
       {item.kind === 'advances' && item.ref && (
         <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => keepAdvances(item.ref!)} data-testid="inbox-dismiss">
@@ -121,7 +132,7 @@ function Report({ item, onOpen }: { item: InboxItem; onOpen: () => void }) {
   )
 }
 
-/** An operation come back after its deletion (AF-1) in Operacje. */
+/** An operation of a report (come back after its deletion – AF-1, a top-up against the firewall) in Operacje. */
 function showReturned(id: string): void {
   const t = useData.getState().records.transactions[id]?.record
   if (t) openOperation(t)

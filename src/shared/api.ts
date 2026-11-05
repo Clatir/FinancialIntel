@@ -147,6 +147,11 @@ export interface MachineConfig {
   dataDir: string | null
   recentDirs: string[]
   backupDirOverride: string | null
+  /**
+   * Backup folders used before a change of the folder of backups (AP-28, DA.14), newest first, per data folder: their
+   * backups stay listed (and can be recovered) instead of „Brak kopii.”.
+   */
+  backupDirsBefore?: Array<{ dataDir: string; dir: string }>
   window: { x?: number; y?: number; width: number; height: number; maximized: boolean } | null
   updates: {
     prefs: UpdatePrefs
@@ -337,15 +342,16 @@ export interface FiApi {
   saveSettings(fi: SettingsFile): Promise<SettingsFile>
   /** The window shows this folder open (B31): main takes its writes from now on. */
   folderShown(generation: number): Promise<void>
-  resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<void>
+  /** `seen` = the sides' file times the choice was made on (AP-27): a side changed since refuses it, nothing moved. */
+  resolveConflict(conflictId: string, keep: 'canonical' | 'copy', seen?: { canonical: number; copy: number }): Promise<void>
   /** The conflict merged field by field (N17): both versions to the history, the merged one at the original's path. */
   /** `seen` = the sides' file times the merge was made from (N17): a side changed since refuses it. */
   mergeConflict(conflictId: string, merged: unknown, seen?: { canonical: number; copy: number }): Promise<void>
   /**
-   * Many conflicts in the order given, one change for the window (W23); a group whose copy could not be kept leaves
-   * its other conflicts as they are (`skipped`).
+   * Many conflicts in the order given, one change for the window (W23); a group whose copy could not be kept, or one
+   * with a side changed since `seen` (AP-27 – that conflict refused), leaves its other conflicts as they are (`skipped`).
    */
-  resolveConflicts(items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>): Promise<Array<{ id: string; error?: string; skipped?: boolean }>>
+  resolveConflicts(items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string; seen?: { canonical: number; copy: number } }>): Promise<Array<{ id: string; error?: string; skipped?: boolean }>>
   trashProblemFile(relPath: string): Promise<void>
   showInFolder(relPath: string | null): Promise<void>
   /**
@@ -358,9 +364,12 @@ export interface FiApi {
   openExternal(url: string): Promise<void>
   /** Opens the folder of this computer's application log (userData/logs) in the file manager. */
   openLogs(): Promise<void>
-  /** Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows). */
-  trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean }>
-  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean }>
+  /**
+   * Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows); `loginEntry` = the
+   * system starts this copy now (its entry), null = not known; `loginDisabled` = its entry turned off in Task Manager (T433).
+   */
+  trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null; loginDisabled?: boolean }>
+  setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null; loginDisabled?: boolean }>
   rescan(): Promise<void>
   /** ZIP of the whole data folder (without backups). */
   exportZip(): Promise<string | null>
@@ -370,7 +379,8 @@ export interface FiApi {
   /** A report's self-contained HTML printed to an A4 PDF. */
   savePdf(defaultName: string, html: string): Promise<string | null>
   /** `failure` – the last daily backup that did not come (B123), null when the last one did. */
-  listBackups(): Promise<{ dir: string; files: BackupInfo[]; failure: { at: string; message: string; dir: string } | null }>
+  /** `earlier`: backups in the folders of backups used before for this data folder (AP-28). */
+  listBackups(): Promise<{ dir: string; files: BackupInfo[]; failure: { at: string; message: string; dir: string } | null; earlier?: Array<{ dir: string; files: BackupInfo[] }> }>
   backupNow(): Promise<string>
   /** The backup before an import from the bank (backups/pre-import); returns its path. */
   importBackup(): Promise<string>

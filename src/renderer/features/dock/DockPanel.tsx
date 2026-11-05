@@ -2,7 +2,7 @@
  * Dokowanie on the bridge (E5): the deliveries from the trading account to dock – ICTTJ payouts with their bank
  * operation (or for Portfel XTB), XTB inflows without an entry – and the latest docked ones; the ICTTJ folder's state.
  */
-import type { Delivery } from '@shared/calc/dock'
+import { deliveryDay, type Delivery } from '@shared/calc/dock'
 import { glossaryOf } from '@shared/glossary'
 import { ICTJ_POOL_LABEL } from '@shared/ictj'
 import { useFolderLocked } from '../../store/data'
@@ -78,7 +78,10 @@ function DeliveryRow({ d }: { d: Delivery }) {
   return (
     <div className="flex items-baseline border-b border-line/60 last:border-b-0">
       <button className="flex min-w-0 flex-1 items-baseline gap-2 px-1 py-1 text-left hover:bg-hover" onClick={() => openDocking(d.key)} data-testid="docking-row" data-state={d.state}>
-        <span className="num w-[68px] shrink-0 text-[11px] text-muted">{plDate(d.date)}</span>
+        {/* One day of a delivery (MO.7): its money's in the bank, as „ostatnia dostawa” says – the entry's in the hint. */}
+        <span className="num w-[68px] shrink-0 text-[11px] text-muted" title={d.entry && deliveryDay(d) !== d.entry.date ? `Wpis w ICTTJ z ${plDate(d.entry.date)}, pieniądze w banku ${plDate(deliveryDay(d))}` : undefined} data-testid="docking-row-date">
+          {plDate(deliveryDay(d))}
+        </span>
         <span className="min-w-0 flex-1 truncate text-fg-strong">
           {what}
           {detail && <span className="text-muted"> · {detail}</span>}

@@ -63,6 +63,12 @@ export interface AnomalyInput {
 const isPurchase = (t: Transaction) => t.kind === 'expense' && t.amount < 0 && !t.goalId && !t.memberId
 
 
+/** The same row of the bank – its key, or a key of it in the other format (B5) – in two operations. */
+function sameBankRow(a: NonNullable<Transaction['bank']>, b: NonNullable<Transaction['bank']>): boolean {
+  const keys = new Set([a.key, ...(a.altKeys ?? [])])
+  return keys.has(b.key) || (b.altKeys ?? []).some((k) => keys.has(k))
+}
+
 const pairKey = (a: Transaction, b: Transaction) => (a.id < b.id ? `${a.id}:${b.id}` : `${b.id}:${a.id}`)
 
 export function anomalies(o: AnomalyInput): Anomaly[] {
@@ -112,6 +118,8 @@ export function anomalies(o: AnomalyInput): Anomaly[] {
         const u = list[j]!
         if (daysBetween(t.date, u.date) > 1) break
         if (!u.bank || u.bank.pending || u.amount !== t.amount) continue
+        // One row of the bank saved twice is a duplicate to merge (the duplicates' panel), never two charges (AP-34, ME.8).
+        if (sameBankRow(t.bank, u.bank)) continue
         out.push({ kind: 'double', key: `double:${pairKey(t, u)}`, txIds: [t.id, u.id], date: u.date, amount: cost, usual: null, name: name(t) })
       }
     }

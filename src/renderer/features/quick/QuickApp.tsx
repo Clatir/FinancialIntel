@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { QuickData, QuickResult, QuickTemplate } from '@shared/api'
 import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
 import { energyAfter } from '@shared/calc/fleet'
+import { impulseAmount } from '@shared/calc/operations'
 import { dm } from '@shared/calc/briefing'
 import { OFFICER_SOURCE_LABEL, officerHint, type OfficerSource } from '@shared/import/officer'
 import { newId } from '@shared/ids'
@@ -9,7 +10,8 @@ import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
 import { TagsField } from '../../components/TagsField'
-import { tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
+import { hashTags, tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
+import { restToChoose, senderOwn } from '@shared/calc/quick'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -300,14 +302,35 @@ export function QuickApp() {
   const set = (p: Partial<QuickDraft>) => setD((x) => ({ ...x, ...p }))
   const cats = useMemo(() => new Map((data?.categories ?? []).map((c) => [c.id, c])), [data])
   const night = d.kind !== 'income' && !!d.time && !!data && inClockWindow(d.time, data.quietHours.from, data.quietHours.to)
-  const asks = d.kind !== 'income' && !!data && d.amount >= data.impulseThreshold && data.impulseThreshold > 0
-  const hide = !!data?.hideAmounts
-  const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
+  // The lines of the draft as saved: a shared purchase's people, a split receipt's parts, or the purchase itself.
+  const parts = useMemo((): Line[] => {
+    if (d.kind === 'income') return []
+    return share
+      ? shareAmounts(d.amount, share).map((amount, i) => ({ amount, categoryId: d.categoryId, refundable: share.lines[i]!.memberId != null, memberId: share.lines[i]!.memberId, gift: share.lines[i]!.gift }))
+      : lines.length > 1
+        ? lines
+        : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift }]
+  }, [d, lines, share])
+  // „Plan czy impuls?” of my own part only (AP-19): never a household member's purchase, never an ATM withdrawal.
+  const asks = d.kind !== 'income' && !!data && data.impulseThreshold > 0 && impulseAmount(parts.map((p) => ({ ...p, amount: -p.amount }))) >= data.impulseThreshold
   // The part repaying a loan (D100): its loan of the list and its amount (`quickLoanPart`).
   const loanNow = useMemo(
     () => quickLoanPart(loan, data, { kind: d.kind, household: d.household, memberId: d.memberId, amount: d.amount }, shares),
     [loan, data, d.kind, d.household, d.memberId, d.amount, shares]
   )
+  // A member's money (D80 b): the sender's part beyond what they owe – a member „pytaj” chooses it here (AP-19, SW sp. 3);
+  // their own part without the others' parts and the loan's (D100 – `senderOwn`, as the preview and the saved lines).
+  const payer = d.kind === 'income' && d.household ? data?.members.find((x) => x.id === d.memberId) : undefined
+  const payerOwn = payer ? senderOwn(d.amount, payer.id, data?.members ?? [], shares, loanNow?.amount ?? 0) : 0
+  const askRest = restToChoose(payerOwn, payer, !!d.advanceChosen)
+  const restOpen = payer?.inflow === 'ask' && !d.advanceChosen
+  const hide = !!data?.hideAmounts
+  // The „#słowo” of the name and the note not in the tags yet (AP-20): the window shows them before saving.
+  const hashed = useMemo(() => {
+    const have = new Set((d.tags ?? []).map(tagKey))
+    return withTags([], [...hashTags(d.counterparty), ...hashTags(d.note)]).filter((x) => !have.has(tagKey(x)))
+  }, [d.counterparty, d.note, d.tags])
+  const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
@@ -333,15 +356,16 @@ export function QuickApp() {
       }
       // Others' money in it first (D81), then the sender's: what each owes first, the rest their advance or income.
       const others = data.members.filter((x) => x.via === m.id && (shares[x.id] ?? 0) > 0)
-      const own = d.amount - others.reduce((a, x) => a + shares[x.id]!, 0) - toLoan
-      const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean) => {
+      const own = senderOwn(d.amount, m.id, data.members, shares, toLoan)
+      const line = (who: { name: string; owed: number; inflow: string }, amount: number, advance: boolean | null) => {
         const back = Math.min(amount, who.owed)
         const rest = amount - back
-        return `${who.name}${back ? ` – wyrównuje ${money(back)} (ma oddać ${money(who.owed)})` : ''}${rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'}` : ''}.`
+        const as = advance == null ? '– przychód czy zaliczka? Wybierz wyżej' : advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'
+        return `${who.name}${back ? ` – wyrównuje ${money(back)} (ma oddać ${money(who.owed)})` : ''}${rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${as}` : ''}.`
       }
       return (
         <div className="flex flex-col">
-          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : own > 0 || !toLoan ? <span data-testid="quick-preview-member">Od: {line(m, own, d.advance)}</span> : null}
+          {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : own > 0 || !toLoan ? <span data-testid="quick-preview-member">Od: {line(m, own, restOpen ? null : d.advance)}</span> : null}
           {others.map((x) => (
             <span key={x.id} data-testid="quick-preview-share">
               W tym za: {line(x, shares[x.id]!, x.inflow === 'advance')}
@@ -351,11 +375,6 @@ export function QuickApp() {
         </div>
       )
     }
-    const parts: Line[] = share
-      ? shareAmounts(d.amount, share).map((amount, i) => ({ amount, categoryId: d.categoryId, refundable: share.lines[i]!.memberId != null, memberId: share.lines[i]!.memberId, gift: share.lines[i]!.gift }))
-      : lines.length > 1
-        ? lines
-        : [{ amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable', memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift }]
     let daily = 0
     /** The daily parts by main category ('' – none): today's refund of an earlier purchase of it is taken first (T370). */
     const dailyBy = new Map<string, number>()
@@ -429,8 +448,10 @@ export function QuickApp() {
         </div>
       )
     }
+    // A purchase for a member with none chosen yet (SW.12): said so – never the first member's name and advance.
+    if (d.kind === 'refundable' && !share && lines.length <= 1 && !d.memberId) out.push(<div key="member:none" data-testid="quick-preview-financed">Za domownika: wybierz, kto finansuje zakup.</div>)
     // Financed by household members (D80): not my energy – their advance first, the rest the shields lend (a gift – pay, D83).
-    for (const [id, { amount: v, gift }] of financed) {
+    else for (const [id, { amount: v, gift }] of financed) {
       const m = data.members.find((x) => x.id === id)
       const fromDeposit = Math.min(v, m?.deposit ?? 0)
       out.push(
@@ -442,7 +463,7 @@ export function QuickApp() {
       )
     }
     return out
-  }, [data, d, lines, share, cats, money, shares, loanNow])
+  }, [data, d, parts, cats, money, shares, restOpen, loanNow])
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
@@ -452,6 +473,8 @@ export function QuickApp() {
     if (d.amount <= 0) return refuse('Wpisz kwotę.')
     if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return refuse('Części paragonu nie sumują się do kwoty.')
     if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return refuse('Wybierz domownika, który finansuje zakup.')
+    // A member „pytaj” (D80 b, AP-19): the rest beyond what they owe is chosen – never saved as income unasked.
+    if (askRest > 0) return refuse(`Wybierz, czym jest reszta ${money(askRest)} ponad to, co ${payer!.name} ma oddać: przychód czy zaliczka.`)
     if (share && !shareComplete(share, d.amount)) return refuse(share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.')
     if (night && (!nightOk || !d.logNote.trim())) return refuse('Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.')
     // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
@@ -465,8 +488,10 @@ export function QuickApp() {
     setBusy(true)
     setMsg(null)
     const loanPart = loanNow ? { loanId: loanNow.loan.id, amount: loanNow.amount } : null
-    void api.quickAdd({ ...d, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts, loanPart } satisfies QuickDraft)
-  }, [busy, data, d, lines, share, night, nightOk, shares, loan, loanNow])
+    // „Plan czy impuls” only where the log asks – of my own part (AP-19); Alt+P / Alt+I may be pressed before the amount
+    // is known (AP-20).
+    void api.quickAdd({ ...d, impulse: asks ? d.impulse : null, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts, loanPart } satisfies QuickDraft)
+  }, [busy, data, d, lines, share, night, nightOk, shares, askRest, payer, money, asks, loan, loanNow])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -484,6 +509,14 @@ export function QuickApp() {
       void api.quickClose()
     }
     const onKey = (e: KeyboardEvent) => {
+      // „Plan czy impuls” from any field (AP-20, SW.36): Alt+P / Alt+I – no Tab to the log at the form's end. Alt alone:
+      // AltGr (Ctrl+Alt) writes Polish letters.
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyP' || e.code === 'KeyI')) {
+        e.preventDefault()
+        const impulse = e.code === 'KeyP' ? 'plan' : 'impulse'
+        setD((x) => (x.kind === 'income' ? x : { ...x, impulse }))
+        return
+      }
       if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
         e.preventDefault()
         // Ctrl+Enter: saved, and the window stays for the next one (F7); Enter saves and closes (D70).
@@ -767,7 +800,8 @@ export function QuickApp() {
                 {d.household && d.memberId && (
                   <Segmented
                     size="sm"
-                    value={d.advance ? 'advance' : 'income'}
+                    // A member „pytaj” (AP-19, SW sp. 3): no answer given beforehand – the user chooses.
+                    value={restOpen ? null : d.advance ? 'advance' : 'income'}
                     onChange={(v) => set({ advance: v === 'advance', advanceChosen: true })}
                     options={[
                       { value: 'income', label: 'przychód' },
@@ -832,8 +866,14 @@ export function QuickApp() {
           </Row>
           {/* F17: a trip's, a project's tags – „#słowo” in the name or the note adds one too; the last one in a click. */}
           <Row label="Tagi">
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <TagsField className="flex-1" value={d.tags ?? []} onChange={(tags) => set({ tags })} known={data.knownTags ?? []} compact testId="quick-tags" />
+              {/* „#słowo” typed in the name or the note (AP-20, SW sp. 5): shown before saving – it is saved as a tag too. */}
+              {hashed.map((tag) => (
+                <span key={tag} className="chip h-[20px] shrink-0 px-1.5 text-[11px] text-muted" title="Z „#” w nazwie albo notatce – zapisze się jako tag; usuń „#” z tekstu, by go nie dodawać" data-testid="quick-tag-hash" data-tag={tag}>
+                  #{tag}
+                </span>
+              ))}
               {data.lastTag && !(d.tags ?? []).some((x) => tagKey(x) === tagKey(data.lastTag!)) && (
                 <button type="button" className="chip h-[20px] shrink-0 px-1.5 text-[11px]" title="Tag ostatnich dni" onClick={() => set({ tags: withTags(d.tags ?? [], [data.lastTag!]) })} data-testid="quick-tag-last">
                   + #{data.lastTag}
@@ -845,7 +885,7 @@ export function QuickApp() {
             <div className={cx('flex flex-col gap-1 border-l-2 pl-2', night ? 'border-accent' : 'border-line-strong')} data-testid="quick-log">
               <span className="label">Dziennik kapitański</span>
               {asks && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" data-testid="quick-impulse" data-state={d.impulse ?? 'none'}>
                   <span className="text-[11.5px] text-accent">Plan czy impuls?</span>
                   <Segmented
                     size="sm"
@@ -857,6 +897,9 @@ export function QuickApp() {
                     ]}
                     aria-label="Plan czy impuls"
                   />
+                  <span className="text-[11px] text-dim" data-testid="quick-impulse-keys">
+                    Alt+P / Alt+I
+                  </span>
                 </div>
               )}
               <input className="input" value={d.logNote} onChange={(e) => set({ logNote: e.currentTarget.value })} maxLength={500} placeholder={night ? 'Zakup w ciszy nocnej – dlaczego teraz?' : 'Krótko: skąd ten zakup?'} data-testid="quick-log-note" />

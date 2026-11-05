@@ -9,6 +9,7 @@ import { warsawNow } from '@shared/calc/dates'
 import { householdBefore } from '@shared/calc/fleet'
 import { balanceOf, isOpeningItem, memberName, purchaseStatus, type HouseholdLedger, type OpenPurchase, type PurchaseState } from '@shared/calc/household'
 import { dm } from '@shared/format'
+import { monthLabel } from '../../lib/format'
 import { assignsOn, choicesForRepayment, matchCovers, matchReturn, names, repaymentShares, repaymentSharesByMember, waitingForPurchase, withNamed } from '@shared/calc/repayments'
 import type { Transaction } from '@shared/schema'
 import { useData, useFolderLocked } from '../../store/data'
@@ -65,7 +66,8 @@ function PurchaseLine({ p, ledger, t }: { p: PurchaseState; ledger: HouseholdLed
   const paidAmount = p.by.reduce((a, b) => a + b.amount, 0) || p.paid
   const total = paidAmount + rest
   // Money waiting to be assigned to this purchase (1.15.1: both later unassigned repayments and earlier inflows).
-  const waiting = waitingForPurchase(ledger, t, p, (id) => transactions[id]?.record)
+  // A payment of a month before the current one changes a closed month's income (DM sp. 7) – each such, said alike.
+  const waiting = waitingForPurchase(ledger, t, p, (id) => transactions[id]?.record, warsawNow().date.slice(0, 7))
   return (
     <div className="flex flex-col gap-0.5" data-testid="purchase-repaid-member" data-status={status}>
       <span className={cx(status === 'open' || status === 'partial' ? 'text-accent' : 'text-muted')} data-testid="purchase-repaid-status">
@@ -107,7 +109,7 @@ function PurchaseLine({ p, ledger, t }: { p: PurchaseState; ledger: HouseholdLed
                       </span>
                       {u.fromPriorIncome && (
                         <span className="text-[10.5px] text-accent" data-testid="purchase-assign-prior-income">
-                          z przychodu {u.date.slice(0, 7)} – zmieni przychód zamkniętego miesiąca
+                          z przychodu: {monthLabel(u.date.slice(0, 7))} – zmieni przychód zamkniętego miesiąca
                         </span>
                       )}
                     </button>

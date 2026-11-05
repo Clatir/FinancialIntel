@@ -8,7 +8,7 @@ import { memberName } from '@shared/calc/household'
 import { keywordMatcher } from '@shared/import/brands'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
-import { useWizard } from '../wizard/state'
+import { noteImportTrace, useWizard } from '../wizard/state'
 import { useFleet } from '../../store/fleet'
 import { navigate, toast } from '../../store/ui'
 import { AmountField, plnText, signedPln } from '../../components/fields'
@@ -30,6 +30,7 @@ import { keywordOfSearch, saveKeywordRule } from './rules'
 import { bulkOptions, bulkResultText, fits, hasCategory, MEMBER_MONEY_TEXT, memberMoneyOf, offersNewMember, type LoanPick, type Option } from './options'
 import { countLabel, plDateTime } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
+import { CashOffer } from './cash'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
 import {
   acceptGroupHint,
@@ -178,6 +179,7 @@ function FilePanel() {
             </label>
             {importable.length > 1 && <span className="text-[11px] text-dim">Plik z mBanku trafia na wybrane konto; Portfel XTB nie ma eksportu – jego operacje dopisujesz ręcznie.</span>}
             <AccountWarning account={file.account} accountId={accountId} />
+            <CashOffer accountName={accounts.find((a) => a.id === accountId)?.name ?? 'konto'} />
             {file.skipped.length > 0 && (
               <div className="text-[11.5px] text-accent" data-testid="import-skipped">
                 Pominięte wiersze: {file.skipped.map((s) => `linia ${s.line} (${s.reason})`).join('; ')}
@@ -306,7 +308,11 @@ function Summary() {
         <button
           className="btn btn-accent h-[30px] justify-center"
           disabled={busy || readOnly}
-          onClick={() => void runImport()}
+          onClick={() => {
+            // An import made while the start wizard runs stays when it is broken off (AP-25): the wizard says so.
+            const before = useImport.getState().done?.batchId ?? null
+            void runImport().then(() => noteImportTrace(before, useImport.getState().done?.batchId ?? null))
+          }}
           // A file with nothing new is imported too (N13): the time of the import and what the file covers are saved.
           title={nothing ? 'W pliku nie ma nic nowego – zapis zapamięta czas importu i okres pliku (odprawa, Portfel XTB, misja „Łączność z bazą”)' : undefined}
           data-testid="import-run"
@@ -654,9 +660,11 @@ const ImportRowLine = memo(function ImportRowLine({ p, choice }: { p: NewRow; ch
         <CategorySelect
           className={cx('h-[22px] py-0 text-[11px]', mine && 'border-accent/60')}
           value={c.categoryId}
-          // The empty choice is what it does (B98): „bez kategorii” when the group has one, the group's own otherwise.
-          emptyLabel={mine || choice.categoryId ? '— bez kategorii —' : '(jak grupa)'}
+          // „(jak grupa)” first, whatever the group's category (AP-34, IM.8): the way back to the group's decision; „bez
+          // kategorii” is always none (B98).
+          group={{ label: choice.categoryId ? `(jak grupa: ${cats.label(choice.categoryId)})` : '(jak grupa)', on: !mine, pick: () => chooseRow(p.key, null) }}
           onChange={(categoryId) => chooseRow(p.key, categoryId === choice.categoryId ? null : { ...c, categoryId })}
+          data-testid="import-row-category"
         />
       ) : c.kind === 'transfer' && otherAccounts.length > 0 ? (
         <select
@@ -1282,9 +1290,11 @@ export function ImportPage() {
   const containers = useData((s) => s.records.containers)
   const loans = useData((s) => s.records.loans)
   const transactions = useData((s) => s.records.transactions)
+  const budgetAccounts = useData((s) => s.fi?.settings.accounts)
   // A keyword added, a rule deleted, names merged, a member added; the holder's names, a category, a container, a loan,
-  // the operations (B38) – here, in the settings, on another computer: the open file planned again.
-  useEffect(() => replanIfChanged(planInputsNow()), [rules, aliases, members, ownNames, categories, containers, loans, transactions])
+  // the operations (B38), the accounts (AP-33 – the cash account) – here, in the settings, on another computer: the open
+  // file planned again.
+  useEffect(() => replanIfChanged(planInputsNow()), [rules, aliases, members, ownNames, categories, containers, loans, transactions, budgetAccounts])
   const done = useImport((s) => s.done)
   const lastImport = useData((s) => s.fi?.settings.import.lastImport ?? null)
   const accounts = useAccounts()

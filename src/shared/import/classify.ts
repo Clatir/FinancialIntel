@@ -167,6 +167,22 @@ function ruleIndexOf(rules: readonly ImportRule[], direction: Direction): RuleIn
 const ATM = /WYPŁATA (W|Z) BANKOMA|WYPLATA (W|Z) BANKOMA|WYPŁATA GOTÓWKI|WYPLATA GOTOWKI|BLIK WYPŁATA|BLIK WYPLATA/
 
 /**
+ * A cash withdrawal (an ATM, BLIK's cash) by the type of operation: the import's offer of the cash account (AP-33), the
+ * search by the type of operation (AP-34).
+ */
+export const isAtmOperation = (operation: string): boolean => ATM.test(operation)
+
+/**
+ * A decision of the old model of the cash (the spec before D100): an ATM withdrawal as my expense of the system category
+ * „Gotówka”. A rule of it gives way to the own transfer onto the cash account, and none is learned while there is one
+ * (AP-33, T422) – a rule the next import would not follow.
+ */
+export function isCashExpenseRule(rule: Pick<ImportRule, 'kind' | 'categoryId' | 'refundable'> & { share?: unknown }, categories?: CategoryIndex): boolean {
+  if (rule.kind !== 'expense' || rule.refundable || rule.share || !rule.categoryId) return false
+  return rule.categoryId === CASH_CATEGORY_ID || categories?.byId.get(rule.categoryId)?.system === 'cash'
+}
+
+/**
  * What the rule of an operation is looked up and remembered by: an imported row, or an operation in Operacje. A person
  * paid or paying by phone (BLIK P2P) and an ATM in a shop („BANKOMAT ŻABKA”) are no chain of the dictionary; the
  * other side of a transfer is one only by the start of its name, with no city cut (often a person). A name the user
@@ -346,6 +362,11 @@ export interface ClassifyContext {
   locked?: ReadonlySet<string>
   /** Docked operations (their docking points at them, AF-9): a copy of one is never removed by the import. */
   docked?: ReadonlySet<string>
+  /**
+   * The budget's cash account (D100 (1), AP-33 – `cashAccountOf`; never the file's own account): an ATM withdrawal is an
+   * own transfer onto it. None – an expense „Gotówka”, as the spec.
+   */
+  cash?: { id: string; name: string } | null
 }
 
 /**
@@ -526,9 +547,13 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   // rule of its whole repayment gives way otherwise (as no rule), a rule's part is left out.
   const ruleLoan = rule && direction === 'in' ? ruleLoanFor(rule, ctx.loans, row.date) : null
   const loanRuleGone = !!rule?.loanId && rule.kind === 'loan' && !ruleLoan
+  // The cash kept on its account (D100 (1), AP-33): an ATM withdrawal moves the money there – an own transfer, no cost. A
+  // rule of the old model (an expense „Gotówka” – T422) gives way to it.
+  const cash = ATM.test(op) && ctx.cash ? ctx.cash : null
+  const oldCashRule = !!cash && !!rule && isCashExpenseRule(rule, ctx.categories)
   // A rule of plain income naming no member (learned before the person became a member, or before 1.3.0) gives way to
   // the member: their money repays what they owe first.
-  if (rule && !loanRuleGone && !(member && rule.kind === 'income' && !rule.memberId) && !ruleGivesWay(rule, recognized, byTitle)) {
+  if (rule && !loanRuleGone && !oldCashRule && !(member && rule.kind === 'income' && !rule.memberId) && !ruleGivesWay(rule, recognized, byTitle)) {
     const kind = rule.kind as TxKind
     // The loan's whole repayment the rule names (D100): decided by it while the loan is open.
     if (kind === 'loan' && ruleLoan) return out(decision('loan', `reguła – zwrot pożyczki: ${ruleLoan.name}`, { source: 'rule', ruleId: rule.id, byTitle, loanId: ruleLoan.id }))
@@ -598,6 +623,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     )
   }
   if (recognized?.kind === 'trading') return out(decision('trading', direction === 'out' ? 'dopłata do konta tradingowego XTB' : 'wypłata z konta tradingowego XTB'))
+  if (cash) return out(decision('transfer', `wypłata z bankomatu – przelew własny → ${cash.name}`, { counterAccountId: cash.id }))
   if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
   if (/^(POS )?ZWROT/.test(op) && direction === 'in') {

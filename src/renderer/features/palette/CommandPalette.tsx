@@ -1,5 +1,6 @@
 // adapted from ICTTJ src/renderer/features/palette/CommandPalette.tsx @ 84a8339
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useRef, useState } from 'react'
+import { useFocusTrap } from '../../components/trap'
 import { Command } from 'cmdk'
 import { fold } from '@shared/fold'
 import { searchRecords, type SearchHits, type SettingsItem } from '@shared/search'
@@ -80,6 +81,9 @@ function Palette() {
   const page = useUi((s) => s.route.page)
   // „Pokaż na 5 minut” / „do końca sesji” only with the amounts hidden (F40): nothing to hide again otherwise.
   const hidden = useMachine((s) => s.prefs.hideAmounts)
+  // Tab never leaves the palette for the page under it (Esc then still closes it); closed – the focus back (AP-34, IN.28).
+  const box = useRef<HTMLDivElement>(null)
+  useFocusTrap(box)
 
   const actions: Action[] = useMemo(
     () => [
@@ -143,7 +147,7 @@ function Palette() {
   const any = shownActions.length + hits.operations.length + hits.containers.length + hits.goals.length + hits.loans.length + hits.members.length + hits.settings.length > 0
   return (
     <div className="fixed inset-0 z-50 flex animate-fade-in items-start justify-center bg-black/55 pt-[12vh]" onMouseDown={() => setPalette(false)}>
-      <div className="w-[640px] animate-pop-in border border-line-strong bg-panel" onMouseDown={(e) => e.stopPropagation()} data-testid="palette">
+      <div ref={box} className="w-[640px] animate-pop-in border border-line-strong bg-panel" onMouseDown={(e) => e.stopPropagation()} data-trap data-testid="palette">
         <Command
           label="Paleta komend"
           loop

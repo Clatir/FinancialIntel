@@ -325,11 +325,9 @@ describe('8: „Do zadokowania” – wpływ bez części, która spłaca pożyc
     expect(movesOf(f, t)).toMatchObject({ loans: { [jan.id]: -zl(200) } })
     // Before: 1 000 zł – the loan's 200 zł back to the shields counted as the pool's too.
     expect(f.toDock).toMatchObject({ count: 1, inflow: zl(800) })
-    // „dokąd poszła?”: the loan's part apart (before: in „Osłony”, as if the pool's), the pool's 800 zł – the hull (full shields).
-    expect(deliveryWhy(f.log, () => 'cel')?.lines).toEqual([
-      { label: 'Dostawa do zadokowania (według puli wpisu ICTTJ)', amount: zl(1000) },
-      { label: 'Spłata pożyczki (do osłon)', amount: zl(200) },
-      { label: 'Kadłub', amount: zl(800) }
-    ])
+    // The pool's 800 zł – the hull (full shields); the loan's 200 zł back to the shields.
+    expect(movesOf(f, t)).toMatchObject({ hull: zl(800), shields: zl(200) })
+    // A pair waiting is no „ostatnia dostawa – dokąd poszła?” (AP-26, T437 – only after the docking): „Do zadokowania” above.
+    expect(deliveryWhy(f.log, () => 'cel')).toBeNull()
   })
 })

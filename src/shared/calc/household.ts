@@ -30,10 +30,17 @@
  *   goes back to the shields.
  */
 import { fold } from '../fold'
+import { plural } from '../format'
 import { newId } from '../ids'
 import { HOUSE_MEMBER_ID, type HouseholdMember, type MemberOpening } from '../schema/budget'
 import type { Split, Transaction } from '../schema/records'
 import { financedOf, financerOf, partsOf, sum } from './operations'
+
+/**
+ * The title of a member's repayment in cash the app writes („Oddane gotówką” at a purchase – N-PC-11): what tells it from an
+ * income typed by hand (AP-20, T441 – `typedByHand`).
+ */
+export const CASH_REPAY_TITLE = 'Zwrot gotówką: '
 
 /** One member's share of an operation (grosze, all ≥ 0). */
 export interface MemberFlow {
@@ -410,6 +417,16 @@ export function bankNameHolder<M extends Pick<HouseholdMember, 'id' | 'bankNames
 export function nameIn(name: string, counterparty: string): boolean {
   const parts = bankNameWords(name)
   return parts.length > 0 && wordsIn(parts, counterpartyWords(counterparty))
+}
+
+/**
+ * What a member's open list is, in words (SW sp. 9, T439): their purchases – and the balance at the settlements' start
+ * apart, never counted as „1 zakup” (there is no purchase to point at). '' – nothing open.
+ */
+export function openText(open: readonly Pick<OpenPurchase, 'txId'>[]): string {
+  const n = open.filter((o) => !isOpeningItem(o.txId)).length
+  const purchases = n ? `${n} ${plural(n, 'zakup', 'zakupy', 'zakupów')}` : ''
+  return [purchases, open.some((o) => isOpeningItem(o.txId)) ? 'saldo na start rozliczeń' : ''].filter(Boolean).join(' i ')
 }
 
 /**

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { launch } from './app'
 import { json } from './files'
+import { warsawNow } from '../../src/shared/calc/dates'
 import { seedFolder } from './seed'
 
 /** A user-data folder whose config.json already says where the data was (and what else this computer remembers). */
@@ -51,6 +52,14 @@ test('folder danych (1.5.3, B53): zapamiętany pusty – tylko ponowna próba al
     const page = second.page
     await expect(page.getByTestId('setup-message')).toContainText('podfolder')
     await expect(page.getByTestId('retry-folder')).toHaveCount(0)
+    // „Nowe dane gdzie indziej” on a folder of other files (AP-25, AF-53): the question first – no subfolder made by itself.
+    const papers = join(base, 'Papiery')
+    mkdirSync(papers)
+    writeFileSync(join(papers, 'notatki.txt'), 'x')
+    const asked = await page.evaluate((d) => (globalThis as unknown as { fi: { openDataDir: (d: string, c: boolean) => Promise<{ ok: boolean; problem?: string; subfolder?: string; message?: string }> } }).fi.openDataDir(d, true), papers)
+    expect(asked).toMatchObject({ ok: false, problem: 'other', subfolder: join(papers, 'FinancialIntel') })
+    expect(asked.message).toContain('inne pliki')
+    expect(existsSync(join(papers, 'FinancialIntel'))).toBe(false)
     await page.getByTestId('create-subfolder').click()
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     expect(existsSync(join(other, 'FinancialIntel', 'fi.json'))).toBe(true)
@@ -177,6 +186,88 @@ test('zapamiętany pusty folder z Ustawień (1.5.3, B53): nowe dane tylko na wyr
     await told.getByRole('button', { name: 'Utwórz tu nowe dane' }).click()
     await expect(page.getByTestId('settings-data-dir')).toHaveText(emptied)
     expect(existsSync(join(emptied, 'fi.json'))).toBe(true)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('nowy komputer (AP-28): po „Otwórz istniejące” lista „Ustaw na tym komputerze”, „Co nowego” bez sieci; drugi start – bez listy', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'fi-system-new-pc-'))
+  const dataDir = join(base, 'OneDrive', 'FinancialIntel')
+  const { month } = warsawNow()
+  seedFolder(dataDir, { settings: (s) => ({ ...s, budget: { ...s.budget, start: `${month}-01` } }) })
+  const userData = join(base, 'userData')
+  const first = await launch({ userData, usePreset: false, env: { FI_DEFAULT_DATA_DIR: join(base, 'Inny', 'FinancialIntel') } })
+  try {
+    const { app, page } = first
+    await expect(page.getByTestId('folder-setup')).toBeVisible()
+    // The system's folder dialog answers with the budget the other computer made.
+    await app.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog
+    }, dataDir)
+    await page.getByTestId('setup-open').click()
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await expect(page.getByTestId('banner-machine-setup')).toContainText('na tym komputerze')
+    // The start with Windows is on the list – no second banner asking it.
+    await expect(page.getByTestId('banner-autostart')).toHaveCount(0)
+    await page.getByTestId('banner-machine-setup-open').click()
+    const list = page.getByTestId('machine-setup')
+    for (const row of ['ictj', 'shortcut', 'autostart', 'notify', 'token']) await expect(list.getByTestId(`machine-setup-${row}`)).toBeVisible()
+    await expect(list.getByTestId('machine-setup-token')).toHaveAttribute('data-state', 'todo')
+    // „Ustaw…” goes to the panel – marked as this computer's.
+    await list.getByTestId('machine-setup-go-ictj').click()
+    await expect(page.getByTestId('machine-setup')).toHaveCount(0)
+    await expect(page.getByTestId('ictj-dir')).toBeVisible()
+    await expect(page.getByTestId('machine-only').first()).toHaveText('tylko ten komputer')
+    // „Co nowego” of this version from the CHANGELOG built in – GitHub is out of reach in tests.
+    await page.getByTestId('settings-tab-updates').click()
+    await expect(page.getByTestId('whats-new')).toBeVisible()
+    // The list again from Folder i kopie; „Gotowe” ends it on this computer.
+    await page.getByTestId('settings-tab-folder').click()
+    await page.getByTestId('machine-setup-open').click()
+    await page.getByTestId('machine-setup-done').click()
+    await expect(page.getByTestId('banner-machine-setup')).toHaveCount(0)
+    expect(first.errors).toEqual([])
+  } finally {
+    await first.app.close()
+  }
+  // The same computer again: its folder is remembered – nothing new to set.
+  const again = await launch({ userData, usePreset: false })
+  try {
+    await expect(again.page.getByTestId('page-bridge')).toBeVisible()
+    await expect(again.page.getByTestId('banner-machine-setup')).toHaveCount(0)
+  } finally {
+    await again.app.close()
+  }
+})
+
+test('folder kopii zmieniony (AP-28, DA.14): wcześniejsze kopie zostają na liście pod swoim folderem i dają się odzyskać', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'fi-system-backups-'))
+  const dataDir = join(base, 'FinancialIntel')
+  seedFolder(dataDir, {})
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-folder').click()
+    await page.getByTestId('backup-now').click()
+    await expect(page.locator('[data-testid="backup-row"]', { hasText: 'ręczna' })).toHaveCount(1)
+    // Another folder of backups (a local disk instead of OneDrive).
+    const local = join(base, 'Kopie')
+    mkdirSync(local)
+    await app.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog
+    }, local)
+    await page.getByRole('button', { name: 'Zmień folder kopii…' }).click()
+    const earlier = page.getByTestId('backup-earlier')
+    await expect(earlier).toContainText(join(dataDir, 'backups'))
+    await expect(earlier.locator('[data-testid="backup-row"]', { hasText: 'ręczna' })).toHaveCount(1)
+    await expect(page.getByTestId('backup-age')).toContainText('dziś')
+    // Recovered from there as from the current folder.
+    await earlier.locator('[data-testid="backup-row"]', { hasText: 'ręczna' }).getByTestId('backup-recover').click()
+    await expect(page.getByTestId('recover-summary')).toBeVisible()
+    await expect(page.getByTestId('recover-error')).toHaveCount(0)
     expect(errors).toEqual([])
   } finally {
     await app.close()

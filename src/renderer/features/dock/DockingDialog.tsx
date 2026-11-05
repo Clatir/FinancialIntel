@@ -4,7 +4,7 @@
  * proposes – changeable before saving – and, for a return to the trading capital, the firewall.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { addWorkingDays, asPayout, PAIR_WORKING_DAYS, withDocking, type Delivery } from '@shared/calc/dock'
+import { addWorkingDays, asPayout, PAIR_WORKING_DAYS, waitingText, withDocking, type Delivery } from '@shared/calc/dock'
 import { byPriority } from '@shared/calc/goals'
 import { fitSplit } from '@shared/calc/fleet'
 import { undockingOf } from '@shared/calc/undock'
@@ -99,6 +99,8 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const e = d.entry
   const waiting = d.state === 'waiting'
   const until = e ? addWorkingDays(e.date, PAIR_WORKING_DAYS) : null
+  // Waiting past its window (DO sp. 3): a newer file of the bank decides – never „czeka na import do” a day gone by.
+  const waitText = waitingText(d, until)
   const showTax = e?.pool === 'tax' || split.taxHold > 0
   const edit = (patch: Partial<SplitDraft>) => setDraft({ ...split, ...patch })
   // „Wycofaj dokowanie” (AP-9): what it would remove – a docked delivery only.
@@ -163,7 +165,8 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
         <section className="flex items-baseline gap-2" data-testid="docking-source">
           <span className="label w-[70px] shrink-0">Źródło</span>
           <span className="min-w-0 flex-1 text-fg-strong">
-            {e ? (e.kind === 'withdrawal' ? 'Wypłata z ICTTJ' : 'Zwrot do masy w ICTTJ') : 'Wpływ z XTB'} · {plDate(d.date)}
+            {/* One day of the money (MO.7): the bank's below – the entry's day said as the entry's. */}
+            {e ? (e.kind === 'withdrawal' ? 'Wypłata z ICTTJ' : 'Zwrot do masy w ICTTJ') : 'Wpływ z XTB'} · {e && d.transaction && d.transaction.date !== d.date ? `wpis z ${plDate(d.date)}` : plDate(d.date)}
             {e && (
               <span className="ml-1.5">
                 <Badge tone="accent" title="Pula wpisu w ICTTJ">
@@ -219,10 +222,12 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
                 {/* The direction's own words (N43): a return goes out to XTB. */}
                 {d.direction === 'out'
                   ? waiting
-                    ? `Wypływu do XTB w mBanku jeszcze nie ma – FI czeka na import do ${until ? plDate(until) : '…'}. Jeśli pieniądze poszły z Portfela XTB, zadokuj teraz.`
+                    ? `Wypływu do XTB w mBanku jeszcze nie ma – ${waitText}. Jeśli pieniądze poszły z Portfela XTB, zadokuj teraz.`
                     : `W mBanku nie ma tego wypływu do XTB po ${PAIR_WORKING_DAYS} dniach roboczych – najpewniej z Portfela XTB. Potwierdź albo poczekaj na import.`
                   : waiting
-                    ? `Wpływ z XTB w mBanku jeszcze nie przyszedł – FI czeka na import do ${until ? plDate(until) : '…'}. Jeśli pieniądze poszły na Portfel XTB, zadokuj teraz.`
+                    ? d.unseen
+                      ? 'W mBanku nie ma tego wpływu z XTB, a historia banku zaczyna się po początku okna pary (przed startem budżetu). Jeśli pieniądze poszły na Portfel XTB, zadokuj teraz; jeśli wpłynęły przed startem – pomiń wpis.'
+                      : `Wpływ z XTB w mBanku jeszcze nie przyszedł – ${waitText}. Jeśli pieniądze poszły na Portfel XTB, zadokuj teraz.`
                     : `W mBanku nie ma tej kwoty od XTB po ${PAIR_WORKING_DAYS} dniach roboczych – najpewniej Portfel XTB. Potwierdź albo poczekaj na import.`}
               </span>
             </span>

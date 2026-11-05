@@ -154,7 +154,7 @@ describe('konflikty bez przeskanowania folderu (1.4.3, W23)', () => {
     await fs.writeFile(join(store.root, copyB2), JSON.stringify({ ...b.record, note: 'B stara' }, null, 2))
     await store.refresh()
     const listing = spyOn('listDataFiles')
-    const { results, change } = await store.resolveConflicts([
+    const { results, changes } = await store.resolveConflicts([
       { id: copyA, keep: 'copy', group: a.relPath },
       { id: copyB1, keep: 'copy', group: b.relPath },
       { id: copyB2, keep: 'canonical', group: b.relPath }
@@ -165,6 +165,9 @@ describe('konflikty bez przeskanowania folderu (1.4.3, W23)', () => {
       [copyB2, false, true]
     ])
     expect(listing).not.toHaveBeenCalled()
+    // One change set: nothing refused, so nothing from outside before it.
+    expect(changes).toHaveLength(1)
+    const change = changes[0]
     expect(change?.upserts.map((u) => (u.entry.record as { note: string }).note)).toEqual(['A z laptopa'])
     expect(change?.conflicts.map((c) => c.id).sort()).toEqual([copyB2, copyB1].sort())
     // One conflict, as the buttons do it: the copy to the bin, no rescan either.

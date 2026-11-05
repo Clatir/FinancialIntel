@@ -48,6 +48,26 @@ interface DataState {
   save: SaveState
   /** Records created in the UI that were never edited (not written to disk yet). */
   drafts: Record<string, true>
+  /**
+   * The budget's start not whole in the folder yet (KR.29, T446 – `writeStart`): its records as the start made them, kept on
+   * this computer until each is in the folder; null – none. The background writes wait for them.
+   */
+  startLeft: StartLeft | null
+  /** Keys of the start's records the folder still lacks or refused (`startLeft`) – the banner „Dokończ”; [] – none. */
+  startMissing: string[]
+}
+
+/** A record of the budget's start (T446): the openings, the month's plan, the containers, the payments linked to them. */
+export interface StartRecord {
+  collection: StartCollection
+  record: RecordTypes[StartCollection]
+}
+export type StartCollection = 'balances' | 'months' | 'containers' | 'transactions'
+const START_COLLECTIONS: readonly string[] = ['balances', 'months', 'containers', 'transactions'] satisfies StartCollection[]
+/** The start's records kept until each is in the folder (T446); `start` – the budget's day in fi.json. */
+export interface StartLeft {
+  start: string
+  records: StartRecord[]
 }
 
 const SAVE_DELAY_DEFAULT = 400
@@ -153,7 +173,9 @@ export const useData = create<DataState>(() => ({
   status: null,
   loadMs: 0,
   save: { pending: 0, lastSavedAt: null, error: null },
-  drafts: {}
+  drafts: {},
+  startLeft: null,
+  startMissing: []
 }))
 
 const set = useData.setState
@@ -208,6 +230,8 @@ const withMap = (s: DataState, c: Collection, map: AnyMap): Pick<DataState, 'rec
 
 function bumpPending(delta: number, patch: Partial<SaveState> = {}): void {
   set((s) => ({ save: { ...s.save, pending: Math.max(0, s.save.pending + delta), ...patch } }))
+  // A write answered (or a change forgotten): the records of the budget's start may all be on the disk now (T446).
+  syncHeld()
 }
 
 type Stamped = { updatedAt?: string; updatedBy?: string }
@@ -243,7 +267,14 @@ export function applySnapshot(snapshot: Snapshot): void {
   // A folder shown anew: the hold of a close that did not come is over (T301).
   clearTimeout(closeHold)
   closeHold = undefined
+  // Its own start not whole in the folder (T446 – closed or broken off before its records were written): kept on this
+  // computer, the banner „Dokończ” writes what the folder lacks. One whose fi.json never reached the folder – none.
+  const left = readStartLeft(snapshot.status.dataDir)
+  const startLeft = left && snapshot.fi.settings.budget.start === left.start ? left : null
+  if (left && !startLeft) keepStartLeft(snapshot.status.dataDir, null)
   set({
+    startLeft,
+    startMissing: [],
     backgroundHeld: holds > 0,
     phase: 'ready',
     setupMessage: null,
@@ -261,6 +292,7 @@ export function applySnapshot(snapshot: Snapshot): void {
     drafts: {},
     save: { pending: 0, lastSavedAt: null, error: null }
   })
+  syncHeld()
   // Before any write of this folder leaves the window (B31): main takes writes only for the folder shown.
   if (snapshot.generation != null) void api.folderShown(snapshot.generation).catch(() => undefined)
 }
@@ -345,7 +377,8 @@ export function applyChange(change: ChangeSet): void {
     if (change.fi) {
       const key = FI_KEY
       if (!external) {
-        if (!dirty.has(key)) {
+        // The budget's start on its way (T446): its fi.json comes to the window with its records – never before them.
+        if (!dirty.has(key) && !startWriting) {
           const fi = adoptSaved(s.fi, change.fi)
           if (fi) next.fi = fi
         }
@@ -380,6 +413,8 @@ export function applyChange(change: ChangeSet): void {
       return { pending, open: queued.length > 0 || (r.open && pending.length > 0) }
     })
   }
+  // Another computer's version of a record of the budget's start (T446): in the folder – no longer waited for.
+  syncHeld()
 }
 
 /** A decision about a change from another computer (`resolveRemoteMany`). */
@@ -481,6 +516,8 @@ export function resolveRemoteMany(decisions: readonly RemoteDecision[]): void {
     if (ids.length > 1) saveBatch(c, ids)
     else scheduleSave(c, ids[0]!, 0)
   }
+  // Another computer's version taken over a change of the budget's start: nothing of it to wait for (T446).
+  syncHeld()
 }
 
 /** A decision about the settings (`fi.json`) from another computer. */
@@ -829,7 +866,8 @@ export const useFolderLocked = (): boolean => useData((s) => !!s.status?.readOnl
 /**
  * Writes the app makes on its own – the game's days frozen, ICTTJ's goals followed, the settlements' start (D86: on a
  * computer in use only): in a writable folder shown in full, never while changes are being written (T301) – a write
- * started then would keep the flush going or reach the disk after its answer („zapis jeszcze trwa” at the window's close).
+ * started then would keep the flush going or reach the disk after its answer („zapis jeszcze trwa” at the window's close) –
+ * and never while the records of the budget's start are not on the disk yet (KR.29, T446 – `writeStart`).
  */
 export const writesInBackground = (s: DataState): boolean => s.phase === 'ready' && !s.status?.readOnly && !s.switching && !s.backgroundHeld
 
@@ -839,9 +877,113 @@ let holds = 0
 let closeHold: ReturnType<typeof setTimeout> | undefined
 /** How long at most: the window goes in a moment – unless main keeps it (its question after a minute of writing, „Anuluj”). */
 const CLOSE_HOLD_MS = 10_000
+/**
+ * „Uruchom budżet” writing its fi.json now (T446 – `writeStart`): its memo kept as it is (the start not in the window yet),
+ * and fi.json of its own write never taken into the window before the start's records.
+ */
+let startWriting = false
+
+/** The start's memo on this computer, one per folder (T446): as the wizard's draft, the folder's path in the key. */
+const START_LEFT_KEY = 'fi.start.left:'
+const startLeftKey = (dir: string) => `${START_LEFT_KEY}${dir.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()}`
+
+function storage(): Storage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+const isStartRecord = (r: unknown): r is StartRecord => {
+  const x = r as Partial<StartRecord> | null
+  return !!x && typeof x === 'object' && START_COLLECTIONS.includes(x.collection as string) && typeof (x.record as { id?: unknown } | undefined)?.id === 'string'
+}
+
+/** The memo of a folder (null – none, or one this version cannot read). */
+function readStartLeft(dir: string): StartLeft | null {
+  try {
+    const raw = storage()?.getItem(startLeftKey(dir))
+    if (!raw) return null
+    const kept = JSON.parse(raw) as { v?: unknown; start?: unknown; records?: unknown }
+    if (kept.v !== 1 || typeof kept.start !== 'string' || !Array.isArray(kept.records)) return null
+    return { start: kept.start, records: kept.records.filter(isStartRecord) }
+  } catch {
+    return null
+  }
+}
+
+/** The memo of a folder written (null – gone); a full or blocked storage keeps it for the window's life only. */
+function keepStartLeft(dir: string | undefined, left: StartLeft | null): void {
+  if (!dir) return
+  try {
+    if (left) storage()?.setItem(startLeftKey(dir), JSON.stringify({ v: 1, start: left.start, records: left.records }))
+    else storage()?.removeItem(startLeftKey(dir))
+  } catch {
+    /* the window keeps it in memory */
+  }
+}
+
+/** The memo of the folder shown, in the window and on this computer at once. */
+function setStartLeft(left: StartLeft | null): void {
+  keepStartLeft(get().status?.dataDir, left)
+  set({ startLeft: left, startMissing: [] })
+}
+
+/** Records the user deleted are no records of the start any more (T446): never brought back by „Dokończ”. */
+function forgetStartRecords(collection: Collection, ids: readonly string[]): void {
+  const left = get().startLeft
+  if (!left) return
+  const gone = new Set(ids)
+  const records = left.records.filter((r) => r.collection !== collection || !gone.has(r.record.id))
+  if (records.length !== left.records.length) setStartLeft({ ...left, records })
+}
+
+/**
+ * Whether the background writes wait for the budget's start (KR.29, T446), its memo kept in step: a record of the start
+ * waits while the folder lacks it – not in the window (the window closed or broken off before it was written: „Dokończ”)
+ * or changed here and not written yet. One the folder has a version of – written, another computer's waiting for the
+ * decision, a newer version's (B67) – waits no longer; none waiting: the memo goes, said when the folder keeps its own
+ * version of some. `startMissing` – those the folder lacks or refused, for the banner.
+ */
+function startWaiting(s: DataState): boolean {
+  const left = s.startLeft
+  if (!left || startWriting) return false
+  if (s.fi?.settings.budget.start !== left.start) {
+    setStartLeft(null)
+    return false
+  }
+  const missing: string[] = []
+  const elsewhere = new Set<string>()
+  let waiting = false
+  for (const { collection, record } of left.records) {
+    const key = keyOf(collection, record.id)
+    if (!mapOf(s, collection)[record.id]) {
+      // A payment the start linked is the user's record: gone from the folder, it is not the start's to bring back.
+      if (collection === 'transactions') continue
+      waiting = true
+      missing.push(key)
+    } else if (dirty.has(key)) {
+      if (pendingFor(key)) elsewhere.add('czeka na Twoją decyzję o zmianie z drugiego komputera')
+      else if (newer.has(key)) elsewhere.add('zapisała go nowsza wersja aplikacji')
+      else {
+        waiting = true
+        if (failed.has(key)) missing.push(key)
+      }
+    }
+  }
+  if (!waiting) {
+    setStartLeft(null)
+    if (elsewhere.size)
+      toast(`Start budżetu: folder ma już swoją wersję części rekordów startu (${[...elsewhere].join('; ')}) – gra, cele ICTTJ i rozliczenia nie czekają na nie dłużej.`, 'info', 10_000)
+    return false
+  }
+  if (missing.join('|') !== s.startMissing.join('|')) set({ startMissing: missing })
+  return true
+}
 
 function syncHeld(): void {
-  const held = holds > 0 || closeHold !== undefined
+  const held = holds > 0 || closeHold !== undefined || startWaiting(get())
   if (get().backgroundHeld !== held) set({ backgroundHeld: held })
 }
 
@@ -1042,6 +1184,7 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
   const unsaved = dirty.has(key)
   forget(key)
   useRemote.setState((r) => ({ pending: r.pending.filter((p) => p.key !== key) }))
+  forgetStartRecords(collection, [id])
   bumpPending(0, { error: saveError() })
   const wasDraft = !!get().drafts[id]
   set((s) => {
@@ -1087,6 +1230,7 @@ export async function deleteRecords(collection: Collection, ids: readonly string
   const unsaved = new Set(keys.filter((k) => dirty.has(k)))
   for (const key of keys) forget(key)
   useRemote.setState((r) => ({ pending: r.pending.filter((p) => !keys.includes(p.key)) }))
+  forgetStartRecords(collection, ids)
   bumpPending(0, { error: saveError() })
   set((st) => {
     const map = { ...mapOf(st, collection) }
@@ -1168,7 +1312,8 @@ export async function flushSaves(): Promise<boolean> {
     // In rounds (T301): a record changed while its write was on its way – a field committed, an edit, a write started
     // just before, a record a refused deletion brought back – is written once more before the answer. The version each
     // record was sent at: a write that failed or waits for a decision about another computer's change is not sent again –
-    // its error or the decision is the answer.
+    // its error or the decision is the answer. The budget's start on its way (T446): its records come with its fi.json's
+    // answer – written in the next round.
     const sent = new Map<string, number>()
     for (let round = 0; round < FLUSH_ROUNDS; round++) {
       for (const key of new Set([...timers.keys(), ...dirty.keys()])) {
@@ -1215,7 +1360,7 @@ export function unsavedReport(): FlushResult {
 }
 
 /** A record's change not on the disk yet (AP-1): why – its last write's error, or its write on the way; null = saved. */
-export function unsavedOf(collection: Collection, id: string): string | null {
+export function unsavedOf(collection: Collection | 'fi', id: string): string | null {
   const key = keyOf(collection, id)
   return dirty.has(key) ? (failed.get(key) ?? 'zapis jeszcze trwa') : null
 }
@@ -1234,6 +1379,122 @@ export async function writeNow(collection: Collection, id: string, limitMs = 500
   let timer: ReturnType<typeof setTimeout> | undefined
   await Promise.race([enqueue(key), new Promise<void>((r) => (timer = setTimeout(r, limitMs)))]).finally(() => clearTimeout(timer))
   return !dirty.has(key)
+}
+
+const SLOW = Symbol('slow')
+
+/** What became of „Uruchom budżet” on the disk (`writeStart`). */
+export type StartAnswer =
+  /** fi.json written, the start's records made in the window (written as every change). */
+  | { kind: 'started' }
+  /** Nothing of the start written – why. */
+  | { kind: 'refused'; reason: string }
+  /** fi.json written, but another folder shown meanwhile: the start's records wait on this computer for that folder. */
+  | { kind: 'elsewhere' }
+
+/** „Uruchom budżet” for `writeStart`: fi.json's change, the budget's day, the records built and checked before fi.json. */
+export interface StartWrite {
+  update: (f: SettingsFile) => SettingsFile
+  start: string
+  /** The records as built (each checked by its schema) – kept on this computer before fi.json leaves the window. */
+  records: StartRecord[]
+  /** Makes the start's records in the window once fi.json is on the disk (the containers matched to their payees now). */
+  apply: () => void
+  limitMs: number
+  /** Said once `limitMs` passed without the folder's answer (awaited all the same). */
+  slow: () => void
+}
+
+/**
+ * „Uruchom budżet” on the disk (KR.29, T446 – przeglądy 3 i 4 N5): fi.json with the start goes first – as fi.json's next
+ * write, after any on its way – and only once the folder took it does the window get the start, together with its records
+ * (`apply`, at once): neither the folder nor the window ever has the start without them, and a refusal changes nothing in
+ * either – nothing to take back. From the click to the records the background writes are held, a flush waits for it (the
+ * window closing in the middle writes the records too), and fi.json of its own write never comes to the window before
+ * them. The records are kept on this computer (`startLeft`) from before fi.json leaves the window until each is in the
+ * folder – the background writes wait for them, a window closed or broken off before finds them again („Dokończ”). A
+ * decision about another computer's fi.json waiting: refused (never written over a version not seen).
+ */
+export async function writeStart(o: StartWrite): Promise<StartAnswer> {
+  const dir = get().status?.dataDir
+  const shown = get().openedAt
+  return holding(async () => {
+    startWriting = true
+    setStartLeft({ start: o.start, records: o.records })
+    try {
+      const answer = (settled(inFlight.get(FI_KEY)) ?? Promise.resolve()).then(() => startOnDisk(o, shown))
+      // fi.json's write on its way: the next write of fi.json and every flush wait for it, whatever became of it.
+      const flight = answer.then(
+        () => undefined,
+        () => undefined
+      )
+      inFlight.set(FI_KEY, flight)
+      void flight.finally(() => {
+        if (inFlight.get(FI_KEY) === flight) inFlight.delete(FI_KEY)
+      })
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const first = await Promise.race([answer, new Promise<typeof SLOW>((r) => (timer = setTimeout(() => r(SLOW), o.limitMs)))]).finally(() => clearTimeout(timer))
+      if (first === SLOW) o.slow()
+      const result = first === SLOW ? await answer : first
+      // Nothing of the start in the folder: nothing to keep on this computer either.
+      if (result.kind === 'refused') {
+        keepStartLeft(dir, null)
+        if (get().openedAt === shown) set({ startLeft: null, startMissing: [] })
+      }
+      return result
+    } finally {
+      startWriting = false
+    }
+  })
+}
+
+/** `writeStart`'s write, in fi.json's queue: the settings to the disk, then – taken – to the window with the records. */
+async function startOnDisk(o: StartWrite, shown: number): Promise<StartAnswer> {
+  const base = get().fi
+  if (!base || get().openedAt !== shown) return { kind: 'refused', reason: 'w trakcie startu pokazano inny folder' }
+  // Another computer's fi.json waiting for the decision (B48): a write now would go over a version not seen.
+  if (pendingFor(FI_KEY)) {
+    setRemoteDialog(true)
+    return { kind: 'refused', reason: 'czeka Twoja decyzja o zmianie ustawień z drugiego komputera (okno decyzji jest otwarte)' }
+  }
+  bumpPending(1)
+  let saved: SettingsFile
+  try {
+    saved = await api.saveSettings(o.update(base))
+  } catch (e) {
+    bumpPending(-1, { error: saveError() })
+    return { kind: 'refused', reason: `nie udało się zapisać ustawień w folderze (${errorMessage(e)})` }
+  }
+  try {
+    // Another folder shown meanwhile (never while a flush waits for this write – B31): the start is in that folder's
+    // fi.json, its records kept on this computer for it – „Dokończ” once it is shown again.
+    if (get().openedAt !== shown) return { kind: 'elsewhere' }
+    const now = get().fi!
+    if ((now === base || sameContentAs(now, saved)) && !dirty.has(FI_KEY)) set({ fi: shareSettings(now, saved) })
+    else {
+      // fi.json changed in the window meanwhile (an edit, another computer's version taken): kept, the start over it –
+      // written next; the disk has the start already (the base of a later merge).
+      bases.set(FI_KEY, saved)
+      set({ fi: o.update(now) })
+      scheduleSave('fi', 'fi', 0)
+    }
+    // A change from another computer came while this write was on its way (B48): the decision must reach the disk.
+    if (pendingFor(FI_KEY)) useRemote.setState((r) => ({ pending: r.pending.map((p) => (p.key === FI_KEY ? { ...p, savedAfter: true } : p)) }))
+    // What the start made: the changes of the window from `apply` (the keys to write before and after it).
+    const before = new Set(dirty.keys())
+    o.apply()
+    const s = get()
+    const made: StartRecord[] = []
+    for (const [key, t] of dirty) {
+      if (before.has(key) || t.collection === 'fi' || !START_COLLECTIONS.includes(t.collection)) continue
+      const entry = mapOf(s, t.collection)[t.id]
+      if (entry) made.push({ collection: t.collection as StartCollection, record: entry.record as RecordTypes[StartCollection] })
+    }
+    setStartLeft({ start: o.start, records: made })
+    return { kind: 'started' }
+  } finally {
+    bumpPending(-1, { lastSavedAt: new Date().toISOString(), error: saveError() })
+  }
 }
 
 /** The window closing (B108): everything written, the reason of what is not – a waiting decision's dialog opened behind the question. */

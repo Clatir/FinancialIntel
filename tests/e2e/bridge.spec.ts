@@ -114,6 +114,10 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     await quick.getByTestId('quick-amount').press('Tab')
     await quick.getByTestId('quick-payer').selectOption({ label: 'Dom' })
     await expect(quick.getByTestId('quick-preview-member')).toContainText('wyrównuje 120,00 zł')
+    // „Dom” is asked (D80 b – „pytaj”, AP-19): the rest of 80 zł is chosen, never saved as income unasked.
+    await quick.getByTestId('quick-save').click()
+    await expect(quick.getByTestId('quick-message')).toContainText('Wybierz, czym jest reszta 80,00 zł')
+    await quick.getByRole('radio', { name: 'przychód' }).click()
     await quick.getByTestId('quick-save').click()
     await expect.poll(async () => (await operations(dir)).filter((t) => t.kind === 'income').map((t) => [t.amount, t.memberId, t.repaid])).toEqual([[20000, HOUSE, 0]])
     await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')

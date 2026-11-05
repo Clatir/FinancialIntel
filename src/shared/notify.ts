@@ -4,7 +4,7 @@
  * the first opening of the window after them – or its hour, when one is set (D99 pkt 7) – and comes before the others
  * (AP-16): until then the day's other notices wait, at most to `BRIEFING_HOLD_UNTIL`.
  */
-import { briefing, dm, type BriefingInput } from './calc/briefing'
+import { againstFirewall, briefing, dm, type BriefingInput } from './calc/briefing'
 import { WATCH_TIME } from './calc/intel'
 import { addDays, dayOfMonth, daysBetween, inClockWindow, monthOf, WARSAW, warsawNow, weekdayOf } from './calc/dates'
 import { envelopeOverrun, SERIOUS_ENVELOPE_PCT, type FleetState } from './calc/fleet'
@@ -21,7 +21,7 @@ export interface Notice {
   title: string
   body: string
   /** Where clicking it leads (App routes it). */
-  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar' | 'reports' | 'operations'
+  tag: 'briefing' | 'evening' | 'low' | 'overrun' | 'asteroid' | 'cargo' | 'import' | 'balances' | 'debriefing' | 'dock' | 'radar' | 'reports' | 'year' | 'operations'
   /** An alarm: its sound. */
   alarm?: boolean
   /** What exactly a click opens (a delivery: `dock:<key>`); else the tag's screen. */
@@ -202,6 +202,10 @@ export function dueNotices(o: NotifyInput): Notice[] {
   // The debriefing of the month just closed: from the 1st, at the first look until the loot's deadline (the 7th).
   if (p.debriefing && dayOfMonth(today) <= 7 && f.start && monthOf(f.start) < f.month)
     out.push({ key: `debriefing:${f.month}`, tag: 'debriefing', title: 'Debriefing miesiąca', body: 'Miesiąc zamknięty – wynik wobec planu i podział łupów (Plan miesiąca).' })
+  // The year's review (spec „Rytuały”: in January – AP-24, RY.25): once, for the year just closed, when the budget ran in it.
+  const year = Number(today.slice(0, 4)) - 1
+  if (p.yearReview && today.slice(5, 7) === '01' && f.start && f.start <= `${year}-12-31`)
+    out.push({ key: `year:${year}`, tag: 'year', title: 'Przegląd roczny', body: `Rok ${year} zamknięty – koszty, przychody, bilans paliwa, cele i osiągnięcia roku (Raporty → Przegląd roczny).` })
   // The watch report (spec: on Sunday; E8): from 18:00, once a week.
   if (p.watch && weekdayOf(today) === 7 && o.time >= WATCH_TIME)
     out.push({ key: `watch:${today}`, tag: 'reports', title: 'Raport wachty', body: 'Tydzień w liczbach, killzone, koperty na następny tydzień i misja – Raporty.' })
@@ -218,8 +222,14 @@ export function dueNotices(o: NotifyInput): Notice[] {
               tag: 'dock',
               target: `dock:${d.key}`,
               title: 'Zwrot do masy w ICTTJ',
-              // The pool „Podatek” comes back from the reserve – no firewall there (T65, N43).
-              body: e.pool === 'tax' ? `${o.money(e.amount)} z puli Podatek – wraca z rezerwy na PIT-38; potwierdź w Financial Intel.` : `${o.money(e.amount)} – potwierdź w Financial Intel (firewall).`
+              // The pool „Podatek” comes back from the reserve – no firewall there (T65, N43); the firewall's word only when
+              // the engine counts it against the order (DO sp. 6, T438).
+              body:
+                e.pool === 'tax'
+                  ? `${o.money(e.amount)} z puli Podatek – wraca z rezerwy na PIT-38; potwierdź w Financial Intel.`
+                  : againstFirewall(f.alarms, d)
+                    ? `${o.money(e.amount)} – dopłata wbrew rozkazowi firewall; potwierdź w Financial Intel.`
+                    : `${o.money(e.amount)} – potwierdź w Financial Intel.`
             }
       )
     }

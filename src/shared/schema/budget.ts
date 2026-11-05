@@ -47,6 +47,29 @@ export const CASH_ACCOUNT_ID = fixedId('ACC', 3)
 const cashAccount = (): Account => ({ id: CASH_ACCOUNT_ID, name: 'Gotówka', kind: 'cash', importFormat: null, archived: false })
 
 /**
+ * The cash of the budget (D83, D100 (1)): the active account of the kind 'cash' – the default one first. An ATM
+ * withdrawal goes onto it as an own transfer (AP-33); null – none (the withdrawal is an expense „Gotówka”, as the spec).
+ */
+export function cashAccountOf<A extends Pick<Account, 'id' | 'kind' | 'archived'>>(accounts: readonly A[]): A | null {
+  const live = accounts.filter((a) => a.kind === 'cash' && !a.archived)
+  return live.find((a) => a.id === CASH_ACCOUNT_ID) ?? live[0] ?? null
+}
+
+/**
+ * How the cash account comes when there is none (AP-33, T422 – offered, never done silently): an archived cash account
+ * back ('restore'), else an account named „Gotówka” made the cash ('mark'), else a new one ('create' – the default id when
+ * free). null – the budget has its cash.
+ */
+export function cashAccountOffer(accounts: readonly Account[], makeId: () => string): { kind: 'restore' | 'mark' | 'create'; account: Account } | null {
+  if (cashAccountOf(accounts)) return null
+  const old = accounts.find((a) => a.kind === 'cash' && a.id === CASH_ACCOUNT_ID) ?? accounts.find((a) => a.kind === 'cash')
+  if (old) return { kind: 'restore', account: { ...old, archived: false } }
+  const named = accounts.find((a) => a.name.trim().toLowerCase() === 'gotówka')
+  if (named) return { kind: 'mark', account: { ...named, kind: 'cash', archived: false } }
+  return { kind: 'create', account: { ...cashAccount(), id: accounts.some((a) => a.id === CASH_ACCOUNT_ID) ? makeId() : CASH_ACCOUNT_ID } }
+}
+
+/**
  * mBank (CSV import + quick entries), Portfel XTB (the bank account with a card, quick entries only – D9, D68) and the
  * cash (D83: what household members give back in cash, the expenses paid with it).
  */

@@ -4,7 +4,7 @@ import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { notesOf } from '@shared/calc/operations'
 import { tagsText } from '@shared/calc/tags'
 import { useMarkFlags } from '../sensors/state'
-import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { MARK_LABEL, OPERATION_MARKS, amountTone, asideOfOperations, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { BulkChangeBar } from './BulkChange'
 import { ColumnsMenu, ExportVisible, MoreFilters, SortHeader, ViewsBar, viewable } from './ListTools'
@@ -433,16 +433,20 @@ export function OperationsPage() {
   const all = useMemo(() => listOf(records), [records])
   // The marks „nietypowa” and „czeka na zwrot” (F31, F34).
   const flags = useMarkFlags()
+  const keptId = useOperationsUi((s) => s.keptId)
   const rows = useMemo(() => {
     if (!fi) return []
     const ctx = { categories: cats, accounts, orders: fi.settings.orders, aliases: fi.settings.import.aliases, flags }
-    // A new entry being written always shows, whatever the filters; the list in the order chosen (F18).
+    // A new entry being written always shows, whatever the filters – and once written while the filter stays (AP-34:
+    // Ctrl+N keeps the search); the list in the order chosen (F18).
     return sortOperations(
-      all.filter((t) => drafts[t.id] || matchesFilter(t, deferred, ctx)),
+      all.filter((t) => drafts[t.id] || t.id === keptId || matchesFilter(t, deferred, ctx)),
       deferred.sort
     )
-  }, [all, deferred, cats, accounts, fi, drafts, flags])
+  }, [all, deferred, cats, accounts, fi, drafts, flags, keptId])
   const sums = useMemo(() => sumOperations(rows), [rows])
+  const view = deferred.accounts.length === 1 ? deferred.accounts[0]! : null
+  const aside = useMemo(() => asideOfOperations(rows, view), [rows, view])
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW, overscan: 20 })
   const selectedIndex = rows.findIndex((t) => t.id === selectedId)
 
@@ -561,8 +565,17 @@ export function OperationsPage() {
           <span className="text-muted" title="Wydatki minus zwroty towaru (bez przelewów własnych, XTB i wydatków finansowanych przez domowników)">
             Koszty <span className="num text-fg-strong">{plnText(sums.costs)} zł</span>
           </span>
+          {aside.count > 0 && (
+            <span
+              className="text-dim"
+              title={`${aside.corrections ? 'Przelewy własne i korekty' : 'Przelewy własne'} (${aside.count}) nie liczą się do Wpływów ani Wydatków – w eksporcie są, więc suma kwot pliku = Wpływy − Wydatki ${aside.amount < 0 ? '−' : '+'} ${plnText(Math.abs(aside.amount))} zł`}
+              data-testid="operations-aside"
+            >
+              poza sumami: {aside.corrections ? 'przelewy własne i korekty' : 'przelewy własne'} <span className="num">{signedPln(aside.amount)} zł</span>
+            </span>
+          )}
           <DuplicatesLink />
-          <ExportVisible rows={rows} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} />
+          <ExportVisible rows={rows} view={view} />
           <ColumnsMenu />
           <span className="flex-1" />
           {balances.map((a) => (

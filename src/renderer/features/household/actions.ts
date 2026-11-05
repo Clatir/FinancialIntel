@@ -6,7 +6,7 @@ import { useEffect } from 'react'
 import { addDays, warsawNow } from '@shared/calc/dates'
 import { householdOf, openingIdsOf, rebaseOpenings } from '@shared/calc/fleet'
 import { linkRepayments, repayingAdvancesOf, withNamed, type CoverFields } from '@shared/calc/repayments'
-import { balanceOf, bankNameHolder, memberName, sameBankName, skippedDebtsOf, skippedKey } from '@shared/calc/household'
+import { balanceOf, bankNameHolder, CASH_REPAY_TITLE, memberName, sameBankName, skippedDebtsOf, skippedKey } from '@shared/calc/household'
 import { CASH_ACCOUNT_ID, inflowOf, MAX_BANK_NAMES, SCHEMA_VERSION, transactionSchema, type HouseholdMember, type MemberInflow, type MemberOpening, type Transaction } from '@shared/schema'
 import { formatPln } from '@shared/format'
 import { newId } from '@shared/ids'
@@ -154,7 +154,7 @@ export function repayInCash(purchase: Pick<Transaction, 'id' | 'date' | 'counter
     amount,
     memberId,
     counterparty: who,
-    title: `Zwrot gotówką: ${purchase.counterparty || 'zakup'}`,
+    title: `${CASH_REPAY_TITLE}${purchase.counterparty || 'zakup'}`,
     covers: [purchase.id]
   })
   if (!addRecord('transactions', record)) return null

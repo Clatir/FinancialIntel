@@ -1,11 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { newId } from '@shared/ids'
-import { asksImpulse, isNight, isTwoSided, sum } from '@shared/calc/operations'
+import { asksImpulse, isNight, isTwoSided, nightVerdict, sum } from '@shared/calc/operations'
 import { DEFAULT_SIGN } from '@shared/calc/kinds'
 import { confirmedChanges, confirmedPeriodOf, type OperationEdit } from '@shared/calc/balances'
-import { shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
-import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Split, type Transaction, type TxKind } from '@shared/schema'
+import { shareComplete, shareOf, startShare, withAmount, withShare } from '@shared/calc/share'
+import { envelopeKind, HOUSE_MEMBER_ID, TX_KIND_LABEL, type Loan, type Share, type Split, type Transaction, type TxKind } from '@shared/schema'
 import { listOf, useData, useFolderLocked } from '../../store/data'
+import { useDraft } from '../../store/drafts'
 import { answerGuard, askGuard, useGuard } from '../../store/guard'
 import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
@@ -83,6 +84,9 @@ export function OperationEditor({ id }: { id: string }) {
   // A new entry being written (the editor opened on it as a draft – keyed by the operation): its whole first writing is
   // the user's own, a purchase typed in with a past day too – nothing to ask.
   const [fresh] = useState(isDraft)
+  // A share typed not covering the whole (AP-37, T156): refused as the quick entry refuses it – never written; kept in the
+  // window's memory (another screen, another operation keep it) until it sums to 100 % or is dropped.
+  const [refusedShare, setRefusedShare, clearRefusedShare] = useDraft<Share | null>(`operation-share:${id}`, () => null)
   if (!entry || !orders) return <Empty>Wybierz operację z listy albo dodaj nową (Ctrl+N).</Empty>
   const t = entry.record
   const readOnly = folderReadOnly || entry.readOnly
@@ -126,13 +130,64 @@ export function OperationEditor({ id }: { id: string }) {
     })
   }
   // A purchase financed by several people (D83): its lines follow the share.
-  const share = shareOf(t)
+  const written = shareOf(t)
+  const share = written ? (refusedShare ?? written) : null
+  const changeShare = (s: Share) => {
+    // Percents only: their sum does not depend on the amount (amounts over it – the rest is 0 zł, as before).
+    if (s.mode === 'percent' && !shareComplete(s, null)) return setRefusedShare(s)
+    clearRefusedShare()
+    update((r) => withShare(r, s))
+  }
   const firstMember = members.find((m) => !m.archived)
   const directions = DIRECTIONS[t.kind]
   const outgoing = sign < 0
   const night = isNight(t, orders)
   const showLog = asksImpulse(t, orders) || t.impulse != null || night || !!t.logNote
   const account = accounts.find((a) => a.id === t.accountId)
+  // An expense: the amount, the counterparty and the category first (AP-34, OP sp. 8 – from the amount to the category in
+  // two Tabs, not seven); the day, the account and the title after them. Other kinds as before.
+  const expense = t.kind === 'expense'
+  const whenAndWhere = (
+    <>
+      <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
+        <div className="flex items-center gap-2">
+          <DateField className="w-[110px]" value={t.date} notAfter={fleet?.today} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
+          <TimeField className="w-[70px]" value={t.time} allowEmpty onChange={(time) => patch({ time })} aria-label="Godzina" data-testid="operation-time" />
+          {night && (
+            <Badge tone="warn" title={`Cisza nocna ${orders.quietHours.from}–${orders.quietHours.to}`} data-testid="operation-night">
+              noc
+            </Badge>
+          )}
+          {fleet && t.date > fleet.today && (
+            <Badge tone="warn" title="Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia" data-testid="operation-future">
+              w przyszłości
+            </Badge>
+          )}
+        </div>
+      </Field>
+      <Field label="Konto">
+        <AccountSelect
+          className="w-[200px]"
+          value={t.accountId}
+          onChange={(accountId) => {
+            if (!accountId) return
+            rememberAccount(accountId)
+            // The other side's account made this one: a transfer outside the budget (its other side's bank row goes).
+            patch(t.counterAccountId === accountId ? { accountId, counterAccountId: null, counterBank: undefined, counterDate: undefined } : { accountId })
+          }}
+          data-testid="operation-account"
+        />
+      </Field>
+    </>
+  )
+  const titleField = (
+    <Field label="Tytuł">
+      <div className="flex flex-col gap-1.5">
+        <TextField commit value={t.title} onChange={(title) => patch({ title })} placeholder="np. przelew, zwrot, opis…" maxLength={1000} data-testid="operation-title" />
+        <TitleRuleAction t={t} patch={patch} />
+      </div>
+    </Field>
+  )
 
   return (
     <div className="flex min-h-0 flex-col gap-2.5 p-3 text-[12px]" data-testid="operation-editor">
@@ -216,35 +271,7 @@ export function OperationEditor({ id }: { id: string }) {
             </p>
           )}
         </Field>
-        <Field label="Data i godzina" hint={t.bank ? 'Bank nie podaje godzin – wpisz, jeśli pamiętasz.' : undefined}>
-          <div className="flex items-center gap-2">
-            <DateField className="w-[110px]" value={t.date} notAfter={fleet?.today} onChange={(date) => patch({ date })} aria-label="Data" data-testid="operation-date" />
-            <TimeField className="w-[70px]" value={t.time} allowEmpty onChange={(time) => patch({ time })} aria-label="Godzina" data-testid="operation-time" />
-            {night && (
-              <Badge tone="warn" title={`Cisza nocna ${orders.quietHours.from}–${orders.quietHours.to}`} data-testid="operation-night">
-                noc
-              </Badge>
-            )}
-            {fleet && t.date > fleet.today && (
-              <Badge tone="warn" title="Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia" data-testid="operation-future">
-                w przyszłości
-              </Badge>
-            )}
-          </div>
-        </Field>
-        <Field label="Konto">
-          <AccountSelect
-            className="w-[200px]"
-            value={t.accountId}
-            onChange={(accountId) => {
-              if (!accountId) return
-              rememberAccount(accountId)
-              // The other side's account made this one: a transfer outside the budget (its other side's bank row goes).
-              patch(t.counterAccountId === accountId ? { accountId, counterAccountId: null, counterBank: undefined, counterDate: undefined } : { accountId })
-            }}
-            data-testid="operation-account"
-          />
-        </Field>
+        {!expense && whenAndWhere}
         <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'} hint={isDraft ? undefined : <BrandYearLine t={t} />}>
           <div className="flex min-w-0 items-center gap-2">
             <TextField commit className="min-w-0 flex-1" value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
@@ -262,12 +289,7 @@ export function OperationEditor({ id }: { id: string }) {
             )}
           </div>
         </Field>
-        <Field label="Tytuł">
-          <div className="flex flex-col gap-1.5">
-            <TextField commit value={t.title} onChange={(title) => patch({ title })} placeholder="np. przelew, zwrot, opis…" maxLength={1000} data-testid="operation-title" />
-            <TitleRuleAction t={t} patch={patch} />
-          </div>
-        </Field>
+        {!expense && titleField}
 
         {t.kind === 'expense' && (
           <Section title="Kategoria">
@@ -338,17 +360,31 @@ export function OperationEditor({ id }: { id: string }) {
                 {share ? (
                   <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-2">
                     <span className="text-[11.5px] text-muted">{outgoing ? 'Wspólnie – kto ile płaci' : 'Zwrot wspólnego zakupu – dla kogo ile'}</span>
-                    <ShareEditor share={share} total={abs} members={members} onChange={(s) => update((r) => withShare(r, s))} onClear={() => update((r) => withShare(r, null))} testId="operation-share" />
+                    <ShareEditor
+                      share={share}
+                      total={abs}
+                      members={members}
+                      onChange={changeShare}
+                      onClear={() => {
+                        clearRefusedShare()
+                        update((r) => withShare(r, null))
+                      }}
+                      testId="operation-share"
+                    />
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Zwrot dla'}</span>
-                    <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" />
+                    <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Czyj zakup'}</span>
+                    {/* A product return (DM sp. 6): whose purchase comes back – never „Zwrot dla … finansuje: X”. */}
+                    <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" back={!outgoing} />
                     {firstMember && (
                       <button
                         type="button"
                         className="btn h-[24px] shrink-0"
-                        onClick={() => update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))}
+                        onClick={() => {
+                          clearRefusedShare()
+                          update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))
+                        }}
                         title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami"
                         data-testid="operation-share-start"
                       >
@@ -395,6 +431,12 @@ export function OperationEditor({ id }: { id: string }) {
             <AnomalyNote t={t} />
             {outgoing && <AwaitReturnBox t={t} readOnly={readOnly} />}
           </Section>
+        )}
+        {expense && (
+          <>
+            {whenAndWhere}
+            {titleField}
+          </>
         )}
 
         {t.kind === 'income' && t.amount >= 0 && <MemberIncome t={t} patch={patch} />}
@@ -494,8 +536,11 @@ export function OperationEditor({ id }: { id: string }) {
             )}
             {night && t.logNote.trim() !== '' && (
               <div className="flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="operation-night-status">
-                {t.impulse === 'plan' || t.explained || t.containerId != null ? (
+                {nightVerdict(t) === 'justified' ? (
                   <span className="text-muted">Wydatek w ciszy nocnej uzasadniony (plan) – wpis w dzienniku wyjaśnia zakup bez naruszenia w grze.</span>
+                ) : nightVerdict(t) === 'member' ? (
+                  // AF-23: a household member's purchase is not mine – the game counts no violation of it.
+                  <span className="text-muted">Zakup domownika w ciszy nocnej – to nie Twój wydatek, w grze bez naruszenia.</span>
                 ) : (
                   <>
                     <span className="text-accent">Potwierdzony zakup w ciszy nocnej – liczy się jako naruszenie w grze.</span>

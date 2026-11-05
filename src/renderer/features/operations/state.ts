@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
-import { effectOf, type Effect } from '@shared/calc/effect'
-import { computeFleet } from '@shared/calc/fleet'
+import { effectOf, monthsEffectOf, noEffect, pairsLost, type Effect, type LostPair, type MonthEffect } from '@shared/calc/effect'
+import { pendingPairsOf } from '@shared/calc/dock'
+import { budgetStartOf, computeFleet } from '@shared/calc/fleet'
 import { kindUndone, unlinkedBy, withKind } from '@shared/calc/kinds'
+import { entryAccount } from '@shared/calc/quick'
 import { confirmedChanges } from '@shared/calc/balances'
 import { newId } from '@shared/ids'
-import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, showsView, viewFilter, type OperationsFilter } from '@shared/operationsView'
+import { brandKeyOf, emptyFilter, filterOf, inPeriod, LIST_KEYS, narrows, noNarrowing, OPERATION_MARKS, refundablesFilter, showsView, viewFilter, type OperationsFilter, type PeriodFilter } from '@shared/operationsView'
 import type { BrandAliases } from '@shared/import/aliases'
 import { shareOf, withShare } from '@shared/calc/share'
 import { stripDeletedCovers } from '@shared/calc/repayments'
@@ -14,19 +16,29 @@ import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KIND_LABEL, TX_KINDS, transactionS
 import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
 import { askGuard } from '../../store/guard'
 import { fleetInputNow, fleetNow } from '../../store/fleet'
+import { deliveriesFor, deliveriesOfLists } from '../../store/deliveries'
+import { useIctj } from '../../store/ictj'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
 
-/** Filters of this computer (the period and the search start fresh: this month, empty). */
+/** Filters of this computer (the search starts fresh; the period – when it is the whole history or a range, AP-34). */
 const FILTER_KEY = 'fi.operations.filter'
 const ACCOUNT_KEY = 'fi.operations.account'
+
+/**
+ * The period kept for the next start (AP-34, OP sp. 9): „cała historia” and „od – do” are chosen to stay; a month is
+ * where one looks now – the list opens on the current one (B81).
+ */
+const keptPeriod = (p: PeriodFilter): PeriodFilter | null => (p.kind === 'month' ? null : p)
 
 function readStored(): Partial<OperationsFilter> {
   try {
     const f = filterOf(JSON.parse(localStorage.getItem(FILTER_KEY) ?? '{}'), currentMonth)
-    return Object.fromEntries(STORED_KEYS.map((k) => [k, f[k]]))
+    // None stored – the current month (`filterOf`), which is not kept.
+    const period = keptPeriod(f.period)
+    return { ...Object.fromEntries(STORED_KEYS.map((k) => [k, f[k]])), ...(period ? { period } : {}) }
   } catch {
     return {}
   }
@@ -34,7 +46,8 @@ function readStored(): Partial<OperationsFilter> {
 
 function store(f: OperationsFilter): void {
   try {
-    localStorage.setItem(FILTER_KEY, JSON.stringify(Object.fromEntries(STORED_KEYS.map((k) => [k, f[k]]))))
+    const period = keptPeriod(f.period)
+    localStorage.setItem(FILTER_KEY, JSON.stringify({ ...Object.fromEntries(STORED_KEYS.map((k) => [k, f[k]])), ...(period ? { period } : {}) }))
   } catch {
     /* storage unavailable: the filter lives for the session */
   }
@@ -51,6 +64,11 @@ interface OperationsUi {
    * (`showStoredFilter`), and changes after it are stored again.
    */
   shown: boolean
+  /**
+   * The operation added with Ctrl+N (AP-34, IN.3): on the list while the filter stays as it was – the search kept, the
+   * new entry not hidden by it once written. Another filter lets it go.
+   */
+  keptId: string | null
 }
 
 /** The month the list's default period was last set to (B81): the app lives in the tray for weeks. */
@@ -63,7 +81,8 @@ export const useOperationsUi = create<OperationsUi>(() => ({
   filter: { ...emptyFilter(currentMonth), ...readStored() },
   selectedId: null,
   ticked: {},
-  shown: false
+  shown: false,
+  keptId: null
 }))
 
 export function setFilter(patch: Partial<OperationsFilter>): void {
@@ -71,7 +90,7 @@ export function setFilter(patch: Partial<OperationsFilter>): void {
     const filter = { ...s.filter, ...patch }
     // In a view asked from elsewhere the change is the view's (B88): the stored filter stays as it was.
     if (!s.shown) store(filter)
-    return { filter, ticked: {} }
+    return { filter, ticked: {}, keptId: sameValue(filter, s.filter) ? s.keptId : null }
   })
 }
 
@@ -82,18 +101,25 @@ const sameValue = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSO
  * hides a part of the stored filter is one (`shown`) – a period moved or a search cleared is not.
  */
 export function showFilter(patch: Partial<OperationsFilter>): void {
-  useOperationsUi.setState((s) => ({
-    filter: { ...s.filter, ...patch },
-    ticked: {},
-    shown: s.shown || STORED_KEYS.some((k) => k in patch && !sameValue(patch[k], s.filter[k]))
-  }))
+  useOperationsUi.setState((s) => {
+    const filter = { ...s.filter, ...patch }
+    return {
+      filter,
+      ticked: {},
+      shown: s.shown || STORED_KEYS.some((k) => k in patch && !sameValue(patch[k], s.filter[k])),
+      keptId: sameValue(filter, s.filter) ? s.keptId : null
+    }
+  })
 }
 
-/** The filter stored on this computer again (after a view asked from elsewhere): changes are stored from now on. */
+/**
+ * The filter stored on this computer again (after a view asked from elsewhere): changes are stored from now on. Its
+ * period too (AP-34, AF-56): the one kept, else the current month – never the period of the view left.
+ */
 export function showStoredFilter(): void {
   useOperationsUi.setState((s) => {
     const empty = emptyFilter(currentMonth)
-    return { filter: { ...s.filter, ...Object.fromEntries(STORED_KEYS.map((k) => [k, empty[k]])), ...readStored() }, ticked: {}, shown: false }
+    return { filter: { ...s.filter, ...Object.fromEntries(STORED_KEYS.map((k) => [k, empty[k]])), period: empty.period, ...readStored() }, ticked: {}, shown: false, keptId: null }
   })
 }
 
@@ -102,7 +128,7 @@ export function resetFilter(): void {
   const filter = emptyFilter(warsawNow().month)
   const { shown } = useOperationsUi.getState()
   if (!shown) store(filter)
-  useOperationsUi.setState({ filter, ticked: {} })
+  useOperationsUi.setState({ filter, ticked: {}, keptId: null })
 }
 
 /**
@@ -287,11 +313,11 @@ export function selectOperation(id: string | null): void {
   useOperationsUi.setState({ selectedId: id })
 }
 
-const lastAccount = (): string => {
+const lastAccount = (): string | null => {
   try {
-    return localStorage.getItem(ACCOUNT_KEY) ?? MBANK_ACCOUNT_ID
+    return localStorage.getItem(ACCOUNT_KEY)
   } catch {
-    return MBANK_ACCOUNT_ID
+    return null
   }
 }
 
@@ -305,12 +331,13 @@ export function rememberAccount(id: string): void {
 
 /**
  * A new operation as a draft (written on the first change – leaving it untouched drops it): an expense now, on the
- * account used last on this computer.
+ * account used last in the folder (AP-20 – the other computer's entries too), else on this computer.
  */
 export function newOperation(over: Partial<Transaction> = {}): string {
-  const fi = useData.getState().fi
+  const state = useData.getState()
+  const fi = state.fi
   const accounts = fi?.settings.accounts.filter((a) => !a.archived) ?? []
-  const account = accounts.find((a) => a.id === lastAccount())?.id ?? accounts[0]?.id ?? MBANK_ACCOUNT_ID
+  const account = entryAccount(accounts, lastAccount(), listOf(state.records.transactions), listOf(state.records.scheduled)) ?? MBANK_ACCOUNT_ID
   const now = new Date().toISOString()
   const { date, time: clock } = warsawNow()
   // Written in the quiet hours, it is most likely a purchase of the day written down at night (N10): no time – a night
@@ -321,10 +348,12 @@ export function newOperation(over: Partial<Transaction> = {}): string {
   addRecord('transactions', record, { draft: true })
   navigate({ page: 'operations' })
   // A new entry is always visible: its month when the period does not hold its day (B77 – a range too), without filters
-  // that could hide it (F18's too) – a view, the stored filters stay (B88).
+  // that could hide it (F18's too) – a view, the stored filters stay (B88). The search stays as typed (AP-34, IN.3): the
+  // entry is kept on the list (`keptId`) while the filter stays.
   const f = useOperationsUi.getState().filter
   if (!inPeriod(record.date, f.period)) showFilter({ period: { kind: 'month', month: record.date.slice(0, 7) } })
-  if (narrows(f)) showFilter(noNarrowing())
+  if (narrows(f)) showFilter({ ...noNarrowing(), query: f.query })
+  useOperationsUi.setState({ keptId: record.id })
   selectOperation(record.id)
   return record.id
 }
@@ -426,9 +455,12 @@ export function showBrand(t: Transaction, aliases?: BrandAliases): void {
   showFilter({ period: { kind: 'all' }, ...noNarrowing(), brands: [brandKeyOf(t, aliases)] })
 }
 
-/** Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80). */
-export function openRefundables(): void {
-  showFilter({ period: { kind: 'all' }, ...noNarrowing(), marks: ['refundable'] })
+/**
+ * Operacje with the purchases household members finance, of the whole history (the bridge, the radar – D80); one
+ * member's – their purchases still to be paid back (AP-19, AF-58).
+ */
+export function openRefundables(memberId?: string | null): void {
+  showFilter({ period: { kind: 'all' }, ...noNarrowing(), ...refundablesFilter(memberId) })
   navigate({ page: 'operations' })
 }
 
@@ -542,11 +574,21 @@ export function bulkPlan(visibleIds: readonly string[], change: BulkChange): Bul
   return plan
 }
 
+/** The preview's effect (F11, AP-38): the engine's now against with the change, the months gone by it moves, the pairs lost. */
+export interface BulkEffect extends Effect {
+  months: MonthEffect[]
+  pairs: LostPair[]
+}
+
+/** Does the preview have nothing to show? */
+export const noBulkEffect = (e: BulkEffect): boolean => noEffect(e) && !e.months.length && !e.pairs.length
+
 /**
- * What the change does to today's energy, the envelopes, the balances and the shields: the state the screens show (the
- * engine's, computed once) against the engine run with the change.
+ * What the change does to today's energy, the envelopes, the balances, the shields and the goals; the loot and the
+ * envelopes of the months it leaves (AP-38); the ICTTJ payouts losing their pair: the state the screens show (the
+ * engine's, computed once) against the engine run with the change – its pairs not docked yet as the change leaves them.
  */
-export function bulkEffect(plan: BulkPlan): Effect | null {
+export function bulkEffect(plan: BulkPlan): BulkEffect | null {
   const input = fleetInputNow()
   const now = fleetNow()
   if (!input || !now || !plan.before.length) return null
@@ -555,7 +597,26 @@ export function bulkEffect(plan: BulkPlan): Effect | null {
   const changed = new Map(plan.after.map((t) => [t.id, t]))
   const transactions = input.transactions.flatMap((t) => (gone.has(t.id) ? [] : [changed.get(t.id) ?? stripped?.get(t.id) ?? t]))
   const dockings = (input.dockings ?? []).filter((d) => !gone.has(d.transactionId))
-  return effectOf(now, computeFleet({ ...input, transactions, dockings }))
+  // The ICTTJ payouts and their pairs (T341): as now and as the change leaves them – the same list the panel Dokowanie reads.
+  const { fi, records } = useData.getState()
+  const snap = useIctj.getState().snap
+  const start = fi ? budgetStartOf(fi.settings, listOf(records.balances), now.today) : null
+  const ictj = fi && snap.status === 'ok' && snap.entries.length && start && start <= now.today
+  const deliveriesBefore = ictj ? deliveriesFor(records, fi.settings.ictj.skipped, snap, start, now.today, fi.settings.import.coveredTo) : []
+  const deliveriesAfter = ictj ? deliveriesOfLists(transactions, dockings, fi.settings.ictj.skipped, snap, start, now.today, fi.settings.import.coveredTo) : []
+  const after = computeFleet({ ...input, transactions, dockings, ...(ictj ? { pendingPairs: pendingPairsOf(deliveriesAfter) } : {}) })
+  return {
+    ...effectOf(now, after),
+    months: monthsEffectOf(now, after, {
+      categories: input.settings.categories,
+      plans: input.months ?? [],
+      containers: input.containers,
+      transactionsBefore: input.transactions,
+      transactionsAfter: transactions,
+      changed: [...plan.before, ...plan.after]
+    }),
+    pairs: pairsLost(deliveriesBefore, deliveriesAfter)
+  }
 }
 
 /** The fields a change set (F11): „Cofnij” takes back these, while they are still the ones set (B66). */

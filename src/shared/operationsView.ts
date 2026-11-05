@@ -4,13 +4,13 @@
  */
 import type { Account, OperationView, Orders } from './schema/budget'
 import { TX_KINDS, type Transaction, type TxKind } from './schema/records'
-import { asksImpulse, costOf, financedOf, isNight, isTwoSided, notesOf, partsOf, touchesAccount, type CategoryIndex, type Part } from './calc/operations'
+import { amountOn, asksImpulse, costOf, financedOf, isNight, isTwoSided, notesOf, partsOf, touchesAccount, type CategoryIndex, type Part } from './calc/operations'
 import { incomeShares } from './calc/household'
 import { loanIdsOf } from './calc/loans'
 import type { BrandAliases } from './import/aliases'
 import { ruleTargetOf } from './import/classify'
 import { fold } from './fold'
-import { hasTag, tagsOf } from './calc/tags'
+import { hasTag, tagKey, tagsOf } from './calc/tags'
 
 /** Marks of an operation (spec, „Ekrany”: finansuje domownik – D80, plan lub impuls, noc) and of its origin. */
 export const OPERATION_MARKS = ['refundable', 'owed', 'partlyRepaid', 'repaid', 'impulse', 'plan', 'night', 'split', 'uncategorized', 'bank', 'pending', 'manual', 'anomaly', 'awaiting'] as const
@@ -157,6 +157,13 @@ export const LIST_KEYS = ['accounts', 'kinds', 'categories', 'marks', 'members',
 type Narrowing = Pick<OperationsFilter, (typeof LIST_KEYS)[number] | 'query' | 'amountMin' | 'amountMax'>
 
 /**
+ * The household members' purchases to look at (D80): all of them, of the whole history – or one member's still to be
+ * paid back (AP-19, AF-58: „Pokaż zakupy” at „X: do oddania”, the bridge's line of them – never everybody's, the paid too).
+ */
+export const refundablesFilter = (memberId?: string | null): Pick<OperationsFilter, 'members' | 'marks'> =>
+  memberId ? { members: [memberId], marks: ['refundable', 'owed', 'partlyRepaid'] } : { members: [], marks: ['refundable'] }
+
+/**
  * Every part of the filter that can hide an operation – F18's too (the amounts, the brands, the members…): a view that
  * must show one (a jump to an operation, a new entry, the inbox – B77, B88) clears them; the period and the order are
  * the caller's.
@@ -220,7 +227,8 @@ export function filterOf(raw: unknown, month: string): OperationsFilter {
     goals: strings(f.goals),
     loans: strings(f.loans),
     transferAccounts: strings(f.transferAccounts),
-    tags: strings(f.tags),
+    // By the key of now (AP-21): a view saved before 1.15.9 with „wakacje-chorwacja” finds „Wakacje Chorwacja”.
+    tags: [...new Set(strings(f.tags).map(tagKey).filter(Boolean))],
     sort: (OPERATION_SORTS as readonly unknown[]).includes(f.sort) ? (f.sort as OperationSort) : 'date'
   }
 }
@@ -418,6 +426,24 @@ export function sumOperations(rows: readonly Transaction[]): OperationsSums {
     costs += costOf(t)
   }
   return { count: rows.length, inflow, outflow, costs }
+}
+
+/**
+ * What the bar's „Wpływy” and „Wydatki” leave out (AP-29, AF-57): own transfers and corrections – how many and their sum as
+ * the export writes them (`view` – the list of one account: a transfer's money on it), so the file's sum = Wpływy −
+ * Wydatki + this.
+ */
+export function asideOfOperations(rows: readonly Transaction[], view: string | null = null): { count: number; amount: number; corrections: boolean } {
+  let count = 0
+  let amount = 0
+  let corrections = false
+  for (const t of rows) {
+    if (t.kind !== 'transfer' && t.kind !== 'correction') continue
+    count++
+    amount += view && touchesAccount(t, view) ? amountOn(t, view) : t.amount
+    if (t.kind === 'correction') corrections = true
+  }
+  return { count, amount, corrections }
 }
 
 /**

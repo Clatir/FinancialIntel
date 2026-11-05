@@ -2,7 +2,7 @@
  * Operations as the budget sees them: the lines of a (split) receipt, categories and their envelopes, what counts as a
  * net cost and as income, the captain's log marks. Pure; used by the layers' engine (fleet.ts) and the screens.
  */
-import { envelopeKind, HOUSE_MEMBER_ID, type Category, type EnvelopeKind, type Orders } from '../schema/budget'
+import { CASH_CATEGORY_ID, envelopeKind, HOUSE_MEMBER_ID, type Category, type EnvelopeKind, type Orders } from '../schema/budget'
 import type { Transaction } from '../schema/records'
 import { inClockWindow } from './dates'
 
@@ -172,6 +172,20 @@ export function categoryIndex(categories: readonly Category[]): CategoryIndex {
 
 // ------------------------------------------------------------------ costs and income
 
+const upToMemo = new WeakMap<readonly Transaction[], { day: string; list: readonly Transaction[] }>()
+
+/**
+ * The operations dated up to `day` (AP-36, T421: the month in progress counted up to today – an operation dated later is
+ * planned, as the balances and the engine see it): the same list when none is later; once per list and day.
+ */
+export function upToDay(transactions: readonly Transaction[], day: string): readonly Transaction[] {
+  const m = upToMemo.get(transactions)
+  if (m && m.day === day) return m.list
+  const list = transactions.some((t) => t.date > day) ? transactions.filter((t) => t.date <= day) : transactions
+  upToMemo.set(transactions, { day, list })
+  return list
+}
+
 /**
  * Net cost of an operation (grosze, > 0 = a cost, < 0 = a product return): expenses minus product returns, without
  * own transfers, XTB top-ups, purchases a household member finances (D80) and PIT-38 (spec). An expense paid from a
@@ -231,7 +245,32 @@ export function isConfirmedNight(
   return true
 }
 
-/** From the threshold the captain's log asks „plan czy impuls?” (D41); 0 = the log never asks (N32 – everywhere alike). */
-export function asksImpulse(t: Pick<Transaction, 'kind' | 'amount'>, orders: Pick<Orders, 'impulseThreshold'>): boolean {
-  return orders.impulseThreshold > 0 && t.kind === 'expense' && t.amount < 0 && -t.amount >= orders.impulseThreshold
+/**
+ * What a confirmed purchase in the quiet hours is for the game (AF-23, T439 – as `isConfirmedNight` with `ownSpent` in
+ * `game.ts`): justified (a plan, explained, a cargo payment – N-PC-19), not mine (a household member's purchase, D80 –
+ * no violation) or the serious violation.
+ */
+export function nightVerdict(t: Transaction): 'justified' | 'member' | 'violation' {
+  if (t.impulse === 'plan' || t.explained || t.containerId != null) return 'justified'
+  return ownSpent(t) > 0 ? 'violation' : 'member'
+}
+
+/**
+ * What of a purchase the captain's log asks about (AP-19, T439; grosze ≥ 0): my own lines only – not a household member's,
+ * financed or given (D80, D83 – AF-22) – and not what is planned by definition: a cargo payment (rent, an instalment, any
+ * container – OP sp. 1) and an ATM withdrawal (the system category „Gotówka”). Lines as `partsOf` makes them (amounts
+ * with the operation's sign – money out < 0).
+ */
+export function impulseAmount(parts: readonly Pick<Part, 'amount' | 'refundable' | 'categoryId' | 'containerId'>[]): number {
+  let out = 0
+  for (const p of parts) if (!p.refundable && !p.containerId && p.categoryId !== CASH_CATEGORY_ID) out -= p.amount
+  return Math.max(0, out)
+}
+
+/**
+ * From the threshold the captain's log asks „plan czy impuls?” (D41) – of my own unplanned part of a purchase
+ * (`impulseAmount`, AP-19); 0 = the log never asks (N32 – everywhere alike).
+ */
+export function asksImpulse(t: PartsSource & Pick<Transaction, 'kind'>, orders: Pick<Orders, 'impulseThreshold'>): boolean {
+  return orders.impulseThreshold > 0 && t.kind === 'expense' && t.amount < 0 && impulseAmount(partsOf(t)) >= orders.impulseThreshold
 }

@@ -6,6 +6,7 @@
 import type { BrandAliases } from '../import/aliases'
 import type { Category } from '../schema/budget'
 import type { Transaction } from '../schema/records'
+import { operationName, readableName } from '../import/names'
 import { brandKeyOf } from '../operationsView'
 import { addDays, addMonths, daysBetween } from './dates'
 import { spendingByMonth } from './intel'
@@ -38,7 +39,7 @@ export function brandStats(transactions: readonly Transaction[], categories: rea
   const cats = categoryIndex(categories)
   const days = daysBetween(from, to) + 1
   const prevFrom = addDays(from, -days)
-  const stats = new Map<string, { name: string; nameDate: string; total: number; count: number; last: string; byCat: Map<string, number>; before: number }>()
+  const stats = new Map<string, { name: string; nameDate: string; typed: boolean; total: number; count: number; last: string; byCat: Map<string, number>; before: number }>()
   const catTotals = new Map<string, number>()
   for (const t of transactions) {
     if (t.date < prevFrom || t.date > to) continue
@@ -50,16 +51,20 @@ export function brandStats(transactions: readonly Transaction[], categories: rea
     const key = brandKeyOf(t, aliases)
     if (!key) continue
     let s = stats.get(key)
-    if (!s) stats.set(key, (s = { name: '', nameDate: '', total: 0, count: 0, last: '', byCat: new Map(), before: 0 }))
+    if (!s) stats.set(key, (s = { name: '', nameDate: '', typed: false, total: 0, count: 0, last: '', byCat: new Map(), before: 0 }))
     if (t.date < from) {
       s.before += cost
       continue
     }
     s.total += cost
     if (cost > 0) s.count++
-    if (t.date >= s.nameDate) {
-      s.name = t.counterparty || t.title || key
+    // Its name (AP-20, WY.13): the latest typed by hand („Mokka”), else the bank's latest as a person writes it –
+    // without the bank's additions („DATA TRANSAKCJI: …”) and not in capitals only.
+    const typed = !t.bank && !!t.counterparty.trim()
+    if ((typed && (!s.typed || t.date >= s.nameDate)) || (!typed && !s.typed && t.date >= s.nameDate)) {
+      s.name = typed ? t.counterparty.trim() : readableName(operationName(t)) || key
       s.nameDate = t.date
+      s.typed = typed
     }
     if (t.date > s.last) s.last = t.date
     s.byCat.set(main, (s.byCat.get(main) ?? 0) + cost)

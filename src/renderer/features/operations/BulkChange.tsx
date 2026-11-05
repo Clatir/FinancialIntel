@@ -1,19 +1,19 @@
 /**
  * Operacje: a change of the ticked operations at once (F11) – delete them, move them onto another account, another
- * kind, a shifted date –, the effect on today's energy, the envelopes, the balances and the shields shown before it is
- * applied; one „Cofnij”.
+ * kind, a shifted date –, the effect on today's energy, the envelopes, the balances, the shields and the goals, the loot
+ * and the envelopes of the months it leaves, the ICTTJ payouts losing their pair (AP-38) shown before it is applied; one
+ * „Cofnij”.
  */
 import { useMemo, useState } from 'react'
 import { confirmedChanges } from '@shared/calc/balances'
-import type { Effect } from '@shared/calc/effect'
-import { noEffect } from '@shared/calc/effect'
+import { lostPairText } from '@shared/calc/effect'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { plnText, signedPln } from '../../components/fields'
 import { Modal } from '../../components/Modal'
-import { plDate, plural } from '../../lib/format'
+import { monthLabel, plDate, plural } from '../../lib/format'
 import { useRecordList } from '../../store/records'
 import { AccountSelect, useAccounts, useCategories } from './pickers'
-import { applyBulk, bulkEffect, bulkPlan, type BulkChange, type BulkPlan } from './state'
+import { applyBulk, bulkEffect, bulkPlan, noBulkEffect, type BulkChange, type BulkEffect, type BulkPlan } from './state'
 
 type Action = '' | BulkChange['kind']
 
@@ -27,7 +27,7 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
   const [kind, setKind] = useState<TxKind>('transfer')
   const [counter, setCounter] = useState<string | null>(null)
   const [days, setDays] = useState(1)
-  const [preview, setPreview] = useState<{ plan: BulkPlan; effect: Effect | null; what: string } | null>(null)
+  const [preview, setPreview] = useState<{ plan: BulkPlan; effect: BulkEffect | null; what: string } | null>(null)
   const change = (): BulkChange | null => {
     if (action === 'delete') return { kind: 'delete' }
     if (action === 'account') return accountId ? { kind: 'account', accountId } : null
@@ -94,7 +94,7 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
   )
 }
 
-function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: Effect | null; what: string }; onClose: () => void }) {
+function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: BulkEffect | null; what: string }; onClose: () => void }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const balances = useRecordList('balances')
@@ -144,15 +144,28 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
           {plan.skipped ? ` · pominięte ${plan.skipped} (zmiana do nich nie pasuje: zadokowane, przelew na własne konto)` : ''}
           {plan.newer ? ` · zapisane przez nowszą wersję aplikacji: ${plan.newer} (bez zmian)` : ''}.
         </p>
-        {effect && !noEffect(effect) ? (
+        {effect && !noBulkEffect(effect) ? (
           <div className="flex flex-col gap-1 border-t border-line pt-2">
             {effect.energy && line('Energia dziś', effect.energy, 'operations-bulk-energy')}
             {effect.shields && line('Osłony', effect.shields, 'operations-bulk-shields')}
             {effect.envelopes.map((e) => line(`Koperta: ${cats.label(e.categoryId) || 'codzienne'}`, e, 'operations-bulk-envelope', e.categoryId))}
             {effect.accounts.map((a) => line(`Saldo: ${a.name}`, a, 'operations-bulk-balance', a.id))}
+            {effect.goals.map((g) => line(`Cel: ${g.name}`, g, 'operations-bulk-goal', g.id))}
+            {/* The months the operations leave or come to (AP-38): their loot and what their envelopes have left. */}
+            {effect.months.map((m) => (
+              <div key={m.month} className="contents">
+                {m.loot && line(`Łupy – ${monthLabel(m.month)}`, m.loot, 'operations-bulk-loot', `loot-${m.month}`)}
+                {m.envelopes.map((e) => line(`Koperta: ${cats.label(e.categoryId) || 'codzienne'} – ${monthLabel(m.month)}, zostało`, e, 'operations-bulk-month-envelope', `${m.month}-${e.categoryId}`))}
+              </div>
+            ))}
+            {effect.pairs.map((p, i) => (
+              <p key={i} className="text-accent" data-testid="operations-bulk-pair">
+                {lostPairText(p, zl)}
+              </p>
+            ))}
           </div>
         ) : (
-          n > 0 && <p className="text-muted">Energia, koperty, osłony i salda kont bez zmian.</p>
+          n > 0 && <p className="text-muted">Energia, koperty, łupy, cele, osłony i salda kont bez zmian.</p>
         )}
         {confirmed.length > 0 && (
           <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="operations-bulk-confirmed">

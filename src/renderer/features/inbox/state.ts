@@ -6,7 +6,8 @@ import { useMemo } from 'react'
 import { doubleCorrections, openingOf } from '@shared/calc/balances'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { memberName, skippedDebtsOf } from '@shared/calc/household'
-import { inboxItems, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
+import { inboxItems, inboxStarted, topUpsToConfirm, uncategorizedOf, type InboxItem } from '@shared/calc/inbox'
+import { dockingsByTx } from '@shared/calc/fleet'
 import { noNarrowing } from '@shared/operationsView'
 import { listOf, updateSettings, useData } from '../../store/data'
 import { useGhosts } from '../../store/ghosts'
@@ -17,6 +18,7 @@ import { useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
 import { openDocking, useDeliveries } from '../dock/state'
+import { confirmTopUp } from '../dock/actions'
 import { useKnownDuplicateCount } from '../import/DuplicatesPanel'
 import { removeReturned, useReturned } from '../import/returned'
 import { openOperation, openRefundables, showFilter } from '../operations/state'
@@ -43,7 +45,10 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const drafts = useData((s) => s.drafts)
   const accounts = useData((s) => s.fi?.settings.accounts)
   const members = useData((s) => s.fi?.settings.household.members)
-  const from = fleet?.started ? fleet.start : null
+  // The budget's reports from the wizard's start on (AP-25, ME sp. 3) – not from an opening balance alone.
+  const budgetStart = useData((s) => s.fi?.settings.budget.start ?? null)
+  const started = inboxStarted(!!fleet?.started, budgetStart)
+  const from = started ? fleet!.start : null
   const uncategorized = useMemo(() => uncategorizedOf(listOf(transactions), from, drafts), [transactions, from, drafts])
   // A balance confirmed twice on two computers before the sync (B129) – not the pairs said to be two corrections.
   const dismissed = useData((s) => s.fi?.settings.import.notDuplicates)
@@ -76,13 +81,22 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const cargo = useMemo(() => ({ prices: watch.prices, dead: watch.dead, containers: listOf(containers) }), [watch, containers])
   // A „folder-widmo” of an older version (AP-1).
   const ghosts = useGhosts((g) => g.list)
+  // The top-ups of XTB against the firewall found only in the bank, to confirm (DO sp. 12): not the ones with a docking.
+  const dockings = useData((s) => s.records.dockings)
+  const topUps = useMemo(() => {
+    if (!fleet) return []
+    const docked = dockingsByTx(listOf(dockings))
+    return topUpsToConfirm(fleet.alarms, deliveries, (id) => docked.has(id), fleet.today)
+  }, [fleet, deliveries, dockings])
   // A member's advances for the future that left their debt unpaid (AP-4) – not those said „zostaw”.
   const advances = useMemo(() => (fleet ? skippedDebtsOf(fleet.household, fleet.receivables.members, dismissed ?? NO_KEPT) : []), [fleet, dismissed])
   if (!fleet) return []
   return inboxItems({
     today: fleet.today,
-    started: fleet.started,
+    started,
     deliveries,
+    alarms: fleet.alarms,
+    topUps,
     conflicts,
     problems,
     uncategorized,
@@ -139,6 +153,8 @@ export const opensPairs = (item: InboxItem): boolean => item.kind === 'transfers
 /** A report's button: the docking window, Operacje with the filter set, or the screen deciding it. */
 export function openInboxItem(item: InboxItem, from: string | null): void {
   if (item.kind === 'dock' && item.ref) openDocking(item.ref)
+  // A top-up of XTB against the firewall (DO sp. 12): confirmed – „Cofnij” in the toast.
+  else if (item.kind === 'firewall' && item.ref) confirmTopUp(item.ref)
   else if (item.kind === 'loot') navigate({ page: 'month' })
   else if (item.kind === 'folder' && item.ref) void api.showGhostFolder(item.ref).catch((e: unknown) => toast(errorMessage(e), 'error', 6000))
   else if (item.kind === 'folder') navigate({ page: 'sync' })
@@ -146,7 +162,8 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
     showFilter({ period: from ? { kind: 'range', from, to: null } : { kind: 'all' }, ...noNarrowing(), marks: ['uncategorized'] })
     navigate({ page: 'operations' })
   } else if (item.kind === 'duplicates') navigate({ page: 'import' })
-  else if (item.kind === 'refunds') openRefundables()
+  // One member's purchases still to be paid back (AP-19, AF-58) – never everybody's of the whole history.
+  else if (item.kind === 'refunds') openRefundables(item.ref)
   // A member's advances for the future that left the debt unpaid (AP-4): they repay it now – with „Cofnij”.
   else if (item.kind === 'advances' && item.ref) repayAdvances(item.ref)
   else if (item.kind === 'balances') navigate({ page: 'settings', tab: 'accounts' })

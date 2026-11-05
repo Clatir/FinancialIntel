@@ -58,10 +58,17 @@ function runningMonth(): string | null {
  */
 const fromNow = <T extends Pick<Container, 'cycleMonths' | 'from'>>(c: T): T => (c.cycleMonths > 1 && c.from == null ? { ...c, from: runningMonth() } : c)
 
+/**
+ * A new container's record from its draft, checked by the schema – throws on a draft that is no container (the start wizard
+ * builds its containers so before fi.json is written, their ids known – T446).
+ */
+export function containerRecord(draft: ContainerDraft, id = newId(), now = new Date().toISOString()): Container {
+  return containerSchema.parse({ ...fromNow(draft), schemaVersion: SCHEMA_VERSION, id, createdAt: now, updatedAt: now })
+}
+
 export function addContainer(draft: ContainerDraft): string | null {
   if (!canWrite()) return null
-  const now = new Date().toISOString()
-  const record = containerSchema.parse({ ...fromNow(draft), schemaVersion: SCHEMA_VERSION, id: newId(), createdAt: now, updatedAt: now })
+  const record = containerRecord(draft)
   addRecord('containers', record)
   linkPayments(record.id, record.counterparty, true)
   return record.id

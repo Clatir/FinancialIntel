@@ -11,9 +11,10 @@ import { addDays, addMonths, isoWeekOf, monthOf, monthRange } from '@shared/calc
 import { killzoneNote } from '@shared/calc/game'
 import { glossaryOf } from '@shared/glossary'
 import { openDays, scheduledDays } from '@shared/calc/scheduled'
-import { killzoneGrid, logAccuracy, rangeForecast, spendingByMonth } from '@shared/calc/intel'
+import { killzoneGrid, logAccuracy, logEntries, rangeForecast, spendingByMonth } from '@shared/calc/intel'
+import { dm } from '@shared/calc/briefing'
 import { debriefing } from '@shared/calc/plan'
-import { sum } from '@shared/calc/operations'
+import { sum, upToDay } from '@shared/calc/operations'
 import { rangeText } from '@shared/format'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -25,6 +26,7 @@ import { Columns } from '../../components/layout'
 import { Empty, Panel, Segmented, cx } from '../../components/ui'
 import { monthGenLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
+import { openOperation } from '../operations/state'
 import { KillzoneMap, WealthChart } from './charts'
 import { CoursePanel, ManeuverPanel, useCourseInput } from './Course'
 import { CushionPanel } from './Cushion'
@@ -35,6 +37,8 @@ import { FuelPanel } from './Fuel'
 import { InflationPanel } from './Inflation'
 
 const zl = (g: number) => `${plnText(g)} zł`
+/** The log's entries shown in Wywiad (AP-20): the newest of the period. */
+const LOG_SHOWN = 12
 type Period = '3' | '6' | '12'
 const PERIODS: Array<{ value: Period; label: string }> = [
   { value: '3', label: '3 mies.' },
@@ -84,8 +88,10 @@ export function IntelPage() {
   // The week's mission (AP-30): a killzone mission's hour said beside the period's – one „Twoja killzone”.
   const game = useGameRecords()
   const weekMission = useMemo(() => (today ? (game.flatMap((g) => g.missions).find((m) => m.week === isoWeekOf(today)) ?? null) : null), [game, today])
-  const spending = useMemo(() => spendingByMonth(transactions, settings?.categories ?? [], months), [transactions, settings, months])
+  // The month in progress up to today (AP-36), as the debriefing and the fuel balance beside it.
+  const spending = useMemo(() => spendingByMonth(today ? upToDay(transactions, today) : transactions, settings?.categories ?? [], months), [transactions, settings, months, today])
   const log = useMemo(() => (settings ? logAccuracy(transactions, settings.orders, months) : []), [transactions, settings, months])
+  const logWritten = useMemo(() => (today && months.length ? logEntries(transactions, `${months[0]}-01`, today, LOG_SHOWN) : { entries: [], total: 0 }), [transactions, months, today])
   const [fvgMonth, setFvgMonth] = useState<string | null>(null)
   // The buoys' money by month for the range's variant (F16): their open days of two years, a late one this month.
   const scheduled = useRecordList('scheduled')
@@ -284,6 +290,38 @@ export function IntelPage() {
               <span className="text-[11px] text-dim">
                 Trafność = zakupy zaplanowane wśród oznaczonych. Impulsy łącznie: {sum(log.map((l) => l.impulse.count))} na {zl(sum(log.map((l) => l.impulse.amount)))}.
               </span>
+              {/* What was written in the log (AP-20, SW sp. 11), the newest first – a click opens the operation. */}
+              {logWritten.total > 0 && (
+                <div className="mt-1.5 flex flex-col border-t border-line pt-1 text-[11.5px]" data-testid="intel-log-entries">
+                  <span className="label pb-0.5">Wpisy dziennika</span>
+                  {logWritten.entries.map((e) => (
+                    <button
+                      key={e.id}
+                      type="button"
+                      className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-baseline gap-x-2 py-[2px] text-left hover:bg-hover"
+                      onClick={() => openOperation({ id: e.id, date: e.date })}
+                      title="Pokaż operację"
+                      data-testid="intel-log-entry"
+                    >
+                      <span className="num text-muted">{dm(e.date)}</span>
+                      <span className="min-w-0 truncate">
+                        <span className="text-fg-strong">„{e.note}”</span>
+                        <span className="text-dim">
+                          {' '}
+                          · {e.name || 'wydatek'}
+                          {e.impulse ? ` · ${e.impulse === 'plan' ? 'plan' : 'impuls'}` : ''}
+                        </span>
+                      </span>
+                      <span className="num text-right">{plnText(e.amount)}</span>
+                    </button>
+                  ))}
+                  {logWritten.total > logWritten.entries.length && (
+                    <span className="pt-0.5 text-[11px] text-dim">
+                      {logWritten.entries.length} najnowszych z {logWritten.total} – reszta w Operacjach (filtr znaczników).
+                    </span>
+                  )}
+                </div>
+              )}
             </Panel>
           </div>
         </Columns>

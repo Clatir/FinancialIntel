@@ -14,6 +14,7 @@ import { AmountField, plnText, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
 import { cx, Field, NumberField, Panel, Toggle } from '../../components/ui'
 import { toast } from '../../store/ui'
+import { MachineOnly } from './MachineOnly'
 
 type LayersPatch = Partial<Pick<LayersSettings, 'shieldSalaries' | 'hullMonths' | 'assumedCosts'>>
 
@@ -303,7 +304,7 @@ export function ViewTab() {
   const prefs = useMachine((s) => s.prefs)
   return (
     <>
-      <Panel title="Rozmiar i kontrast">
+      <Panel title="Rozmiar i kontrast" actions={<MachineOnly />}>
         <div className="flex flex-col gap-2 text-[12px]">
           <Field label="Rozmiar interfejsu" labelWidth={160} hint="Wszystkie okna aplikacji na tym komputerze – także szybki wpis i panele odłączone. Ctrl+Plus / Ctrl+Minus zmienia rozmiar, Ctrl+Shift+0 wraca do 100 %.">
             <ZoomSlider />
@@ -316,7 +317,7 @@ export function ViewTab() {
           />
         </div>
       </Panel>
-      <Panel title="Prywatność kwot">
+      <Panel title="Prywatność kwot" actions={<MachineOnly />}>
         <div className="flex flex-col gap-2 text-[12px]">
           <Toggle checked={prefs.hideAmounts} onChange={(hideAmounts) => void setMachinePrefs({ hideAmounts })} label="Ukryj kwoty w oknach i w dymku zasobnika (Ctrl+$)" data-testid="settings-hide-amounts" />
           <Field label="Ukryj po bezczynności" labelWidth={160} hint="Bez ruchu myszy i klawiatury w systemie przez tyle minut albo po zablokowaniu ekranu kwoty chowają się same.">
@@ -417,6 +418,7 @@ const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
   ['importOverdue', 'Zaległy import z mBanku – po 3 dniach'],
   ['balances', 'Potwierdzenie sald – w niedzielę'],
   ['debriefing', 'Debriefing – 1. dnia miesiąca'],
+  ['yearReview', 'Przegląd roczny – w styczniu, za rok zamknięty'],
   ['ictj', 'Nowa wypłata w ICTTJ do zadokowania'],
   ['loans', 'Rata pożyczki 3 dni po terminie (własna albo spłata od dłużnika)'],
   ['pit38', 'PIT-38 – 14 i 3 dni przed 30 kwietnia'],
@@ -449,7 +451,7 @@ export function NotifyTab() {
   const briefingShift = quiet && n.briefingTime && briefingAt(n.briefingTime, quiet) !== n.briefingTime ? briefingAt(n.briefingTime, quiet) : null
   return (
     <>
-      <Panel title="Szybki wpis">
+      <Panel title="Szybki wpis" actions={<MachineOnly />}>
         <div className="flex flex-col gap-2 text-[12px]">
           <Field label="Skrót globalny" labelWidth={200} hint="Działa w całym systemie. Zmień, jeśli koliduje z platformą tradingową (kliknij i naciśnij nowy skrót; Backspace – bez skrótu).">
             <div className="flex items-center gap-2">
@@ -470,7 +472,7 @@ export function NotifyTab() {
           </Field>
         </div>
       </Panel>
-      <Panel title="Powiadomienia">
+      <Panel title="Powiadomienia" actions={<MachineOnly />}>
         <div className="flex flex-col gap-1.5 text-[12px]">
           <p className="text-[11.5px] text-muted">Tylko na tym komputerze; działają w tle, gdy aplikacja jest w zasobniku. Nic w ciszy nocnej.</p>
           {NOTIFY_ROWS.map(([key, label]) => (
@@ -509,7 +511,7 @@ export function NotifyTab() {
           ))}
         </div>
       </Panel>
-      <Panel title="Dźwięki">
+      <Panel title="Dźwięki" actions={<MachineOnly />}>
         <div className="flex flex-col gap-1.5 text-[12px]">
           <Toggle checked={s.enabled} onChange={(enabled) => void setMachinePrefs({ sounds: { ...s, enabled } })} label="Dźwięki zdarzeń (syntezowane w aplikacji)" data-testid="sounds-enabled" />
           <Field label="Głośność" labelWidth={120}>

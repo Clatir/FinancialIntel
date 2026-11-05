@@ -5,6 +5,7 @@ import { toast } from '../../store/ui'
 import { openResult, useData } from '../../store/data'
 import { IconFolder, IconPlus } from '../../components/icons'
 import { OpenProgressPanel, openLogs, useOpenProgress } from './OpenProgress'
+import { markNewComputer } from '../settings/MachineSetup'
 import { retriesBySelf } from './retry'
 
 /** A folder that is not ready yet is tried again this often (B109). */
@@ -29,15 +30,19 @@ export function FolderSetup() {
   const [confirmNew, setConfirmNew] = useState(false)
   const [proposal, setProposal] = useState<{ dir: string; oneDrive: boolean } | null>(null)
   const [progress, resetProgress] = useOpenProgress()
+  // A computer that never had a folder (AP-28): an existing budget opened here is new to it – its own settings are to set.
+  const [firstRun, setFirstRun] = useState(false)
   useEffect(() => {
     void api.defaultDataDir().then(setProposal, () => undefined)
+    void api.getConfig().then((c) => setFirstRun(!c.dataDir && c.recentDirs.length === 0), () => undefined)
   }, [])
   const run = async (fn: () => ReturnType<typeof api.pickDataDir>) => {
     resetProgress()
     setConfirmNew(false)
     setBusy(true)
     try {
-      await openResult(await fn())
+      const res = await fn()
+      if ((await openResult(res)) && firstRun && res.ok && res.snapshot.fi.settings.budget.start) markNewComputer()
     } catch (e) {
       toast(errorMessage(e), 'error', 7000)
     } finally {

@@ -32,6 +32,11 @@ paths:
   `household.assignFrom` – brak = zachowanie sprzed wersji albo jednorazowe uzupełnienie (`useHouseholdSinceSeed`),
   null = od startu budżetu / zawsze; `openingIds` – brak = wszystkie operacje. Schemat: `nullable().optional()` – nie
   zamieniaj jednego na drugie.
+- Start budżetu (T446): najpierw `fi.json` z `budget.start`, salda otwarcia, plan i kontenery startu dopiero po nim (okno
+  dostaje start razem z nimi – `writeStart`); na dysku `budget.start` bez sald to stan przejściowy (saldo, którego zapis
+  padł; okno zamknięte przed nim – baner „Dokończ”): zapisy w tle czekają, aż rekordy startu są w folderze
+  (`writesInBackground`). **Pułapka:** nowy zapis w tle z wyniku silnika – tylko za `writesInBackground`, inaczej zapisze
+  budżet liczony bez sald startu.
 - Przelew dwustronny (1.7.0): każda strona liczy się na swoim koncie i w swoim dniu – salda i obliczenia kont przez
   `amountOn`, `dateOn`, `touchesAccount` (`calc/operations.ts`), nigdy przez `t.amount` / `t.accountId` wprost.
 - Wspólny zakup (1.5.0): `share` to tylko opis, prawdą są linie `splits` (jedna na osobę; starsza wersja czyta je jak
@@ -67,8 +72,9 @@ paths:
   Dokowanie – jedna pamięć `store/deliveries.ts`, gra przez `gameInputOf`) i liczy je jak dokowanie z pulą wpisu
   (`dockByPool`, tylko rodzaje `countsByPool`); rekord dokowania decyduje nad parą – dokowanie pary liczonej według puli
   liczy się od chwili jej operacji (`countedFrom` z `dockingOf` – ten sam `countsByPool`, T363), bez pola od swojego
-  utworzenia (T128). Nowe wejście silnika z ICTTJ dopisz do klucza (`keyOf`,
-  `useEngineParts`, `engineParts` w `game.ts`).
+  utworzenia (T128). **Pułapka:** rekord dokowania, który tylko potwierdza (dopłata z meldunku – `topUpConfirmation`,
+  T438), też z `countedFrom` = utworzenie operacji – inaczej przeniesienia dnia (T340) wchodzą przed operację. Nowe
+  wejście silnika z ICTTJ dopisz do klucza (`keyOf`, `useEngineParts`, `engineParts` w `game.ts`).
 - Rata zbiornika (T29) tylko przez `tankWant` – silnik, kreator (`startTanks`) i plan liczą jedną regułą; cykl zapłacony
   (także płatnością sprzed startu – `paidBeforeStart`, T345) nie ma rat, zbiornik zbiera na następny. Cykle zapłacone
   tylko z reguły Ładowni (`paidDuesOf`, T393 – na przełomie płatności sprzed niego), nigdy własną regułą; która płatność
@@ -109,6 +115,10 @@ paths:
   na dług (reszta – odsetki, przychód T70) – tylko `loanBacksOf` (silnik i statystyki, po kolei całej historii, także
   w saldzie otwarcia konta). **Pułapka:** linia ma `memberId: null` – kod, który bierze takie części za „mój przychód”
   (tagi), musi pominąć `loanId`.
+
+- Miesiąc w toku liczony do dziś (AP-36, T421): debriefing, przegląd roczny, bilans paliwa i „Wydatki w czasie” czytają
+  operacje do dnia budżetu (`upToDay`), późniejsze – osobno `planned` („Zaplanowane”); nowe zestawienie miesiąca w toku
+  tak samo – jak salda i silnik.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`, `pastStates`); wyniki

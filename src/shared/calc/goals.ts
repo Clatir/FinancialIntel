@@ -90,7 +90,10 @@ export function syncIctjGoals(forecast: IctjForecast | null, goals: readonly Goa
   const version = forecast?.updatedAt ?? ''
   const older = (g: Goal) => !!forecast && version < (g.ictj?.version ?? '')
   const wanted = new Set<string>()
-  for (const fg of forecast?.goals ?? []) {
+  // New goals take their places by their deadlines (AP-25, KR sp. 9): the nearest month first, without one last – the
+  // scenario's list order only between goals of the same month (a goal due in 16 months never waits for one due in 30).
+  const byDeadline = [...(forecast?.goals ?? [])].map((fg, i) => ({ fg, i })).sort((a, b) => (a.fg.month ?? '9999-99').localeCompare(b.fg.month ?? '9999-99') || a.i - b.i)
+  for (const { fg } of byDeadline) {
     if (!fg.enabled) continue
     wanted.add(fg.id)
     const target = forecast!.currency === 'PLN' && fg.amount != null ? fg.amount : 0

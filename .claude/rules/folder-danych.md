@@ -25,6 +25,13 @@ paths:
 - Zapis atomowy, historia `.history/`, konflikt chmury → kopia `-KOMPUTER.json` i scalanie trójstronne (`merge.ts`,
   `resolveConflict`, `mergeConflict`).
 - Wpis albo plik nowszej wersji → tylko do odczytu (`NewerFileError`, `SettingsFileError` 'too-new'); nigdy nie nadpisuj.
+- Start budżetu (T446): `writeStart` – rekordy startu zbudowane i sprawdzone schematem przed nim, `fi.json` z
+  `budget.start` pierwszy (następny zapis `fi.json`, po 15 s komunikat, czeka dalej; decyzja o `fi.json` czeka – odmowa),
+  do okna dopiero z odpowiedzią folderu i od razu z rekordami (`apply`, zwykły autozapis z ponowieniem); odmowa nie zmienia
+  niczego ani w folderze, ani w oknie. Zapisy w tle wstrzymane od kliknięcia; rekordy startu na tym komputerze
+  (`startLeft`, `fi.start.left:`) do zapisu każdego w folderze – czekają na nie zapisy w tle, po ponownym otwarciu baner
+  „Dokończ” (`finishStart`). **Pułapka:** `apply` robi tylko zmiany w pamięci – nigdy `flushSaves` / `saveFirst` /
+  `unsavedNote` (czekałby na siebie).
 - **Zapis nigdy nie zakłada folderu danych** (AP-1, T314): każdy zapis pod korzeniem idzie przez
   `writeFileAtomic(…, within)` / `writeZipFile(…, within)` / `mkdirWithin` (nowy zapis do folderu – też obecność, historia,
   ZIP w `backups/`); `within` obowiązkowy, `null` tylko poza folderem danych; zwykłe `fs.mkdir(…, { recursive: true })` pod
@@ -53,7 +60,10 @@ paths:
 - Zamykanie: `flushSaves` w rundach, zapisy w tle wstrzymane (`holding`); pytanie o niezapisane podaje przyczynę
   (`unsavedQuestion`), main loguje ją przed pytaniem.
 - Ustawienia komputera w `userData/config.json` (`config.ts`, nie w folderze danych); jedna droga zmian – `changePrefs`
-  w main, rozsyłana do wszystkich okien.
+  w main, rozsyłana do wszystkich okien. Zmiana działa przed zapisem (także wpis autostartu – `changeTray`), nieudany
+  zapis ponawia się sam, a okno pokazuje stan z pamięci main; pola ważne dopiero po zapisie (`ONLY_ONCE_SAVED` – folder
+  kopii, ICTTJ, token, aktualizacje) `update` cofa do stanu pliku z `ConfigNotSavedError` – handler stosuje zmianę dopiero
+  po udanym `await config.update` (przegląd N5, T433, T434).
 - Odświeżanie: `RefreshQueue` (jedno naraz, zaległe łączone), watcher + `pollMs`; nieczytelny plik → `readError` i
   ponowny odczyt.
 - OneDrive „tylko online”: `threadpool.ts` importowany pierwszy w `index.ts` (`UV_THREADPOOL_SIZE` 32),

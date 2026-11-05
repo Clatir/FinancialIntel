@@ -56,6 +56,8 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     const items = inboxItems(
       input({
         deliveries: [delivery('pending', zl(1200)), delivery('waiting', zl(300)), delivery('docked', zl(500)), delivery('pending', zl(80))],
+        // A top-up of XTB against the firewall found only in the bank (DO sp. 12, 1.15.9): to confirm.
+        topUps: [{ txId: 'F1', date: '2026-10-16', amount: zl(200) }],
         conflicts: 1,
         problems: 2,
         uncategorized: { count: 3, amount: zl(54.2), from: '2026-09-01' },
@@ -107,7 +109,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         }
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'firewall', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
@@ -119,7 +121,8 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(text('duplicates')).toEqual(['2 możliwe duplikaty – ta sama operacja dwa razy.'])
     expect(text('returned')).toEqual(['mBank: „ZABKA Z1234” z 25.09.2026, 31.95 zł – usunięta przez Ciebie 26.09.2026, wróciła z importem listy operacji i znowu liczy się w saldzie.'])
     // A member's money waiting to be assigned (D91): its operation's editor.
-    expect(items.filter((i) => i.kind === 'repayments').map((i) => [i.ref, i.text, i.action])).toEqual([['p', 'Babcia: zwrot 30.00 zł z 05.10 – wskaż, które zakupy spłaca (do oddania: 1 zakup).', 'Przypisz']])
+    expect(items.filter((i) => i.kind === 'repayments').map((i) => [i.ref, i.text, i.action])).toEqual([['p', 'Babcia: zwrot 30.00 zł z 05.10 – wskaż, co spłaca (do oddania: 1 zakup).', 'Przypisz']])
+    expect(items.filter((i) => i.kind === 'firewall').map((i) => [i.ref, i.text, i.action])).toEqual([['F1', 'Dopłata do XTB 200.00 zł z 16.10 wbrew rozkazowi firewall (osłony albo kadłub niepełne) – potwierdź, że to Twoja decyzja.', 'Potwierdź']])
     expect(text('transfers')).toEqual([
       '1 przelew między kontami zapisany jako dwie osobne operacje (sprzed 1.7.0) – połączenie w jedną operację nie zmienia żadnego salda.',
       'mBank → Portfel XTB 05.10, 500.00 zł: strona konta Portfel XTB zapisana też osobno (06.10) – liczy się dwa razy.',

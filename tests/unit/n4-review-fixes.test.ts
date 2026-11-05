@@ -114,7 +114,7 @@ describe('przegląd N4 1, 6: pierwszy dotyk po ciszy nocnej tylko po przerwie (T
 })
 
 describe('przegląd N4 1, 7: Excel (operacje + miesiące) bez operacji w okresie – z miesiącami', () => {
-  const month: MonthRow = { month: '2026-09', salary: 300000, costs: 0, income: 0, plus: null, inProgress: false, loot: null, balance: 0, rate: null }
+  const month: MonthRow = { month: '2026-09', salary: 300000, costs: 0, income: 0, plus: null, inProgress: false, loot: null, balance: 0, rate: null, energy: null, financed: 0, planned: 0, plannedIncome: 0 }
   it('okres bez operacji, z miesiącem: oba arkusze; bez niczego: null (komunikat, bez pliku)', () => {
     const sheets = budgetWorkbook([], [month])!
     expect(sheets.map((s) => [s.name, s.rows.length])).toEqual([

@@ -12,13 +12,13 @@ import { ShowMore } from '../../components/ui'
 import { plDate, plural } from '../../lib/format'
 import { listOf, useData, useFolderLocked } from '../../store/data'
 import { useAccounts } from '../operations/pickers'
-import { dismissTransfer, joinTransfers, transferIssuesOf, transferKey, type JoinIssue } from '../operations/transfers'
+import { dismissTransfer, joinTransfers, pairTickedFirst, transferIssuesOf, transferKey, type JoinIssue } from '../operations/transfers'
 
 type Pair = Extract<JoinIssue, { kind: 'pair' }>
 const PAGE = 100
 
 /** Neither side names the other account: a pair by the amount and the days only. */
-const unnamed = (p: Pair): boolean => !p.keep.counterAccountId && !p.drop.counterAccountId
+const unnamed = (p: Pair): boolean => !pairTickedFirst(p)
 
 export function TransferPairs({ onClose }: { onClose: () => void }) {
   const transactions = useData((s) => s.records.transactions)
@@ -28,18 +28,15 @@ export function TransferPairs({ onClose }: { onClose: () => void }) {
   const accounts = useAccounts()
   // The pairs as they are now: a pair said „zostaw tak” goes from the list.
   const pairs = useMemo(() => (fi ? transferIssuesOf(listOf(transactions), useData.getState()).filter((i): i is Pair => i.kind === 'pair') : []), [transactions, balances, fi])
-  const [off, setOff] = useState<ReadonlySet<string>>(new Set())
+  // The user's ticks by pair; a pair not ticked by hand is as `pairTickedFirst` says (AP-34).
+  const [ticks, setTicks] = useState<Readonly<Record<string, boolean>>>({})
   const [limit, setLimit] = useState(PAGE)
-  const chosen = pairs.filter((p) => !off.has(transferKey(p)))
+  const ticked = (p: Pair) => ticks[transferKey(p)] ?? pairTickedFirst(p)
+  const chosen = pairs.filter(ticked)
   const name = (id: string) => accounts.find((a) => a.id === id)?.name ?? 'konto spoza listy'
   const who = (t: Transaction) => t.counterparty || t.title || '—'
-  const tick = (key: string, on: boolean) =>
-    setOff((s) => {
-      const next = new Set(s)
-      if (on) next.delete(key)
-      else next.add(key)
-      return next
-    })
+  const tick = (key: string, on: boolean) => setTicks((s) => ({ ...s, [key]: on }))
+  const tickAll = (on: boolean) => setTicks(Object.fromEntries(pairs.map((p) => [transferKey(p), on])))
   return (
     <Modal
       title="Przelewy zapisane jako dwie operacje"
@@ -72,10 +69,10 @@ export function TransferPairs({ onClose }: { onClose: () => void }) {
           warstwy się nie zmienią; „Cofnij” po połączeniu.
         </p>
         <div className="flex items-center gap-2">
-          <button type="button" className="btn btn-ghost h-[22px]" onClick={() => setOff(new Set())} data-testid="inbox-pairs-all">
+          <button type="button" className="btn btn-ghost h-[22px]" onClick={() => tickAll(true)} data-testid="inbox-pairs-all">
             zaznacz wszystkie
           </button>
-          <button type="button" className="btn btn-ghost h-[22px]" onClick={() => setOff(new Set(pairs.map(transferKey)))} data-testid="inbox-pairs-none">
+          <button type="button" className="btn btn-ghost h-[22px]" onClick={() => tickAll(false)} data-testid="inbox-pairs-none">
             odznacz wszystkie
           </button>
           <span className="text-muted">
@@ -88,7 +85,7 @@ export function TransferPairs({ onClose }: { onClose: () => void }) {
             const key = transferKey(p)
             return (
               <div key={key} className="flex items-start gap-2 border-b border-line/60 py-1.5 last:border-b-0" data-testid="inbox-pair" data-unnamed={unnamed(p) ? '1' : undefined}>
-                <input type="checkbox" className="mt-0.5" checked={!off.has(key)} onChange={(e) => tick(key, e.currentTarget.checked)} aria-label="Połącz tę parę" data-testid="inbox-pair-tick" />
+                <input type="checkbox" className="mt-0.5" checked={ticked(p)} onChange={(e) => tick(key, e.currentTarget.checked)} aria-label="Połącz tę parę" data-testid="inbox-pair-tick" />
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span>
                     <span className="num">{plDate(p.keep.date)}</span> {name(p.keep.accountId)} → {name(p.drop.accountId)}
@@ -100,7 +97,7 @@ export function TransferPairs({ onClose }: { onClose: () => void }) {
                   </span>
                   {unnamed(p) && (
                     <span className="text-[11px] text-accent" data-testid="inbox-pair-check">
-                      Żadna strona nie wskazuje konta – para po kwocie i dniu; sprawdź, czy to jeden przelew.
+                      Żadna strona nie wskazuje konta – para po kwocie i dniu, dlatego niezaznaczona; sprawdź, czy to jeden przelew.
                     </span>
                   )}
                 </div>

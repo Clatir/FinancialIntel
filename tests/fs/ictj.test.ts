@@ -154,6 +154,21 @@ describe('odczyt folderu ICTTJ (tylko payouts/ i forecasts/, nigdy zapis)', () =
     expect(snap.warnings.some((w) => w.startsWith('Wpis ICTTJ w dwóch plikach') && w.includes(`payouts/2026/2026-10-16_${W1}.json`))).toBe(true)
   })
 
+  it('DO sp. 7 (1.15.9): wpis z nieznaną pulą nie jest „pominięty”; przy wpisie w dwóch plikach ostrzeżenie mówi, który plik FI bierze', async () => {
+    const root = await ictjFolder()
+    await write(root, 'payouts/2026/2026-10-21_01KPAY00000000000000000007.json', payout('01KPAY00000000000000000007', 'withdrawal', '2026-10-21', 50, 'bonus'))
+    await write(root, `payouts/2026/2026-10-18_${W1}.json`, payout(W1, 'withdrawal', '2026-10-18', 1200, 'current', { updatedAt: '2026-10-18T09:00:00.000Z' }))
+    const snap = await readIctjFolder(root)
+    expect(snap.entries.find((e) => e.id === '01KPAY00000000000000000007')).toMatchObject({ pool: 'current' })
+    // Only the broken file is left out (before: „Pominięte pliki ICTTJ (2)” with the „bonus” one that docks).
+    expect(snap.warnings.filter((w) => w.startsWith('Pominięte pliki ICTTJ'))).toEqual(['Pominięte pliki ICTTJ (1): payouts/2026/2026-10-12_01KPAY00000000000000000005.json: nieczytelny plik'])
+    expect(snap.warnings.filter((w) => w.startsWith('Wpisy ICTTJ z nieznaną pulą'))).toEqual(['Wpisy ICTTJ z nieznaną pulą (1) – FI je czyta: payouts/2026/2026-10-21_01KPAY00000000000000000007.json: nieznana pula „bonus” – dokuje zwykłą kolejnością'])
+    // The older file left out, with the one FI takes (before: only the older one's path after „bierze nowszy”).
+    expect(snap.warnings.find((w) => w.startsWith('Wpis ICTTJ w dwóch plikach'))).toBe(
+      `Wpis ICTTJ w dwóch plikach (konflikt do rozstrzygnięcia w ICTTJ → Synchronizacja) – FI bierze nowszy, pomija: payouts/2026/2026-10-16_${W1}.json (bierze payouts/2026/2026-10-18_${W1}.json)`
+    )
+  })
+
   it('folder wypłat, którego nie da się odczytać: błąd, nie „czytany” bez wpisów; po dobrym odczycie zostaje dobry z ostrzeżeniem (B73)', async () => {
     const root = await ictjFolder()
     const src = new IctjSource({ onSnapshot: () => undefined, log: () => undefined })

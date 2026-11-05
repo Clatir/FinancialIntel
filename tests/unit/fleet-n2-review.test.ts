@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { paymentsIndex } from '@shared/calc/cargoStatus'
-import { deliveries, pendingPairsOf, previewDocking, type DeliveriesInput } from '@shared/calc/dock'
+import { asPayout, deliveries, pendingPairsOf, previewDocking, type DeliveriesInput } from '@shared/calc/dock'
 import { computeFleet, layersSum, paidBeforeStart, type FleetInput, type FleetState, type PendingPair } from '@shared/calc/fleet'
 import { transferGoal } from '@shared/calc/goals'
 import { sinkingOf } from '@shared/calc/plan'
@@ -144,7 +144,7 @@ describe('przegląd N2 5: „w tym do zadokowania” – to, co z par jest jeszc
 })
 
 describe('przegląd N2 12: wpływ wpisany na Portfelu XTB sparowany z wpisem ICTTJ (B69)', () => {
-  it('ostatnia dostawa – para do zadokowania, nie wcześniejsza zadokowana', () => {
+  it('para w „Do zadokowania”, ostatnia dostawa – zadokowana; po „Zadokuj” to ona (T437 zmienia T342: tylko zadokowane)', () => {
     const trip = goal('Wakacje', zl(3000), 1)
     // 2 November: a payout docked; 3 November: 700 zł typed on Portfel XTB, paired with its ICTTJ entry (pool Cele).
     const before = entry('2026-11-02', zl(500), { pool: 'current' })
@@ -155,12 +155,20 @@ describe('przegląd N2 12: wpływ wpisany na Portfelu XTB sparowany z wpisem ICT
     const pendingPairs = pairsOf({ entries: [before, e], transactions: [bank, typed], dockings })
     expect([...pendingPairs.keys()]).toEqual([typed.id])
     const s = ship({ goals: [trip], transactions: [bank, typed], dockings, pendingPairs })
-    // Before: the docked one of 2 November (only the trading account's operations were read).
-    expect(deliveryWhy(s.log, (id) => s.goals.find((g) => g.id === id)!.name)).toEqual({
+    const name = (id: string) => s.goals.find((g) => g.id === id)!.name
+    const docked = (list: readonly Docking[]) => (id: string) => list.some((d) => d.transactionId === id)
+    // The pair is the bridge's „Do zadokowania” by its entry's pool (T342) – „ostatnia dostawa” only after the docking
+    // (AP-26, T437): the one of 2 November.
+    expect(s.toDock).toMatchObject({ count: 1, inflow: zl(700), goals: zl(700) })
+    expect(deliveryWhy(s.log, name, docked(dockings))?.date).toBe('2026-11-02')
+    // „Zadokuj” makes the inflow the trading account's payout (`asPayout`, B69): now the last delivery, by its pool.
+    const payout = asPayout(typed)
+    const after = [...dockings, docking(payout, e, '2026-11-03T10:00:00.000Z', { countedFrom: typed.createdAt })]
+    const s2 = ship({ goals: [trip], transactions: [bank, payout], dockings: after })
+    expect(deliveryWhy(s2.log, name, docked(after))).toEqual({
       date: '2026-11-03',
-      pending: true,
       lines: [
-        { label: 'Dostawa do zadokowania (według puli wpisu ICTTJ)', amount: zl(700) },
+        { label: 'Dostawa', amount: zl(700) },
         { label: 'Cel: Wakacje', amount: zl(700) }
       ]
     })
@@ -178,11 +186,8 @@ describe('przegląd N2 12: wpływ wpisany na Portfelu XTB sparowany z wpisem ICT
     expect(s.goals.map((g) => g.amount)).toEqual([zl(800)])
     // Before: 1 000 zł – the household's 200 zł too.
     expect(s.toDock).toEqual({ count: 1, inflow: zl(800), outflow: 0, goals: zl(800) })
-    expect(deliveryWhy(s.log, (id) => s.goals.find((g) => g.id === id)!.name)?.lines).toEqual([
-      { label: 'Dostawa do zadokowania (według puli wpisu ICTTJ)', amount: zl(1000) },
-      { label: 'Domownicy – spłata i zaliczka', amount: zl(200) },
-      { label: 'Cel: Wakacje', amount: zl(800) }
-    ])
+    // A pair waiting is no „ostatnia dostawa” (AP-26, T437) – its pool's part is the „Do zadokowania” above.
+    expect(deliveryWhy(s.log, (id) => s.goals.find((g) => g.id === id)!.name)).toBeNull()
   })
 })
 

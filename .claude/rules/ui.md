@@ -17,6 +17,7 @@ paths:
   nic nie jest memoizowane) i `formatPln`; liczebniki przez `plural` / `countLabel`.
 - Selektory zustand zwracają prymitywy albo istniejące referencje (nowy obiekt w selektorze = pętla renderów).
 - Długie listy po 100 (`ShowMore`), wiersze w `memo`; okna przez `Modal` (portal ze stosem, Esc zamyka wierzchnie).
+  Fokus uwięziony w oknie i wraca po zamknięciu (`useFocusTrap`, T442) – własna nakładka (paleta, F1) też go używa.
 - Usunięcia i zmiany zbiorcze z „Cofnij”; przy ważnych rekordach `HistoryButton`.
 - Zapis zablokowany przy folderze tylko do odczytu albo w trakcie przełączania (`canWrite`, `useFolderLocked`);
   zapisy zwracają boolean.

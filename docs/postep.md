@@ -28,8 +28,8 @@ CI (Linux, Windows) → scalenie → wydanie → wpis tutaj → następna grupa 
 | N1 Dane i import | 1.15.5 | `claude/1.15.5-dane-import` | ✅ wydane 04.11 07:33 (wpis w archiwum `postep-od-1.15.4.md`) | #50 | ok. 5,5 h (01:53–07:33) |
 | N2 Silnik pieniędzy | 1.15.6 | `claude/1.15.6-silnik` | ✅ wydane 04.11 13:06 (wpis w archiwum `postep-od-1.15.4.md`) | #51 | ok. 8 h zegara (05:05–13:06) |
 | N3 Opłaty, energia, gra | 1.15.7 | `claude/1.15.7-oplaty` | ✅ wydane 04.11 18:02 (wpis w archiwum `postep-od-1.15.4.md`) | #52 | ok. 10,5 h zegara (07:15–18:02, z przerwą 14:00–14:20) |
-| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | 🔄 scalone z N3; przegląd 3 (11 uwag) w poprawce, potem PR | – | – |
-| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | 🔄 13 z 13 AP gotowe; integracja (N4, n5a, n5b) w toku | – | – |
+| N4 Zasady interfejsu | 1.15.8 | `claude/1.15.8-interfejs` | ✅ wydane 04.11 21:40 (wpis w archiwum `postep-od-1.15.4.md`) | #53 | ok. 9 h zegara (12:09–21:40, z przerwą) |
+| N5 Ścieżki i ergonomia | 1.15.9 | `claude/1.15.9-sciezki` | 🔄 przegląd xhigh + 3 rundy poprawione; PR, CI, wydanie | – | – |
 | R1 Rozwojowe 1 | 1.16.0 | – | ⏳ | – | – |
 | R2 Rozwojowe 2 | 1.17.0 | – | ⏳ | – | – |
 
@@ -42,11 +42,10 @@ podagentów, linie CHANGELOG, „do potwierdzenia”, otwarte; `n*-review*.md` �
 notatki, dalej od pierwszej grupy niewydanej.
 
 - **N3 (1.15.7)** – ✅ wydane 04.11 18:02 (PR #52).
-- **N4 (1.15.8)** – gałąź `claude/1.15.8-interfejs` (drzewo `FI-wt\n4a`): przeglądy 1 i 2 poprawione (d877273, c1eace1 –
-  T410–T417), scalone N3 z N2 (56306cb, ea74a89) i `main` 1.15.7 (b849b1b), wersja i CHANGELOG (87b6518); przegląd 3
-  (11 uwag – `_notatki/n4-review3.md`) w poprawce; potem PR, CI, wydanie.
-- **N5 (1.15.9)** – gałąź integracji `claude/1.15.9-sciezki` (drzewo `FI-wt\n5`): n5d + n5e + n5f scalone (8b71968);
-  w toku scalenie N4, n5a, n5b; potem przegląd high całości, poprawki, wydanie.
+- **N4 (1.15.8)** – ✅ wydane 04.11 21:40 (PR #53).
+- **N5 (1.15.9)** – gałąź integracji `claude/1.15.9-sciezki` (drzewo `FI-wt\n5`): wszystkie gałęzie N5 i N4 scalone, wersja
+  i CHANGELOG (eab4d36); przegląd xhigh – 11 uwag (`_notatki/n5-review1.md`) w poprawce w `claude/1.15.9-fixa` (`FI-wt\n5b`)
+  i `claude/1.15.9-fixb` (`FI-wt\n5d`); potem scalenie, PR, CI, wydanie.
 - **R1 (1.16.0), R2 (1.17.0)** – nie zaczęte (zakres w kolejce niżej; R2 bez karty kredytowej – D101).
 
 **Lekcje z ciągu:** równolegle najwyżej 4–5 podagentów (więcej – zbyt wolne E2E i niestabilności); jeden przegląd xhigh
@@ -62,6 +61,19 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
+| N5 | Start budżetu (KR.29) | najpierw `fi.json` ze startem, potem salda, plan i kontenery; odmowa – nic w folderze, ponowne kliknięcie od nowa; niedokończony start – baner „Start budżetu niedokończony – Dokończ” (tylko brakujące rekordy, bez „Pomiń”; do tego czasu gra, cele ICTTJ i rozliczenia czekają; per komputer); wolny folder > 15 s – toast i czekanie; osłony poniżej minimum kolorem akcentu | T445, T446 |
+| N5 | Autostart i ustawienia komputera | start nigdy nie usuwa wpisu autostartu (wpis z wersji sprzed poprawki albo drugiej kopii przy „wyłączone” zostaje, dopóki nie przełączysz w tej kopii); przełącznik pokazuje prawdziwy wpis z notką; przy zajętym `config.json` przełącznik zostaje w nowym położeniu z komunikatem „działa, zapis ponawia się”; folder ICTTJ, program, token, folder kopii i aktualizacje – „zmiana nie została zapamiętana” | T433, T434 |
+| N5 | Konflikty – decyzje | „Zaakceptuj nowsze” według kart; przy nowszej kopii i świeżych zmianach oryginału grupa zostaje dla Ciebie z komunikatem; zachowanie oryginału przy oryginale zmienionym z zewnątrz zatrzymuje go w nowej postaci | T431 |
+| N5 | Eksport „Miesiące” | przychody i koszty miesiąca w toku do dziś; kolumny „Zaplanowane koszty” i „Zaplanowane przychody – data po dziś” (w zakończonych 0,00) | T421 |
+| N5 | Konto Gotówka | dawne wypłaty z bankomatu (wydatek „Gotówka”) bez konwersji – saldo Gotówki wyrównasz jednym potwierdzeniem salda; reguła „wydatek Gotówka” ustępuje przelewowi, gdy jest konto Gotówka; tag zachowuje pierwszą pisownię jako nazwę; pasek sum Operacji liczy też wiersze z przyszłą datą | T420–T423 |
+| N5 | Eksport | „Części” ma wiersz dla każdej operacji (jedna tabela przestawna); daty w Excelu jako rrrr-mm-dd jak w CSV; okres eksportu zapamiętany na tym komputerze; części ponad sumę z resztą 0 zł; odrzucony podział nie jest „niezapisany” przy zamknięciu; „Części – CSV” w pustym okresie – komunikat zamiast pliku | T425–T428 |
+| N5 | Nowy komputer i konflikty | lista „Ustaw na tym komputerze” tylko po pierwszym otwarciu wystartowanego budżetu na komputerze bez folderu, do „Gotowe” albo ×; „Zachowaj tę wersję” też odmawia przy zmianie pliku; 15 najnowszych sekcji CHANGELOG w oknie „Co nowego”; słowa „wersja niezachowana”, „pożyczona komuś” | T430–T434 |
+| N5 | Konto nowego wpisu | najpierw konto ostatniego wpisu ręcznego w folderze (bez operacji zakładanych przez aplikację), potem wybór tego komputera, potem pierwsze konto | T441 |
+| N5 | Dokowanie | wpis z pierwszych dni bez historii banku przed startem nigdy sam nie staje się „Portfel XTB?”; potwierdzenie dopłaty zapisuje rekord dokowania bez wpisu ICTTJ, meldunek 30 dni, naruszenie w grze zostaje, telefon bez meldunku; „dostawa” to tylko wypłata z XTB; para na Portfelu XTB (B69) tylko w „Do zadokowania”, po „Zadokuj” – ostatnią dostawą | T435–T438 |
+| N5 | Domownicy | zakup z pieniędzy celu nadal pyta „plan czy impuls?”; edytor Operacji z „pytaj” zapisuje od razu – do wyboru reszta jako przychód; w dzienniku zakup samego domownika nie liczy się wcale | T439 |
+| N5 | Szybki wpis i Operacje | Alt+P / Alt+I zamiast „plan / impuls” pod kwotą; edytor wydatku: Data, Konto, Tytuł pod Kategorią; pamiętane tylko „cała historia” i „od – do”; Ctrl+N zostawia wyszukiwanie, inne filtry zdejmuje; czytelna wielkość liter tylko w podpowiedziach i Namierzonych celach; aliasy tylko ręcznie; Wywiad – 12 najnowszych wpisów dziennika | T440–T444 |
+| N5 | Kreator | propozycje kopert maleją proporcjonalnie do 10 zł (propozycja pensji D70 bez zmian); podpowiedź kopert codziennych – tylko tekst; opłata sezonowa (ogrzewanie X–IV) nie jest proponowana jako harmonogram; rachunek zmienny tylko co 2 mies.; przed kreatorem w Meldunkach tylko sprawy folderu | T445–T447 |
+| N5 | Debriefing i przegląd roczny | przypomnienie roczne osobnym przełącznikiem, domyślnie włączone; tydzień w toku nie do otwarcia przed niedzielą 18:00; debriefing miesiąca w toku bez stopy oszczędności; „Zaplanowane” w przeglądzie rocznym tylko przy miesiącu z historią | T448, T449 |
 | N4 | Odmowy i „Cofnij” | zamiana „od” / „do” z komunikatem zamiast odmowy; 0 zł zapisywane z ostrzeżeniem; „Cofnij” najmniej 8 s, licznik długości od 80 %; usunięcie tokenu i przeniesienie do Kosza pytają; przełącznik scenariusza ICTTJ zostaje z banerem | T400–T402 |
 | N4 | Odprawa z hierarchią | „sprawy dnia” i najwyżej 8 linii; inne powiadomienia czekają na odprawę do 09:00 (albo jej godziny, najpóźniej 12:00); 3 i więcej naraz = jedno, klik otwiera Mostek; progi gry przeniesione do Ustawień; z ustawioną godziną wcześniejsze otwarcie nie wysyła odprawy, wybór opcji ustawia 07:00 | T405–T409 |
 | N4 | Poranny dotyk | okno zostawione na noc przechodzi na Mostek przy pierwszym dotyku po co najmniej 30 min bez dotyku | T411 |
@@ -102,27 +114,29 @@ Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybran
 | N2 | Spłata pożyczki dowolną wpłatą | „kto zapłacił” tylko, gdy płacił ktoś inny (wtedy wszyscy płacący); „zapamiętaj” domyślnie wyłączone; cała spłata z szybkiego wpisu zapisana jako wpływ z częścią pożyczki; część z reguły – na każdą wpłatę, suma dla kilku wpłat nie trafia do reguły | T355–T359, T368 |
 | N1 | Audyt reguł | tylko wskazuje operacje do poprawy, bez naprawy jednym kliknięciem; stare błędne operacje sprzed 1.15.5 – ręcznie | T326 |
 
-## N4 – Zasady interfejsu (1.15.8, 04.11.2026)
-- **Zakres:** AP-15 komunikat przy każdej odmowie i przycięciu (T400–T402), AP-22 „Cofnij” wszędzie, AP-16 odprawa
-  z hierarchią, godzina odprawy, progi gry w Ustawieniach (T405–T409), AP-23 teksty – daty dd.mm.rrrr, bez kodów, błędy
-  po polsku, odmiana, „−” (T403, T404); po przeglądach: „Cofnij import” po odcisku treści (T415 zamiast T410), jedna
-  reguła „ta sama osoba” jak `memberOf` (T416), słowa pól szybkiego wpisu (T413, T417), żadne „Cofnij” reguł
-  i domowników nie nadpisuje późniejszych zmian (T418), poranny dotyk (T411), eksport i wyszukiwanie usuniętych (T412),
-  limit 20 nazw w banku (T414).
-- **Wykonawcy:** N4-a (AP-15, AP-22 – Sonnet high), N4-b (AP-16 – Opus high), N4-c (AP-23 – Sonnet high); poprawki
-  przeglądów – Opus xhigh; scalenie N3 z N2 do N4 – Opus max (10 konfliktów, m.in. księga domowników – bez zmian).
-- **Przegląd:** high całości (10 uwag), high na poprawkach (10 – m.in. „Cofnij import” mógł usunąć zmianę użytkownika
-  bez ostrzeżenia; przeprojektowane na odcisk treści), high na poprawkach i scaleniu z N3 (10 + 1 – m.in. ponowienie po
-  cofnięciu dublowało operacje, nazwa domownika, którą import przypisałby innej osobie) – wszystkie poprawione z testem,
-  który przed poprawką padał; trzecia runda sprawdzona przez koordynatora na diffie.
-- **Testy:** typecheck, `npm test` 1517 (pod obciążeniem pada tylko `folder-speed` ZIP64), build, E2E komputera 106/108
-  po scaleniu (lokalnie `ictj.spec`, `series.spec` – osobno zielony), telefonu 10/10, wyrocznia bez rozbieżności.
-- **Otwarte:** „Cofnij” poza regułami i domownikami (Ładownia, Radar, Operacje, Kategorie) może nadpisywać zmiany zrobione
-  po działaniu; paczki importu sprzed 1.15.8 ostrzegają w nadmiarze, dopóki nie wypadną z 10 ostatnich; chip „+ #tag
-  ostatnich dni” zasłania pole tagów w wąskim oknie; krótkie daty dd.mm (58 miejsc) zostają; „Ctrl K” przy wysokim
-  kontraście; telefon bez własnej godziny odprawy.
-- **Czas:** 12:09–ok. 13:50 kod (przed przerwą), 14:20–18:45 trzy rundy poprawek, scalenie z N3, wydanie – plan 2–3 h
-  pracy; zegar dłuższy przez rundy przeglądu i scalenie z N2/N3.
+## N5 – Ścieżki i ergonomia (1.15.9, 04–05.11.2026)
+- **Zakres:** AP-21 tagi, AP-33 konto Gotówka, AP-36 koszty do dziś (T420–T423), AP-29 eksport części, AP-37 procenty,
+  AP-38 podgląd zmian zbiorczych (T425–T429), AP-27 konflikty, AP-28 nowy komputer i autostart (T430–T434), AP-19
+  domownicy, AP-26 dokowanie (T435–T439), AP-20 szybki wpis, AP-34 Operacje i klawiatura (T440–T444), AP-25 kreator,
+  AP-24 debriefing i przegląd roczny, KR.29 start budżetu (T445–T449).
+- **Wykonawcy:** 6 gałęzi (n5a, n5b, n5d, n5e, n5f – dwie dokończone z WIP po przerwie), Opus xhigh / high; integracja
+  w dwóch częściach (gałęzie na N4, potem N4 z N2/N3 i gałęzie na `main` – Opus max); poprawki w dwóch strumieniach
+  równolegle (`config.json` / konflikty – xhigh; kreator / dokowanie / eksport – max).
+- **Przegląd:** xhigh całości (11 uwag), high na poprawkach w trzech rundach (9, 10, 10 uwag). Najpoważniejsze:
+  autostart wyłączany albo usuwany wbrew ustawieniu przy zajętym lub uszkodzonym `config.json`, „Zachowaj nowsze”
+  wyrzucające niewidzianą wersję, potwierdzenie dopłaty zmieniające kolejność w silniku, odrzucony start budżetu
+  zostawiający salda i plan. Mechanizm wycofania startu po trzech rundach zastąpiony odwróceniem kolejności zapisów
+  (najpierw `fi.json`, T446) – wszystkie poprawione z testem, który przed poprawką padał; ostatnia runda sprawdzona przez
+  koordynatora na diffie.
+- **Testy:** typecheck (+ `typecheck:audyt`), `npm test` 1686 (pod obciążeniem pada tylko `folder-speed` ZIP64), build,
+  E2E komputera 122/123 (lokalnie `ictj.spec`), telefonu 10/10, wyrocznia bez rozbieżności.
+- **Otwarte:** „Co nowego” po aktualizacji z ≤ 1.15.2 pokaże stare sekcje z kodami D…; DM sp. 4 (na który zakup poszła
+  zaliczka); SW.26, IM sp. 6–8, IN sp. 1, OP.20, OP.42, OP.10, ME sp. 4; PM sp. 2, AF-54, WY.14 (poza wierszami AP);
+  wyrocznia bez `countedFrom` (T363); do sprawdzenia w maszynie – autostart instalator / portable, klucz Run, blokada
+  `config.json` (FileShare.None), „Co nowego” offline po aktualizacji instalatorem, „nowy komputer” na prawdziwym
+  OneDrive, powiadomienie o starych wpisach przy pierwszym wyborze folderu ICTTJ.
+- **Czas:** 12:45–ok. 14:00 pierwsze gałęzie, 14:20–ok. 03:00 dokończenie, integracja, cztery rundy przeglądu, wydanie –
+  plan 3–4,5 h pracy; zegar dłuższy przez 6 gałęzi na dwóch bazach i rundy poprawek w obszarze startu budżetu.
 
 ## Zasady prowadzenia (prośba użytkownika 16.10.2026 – D67)
 - Po każdym kroku (etapie albo grupie) zaktualizowana tabela: model i thinking z górką, szacowany czas pracy Claude'a.

@@ -3417,3 +3417,455 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   potem zostają; dawniej całe ustawienia domowników z chwili kliknięcia). „zostaw” zaliczek liczy meldunek jak skrzynka
   (zostawione już się nie liczą) – na meldunku zostawionym gdzie indziej mówi „nic do zmiany”. Inne ekrany (Ładownia, Radar,
   Operacje) – poza tym przeglądem.
+- **T420** „-” i „_” w tagu jak spacja (AP-21, AF-18; zmienia T291): `tagKey` – bez wielkości liter, polskich znaków,
+  a „-” i „_” to spacja („#wakacje-chorwacja” w nazwie = tag „Wakacje Chorwacja”; „#słowo” nie ma spacji, więc wyprawa
+  z kilku słów rozdwajała się). Bez migracji: tagi operacji zostają jak zapisane (pierwsza pisownia jest etykietą), klucze
+  zapisane w ustawieniach przed 1.15.9 czytane przez `tagKey` jeszcze raz – cel wyprawy (`tagGoalOf`; `setTagGoal` usuwa
+  dawny klucz tego tagu), filtr zapisanego widoku i filtr tego komputera (`filterOf`). Tag z samych „-” / „_” – żaden.
+- **T421** Miesiąc w toku liczony do dziś (AP-36, C16 – D99 (9); RE sp. 4): debriefing (`debriefing` – koszty netto,
+  koperty, „bez koperty”, ładownia, sfinansowane przez domowników), przegląd roczny (`yearNumbers(…, today)` – koszty,
+  przychody, kategorie, miesiące), bilans paliwa (`fuelMonths` / `fuelSummary(…, today)`) i „Wydatki w czasie” Wywiadu
+  czytają operacje z datą do dnia budżetu (`upToDay`, `calc/operations.ts` – ta sama lista, gdy żadna nie jest późniejsza),
+  jak salda, energia i warstwy („Operacja z przyszłą datą nie liczy się do sald, energii i warstw do tego dnia”). Koszty
+  netto operacji z datą po dziś – osobno jako „Zaplanowane (operacje z datą po dziś – poza kosztami)”: `Debriefing.planned`
+  i `YearNumbers.planned` (kolumna „Zaplanowane” w tabeli miesięcy przeglądu, gdy jest), linia tylko przy kwocie ≠ 0.
+  Dopisek (integracja 2 N5): tabela miesięcy przeglądu ma tylko miesiące z historią (T449), więc kolumna – gdy ma ją
+  któryś z pokazanych miesięcy; zaplanowane późniejszych miesięcy – w linii roku.
+  Miesiąc zakończony – jak dawniej (nie ma w nim dat po dziś). Eksport „Miesiące” bierze koszty z debriefingu (do dziś),
+  przychody liczy sam (poza tą zmianą). Operacje pokazują listę okresu bez zmian (suma tego, co na liście).
+  Dopisek (przegląd N5 8 – zmienia zdanie o przychodach eksportu): eksport „Miesiące” liczy przychody miesiąca w toku
+  z tych samych operacji co koszty – do dnia budżetu (`monthRows` z `upToDay`, jak Bilans paliwa `fuelMonths`), więc
+  bilans i stopa oszczędności są z jednego okresu (wcześniej: przychody całego miesiąca, także z datą po dziś, przeciw
+  kosztom do dziś); koszty netto operacji z datą po dziś – osobno, w nowej ostatniej kolumnie „Zaplanowane – data po
+  dziś (zł)” (`Debriefing.planned`; miesiąc zakończony 0,00 – kolumny przed nią na swoich miejscach, jak w AP-29).
+  Przychód z datą po dziś nie ma kolumny (jak w debriefingu i przeglądzie rocznym).
+  Dopisek (przegląd 2 N5 6 – zmienia ostatnie zdanie poprzedniego dopisku): przychód (D81) operacji z datą po dziś nie
+  znika z eksportu – kolumna „Zaplanowane przychody – data po dziś (zł)” obok „Zaplanowane koszty – data po dziś (zł)”
+  (dawniej „Zaplanowane – data po dziś (zł)”; `MonthRow.plannedIncome` – ta sama reguła przychodu co „Przychody”);
+  bilans i stopa oszczędności dalej do dziś, jak debriefing (AP-36).
+- **T422** Wypłata z bankomatu na konto „Gotówka” (AP-33, D100 (1); zmienia spec „Konta budżetu” i „Przypadki
+  szczególne”, doprecyzowuje D83): konto gotówki to aktywne konto rodzaju `cash` (`cashAccountOf` – domyślne
+  `CASH_ACCOUNT_ID` najpierw; nazwa nie decyduje). Jest – import rozpoznaje wypłatę (`isAtmOperation`: „WYPŁATA
+  W BANKOMACIE”, „BLIK WYPŁATA GOTÓWKI” i podobne, jak dotąd) jako przelew własny pliku → Gotówka (`ClassifyContext.cash`,
+  `transfer` z `counterAccountId` – jedna operacja dla obu kont, `bothSides`; bez kosztu, warstwy bez zmian), nigdy na
+  konto samego pliku; reguła starego modelu – wydatek kategorii systemowej „Gotówka” (bez finansowania i wspólnego zakupu,
+  także słowo użytkownika) – ustępuje temu przelewowi, a „zapamiętaj” takiej decyzji przy koncie gotówki reguły nie uczy
+  (`ImportPlan.cash`; następny import by jej nie posłuchał); reguła innej kategorii zostaje. Nie ma – wydatek „Gotówka” jak
+  w specyfikacji, a import przy pliku z wypłatami proponuje konto (`cashAccountOffer`, przycisk przy pliku, nigdy po
+  cichu): zarchiwizowane konto gotówki wraca, konto nazwane „Gotówka” dostaje rodzaj `cash`, inaczej nowe „Gotówka”
+  (stałe id, gdy wolne); „Cofnij” przywraca konta, póki żadna operacja nie jest na tym koncie; ekran importu planuje od nowa
+  po zmianie kont (`PlanInputs.accounts`). Zakupy gotówką – szybki wpis i edytor z konta „Gotówka” (bez zmian w kodzie,
+  pilnuje E2E `cash.spec.ts`). Wpłatomat (wpłata gotówki na rachunek) – bez rozpoznania (brak wzoru opisu mBanku w danych
+  testowych), jak dotąd wpływ do decyzji użytkownika.
+- **T423** Dawne wypłaty z bankomatu zapisane jako wydatek „Gotówka” – bez migracji i bez meldunku zamiany (AP-33): zamiana
+  na przelew nie jest czysta – zmienia koszty, wynik „na plus” i łupy zamkniętych miesięcy (silnik przelicza historię),
+  a konto Gotówka dostałoby całą dawną gotówkę, której wydatków dawny model nie wymagał wpisywać (fałszywe saldo). Zostają
+  jak są; zmianę pojedynczej wypłaty robi edytor Operacji (rodzaj „Przelew własny” → Gotówka). Dawne podwójne liczenie
+  (wypłata jako wydatek i zakup z Gotówki – saldo Gotówki ujemne, OP sp. 7) prostuje jedno potwierdzenie salda Gotówki
+  (Ustawienia → Konta → „Potwierdź saldo” – korekta o różnicę) – do potwierdzenia, czy podpowiadać je meldunkiem.
+- **T425** Eksport „Części” (AP-29, AF-35, D89 / T303 – wiersz operacji bez zmian): `export/budget.ts` `partRowsOf` – wiersz
+  na każdą linię operacji okresu: część paragonu i wspólnego zakupu z własną kwotą, kategorią, „Finansuje” (domownik,
+  „(prezent)”, część wpływu „od: …”), opisem i tagami (tagi operacji + linii); operacja bez linii – jeden wiersz; czego
+  linie nie pokrywają (plik zmieniony ręcznie) – wiersz kategorii operacji jak `partsOf`, więc suma części = kwota
+  operacji i tabela przestawna sumuje kategorie roku. „Nr operacji” = jej miejsce w „Operacjach” tego samego eksportu;
+  „Część” jako „1 z 3” (nie „1/3” – Excel bierze to za datę). Raporty → Eksport: „Części – CSV” i arkusz „Części” w Excelu
+  (między „Operacjami” a „Miesiącami”); Excel widocznej listy Operacji – też z arkuszem „Części” (strona przelewu na
+  liście jednego konta jak wiersz główny). „Miesiące” – na końcu (kolumny przed nimi bez zmian) „Energia miesiąca (zł)”
+  (`debriefing().energy.budget`, puste bez pensji) i „Sfinansowane przez domowników (zł)” (suma `financed`).
+- **T426** Daty w Excelu (AP-29, RE sp. 3): rodzaje kolumn `date` / `month` / `time` w `export/xlsx.ts` – tekst
+  `RRRR-MM-DD` / `RRRR-MM` / `GG:MM` zapisany jako liczba dnia Excela (system 1900) z formatem `yyyy-mm-dd` / `yyyy-mm` /
+  `hh:mm` (wygląd jak w CSV, filtr dat i tabela przestawna je widzą); tekst, który datą nie jest, zostaje tekstem bez
+  stylu daty. Dopiski (AF-57, AF-70): pasek Operacji – „poza sumami: przelewy własne (i korekty) ±X zł”
+  (`operationsView.ts` `asideOfOperations`, kwoty jak w eksporcie – strona przelewu przy liście jednego konta), więc suma
+  pliku = Wpływy − Wydatki + X; panel „Przychody” – przy miesiącu z dopłatą do XTB w 12 miesiącach dopisek, że okno liczy
+  trading netto, ze średnią miesięcy jak w Bilansie paliwa (`income.ts` `monthsAverageOf`; bez dopłat – brak dopisku).
+- **T427** Okres eksportu zapamiętany na tym komputerze (AP-29, RE sp. 1): `localStorage` `fi.reports.exportPeriod`
+  (`{from, to, toToday}` – `exportPeriodOf` / `exportPeriodText`), jak filtry Operacji – wybór biurka, nie folderu (inny
+  komputer eksportuje swój okres; format danych folderu bez zmian). Koniec okresu równy dniowi wyboru = „do dziś” – przy
+  następnym eksporcie idzie z nowym dniem; inny koniec zostaje. Zły zapis – od początku roku do dziś.
+- **T428** Procenty „Wspólnie” – jedna reguła (AP-37, AF-49, zmienia „edytor ostrzega” z T156): procenty ≠ 100 % nie są
+  zapisywane nigdzie – szybki wpis, zmiana zbiorcza i import odmawiały, teraz edytor operacji też. Wpisany podział, który
+  nie daje 100 %, czeka w pamięci okna (`useDraft` `operation-share:<id>` – inna operacja, inny ekran go nie gubią; plik
+  operacji ma ostatni pełny podział), aż da 100 % albo „bez podziału” / „Wspólnie” od nowa. Edytor podziału
+  (`ShareEditor`, wszystkie miejsca) mówi „razem X % – podział zapisze się dopiero przy 100 %” (`data-state="refused"`)
+  i ma „dopełnij ostatniej do 100 %” (`share.ts` `fillLastPercent`: ostatnia osoba dostaje 100 − suma pozostałych, z
+  groszami procentów; brak przycisku, gdy pozostali mają już ponad 100 %). Kwoty innych ponad całość – bez zmian (reszta
+  0 zł): ich pełność zależy od kwoty operacji, która może się jeszcze zmienić.
+- **T429** Podgląd zmiany zbiorczej – cały skutek (AP-38, AF-24, OP sp. 2, rozszerza T265): obok energii dziś, kopert
+  bieżącego miesiąca, osłon i sald – cele (`effectOf` `goals`: pieniądze celu przed i po), miniony miesiąc, z którego
+  operacje wychodzą albo do którego przychodzą, i każdy, którego łupy silnik kończy inaczej (`monthsEffectOf`: debriefing
+  z dziennika silnika przed i po – łupy i „zostało” kopert, tylko miesiące zakończone; bieżący ma swoje linie kopert) oraz
+  wypłaty i zwroty ICTTJ, które tracą parę w banku (`pairsLost`: dostawy jak panel Dokowanie – `deliveriesFor` teraz,
+  `deliveriesOfLists` ze zmianą; para przed, brak operacji po). Silnik ze zmianą liczy pary niezadokowane z dostaw po
+  zmianie (`pendingPairsOf`), nie z obecnych. Tylko odczyt wyników silnika – reguły pieniędzy bez zmian.
+  Dopisek (przegląd N5 10): linia tracącej parę – nazwą z okna dokowania (N43, AP-23; `lostPairText` w `calc/effect.ts`):
+  „Wypłata z ICTTJ z dd.mm.rrrr (X zł) straci parę w banku…” albo „Zwrot do masy w ICTTJ z …” (było „Wpływ do XTB z
+  ICTTJ” – zwrot to wypływ do XTB).
+- **T430** Konflikty i historia czytelne (AP-27, DA sp. 3, DA.22, DA.23, DA.28, DA.30): karta konfliktu nazywa wpis tym, co
+  człowiek rozpoznaje (`conflicts.ts` `conflictSubject`) – operacja: kontrahent (inaczej tytuł, kategoria), data
+  dd.mm.rrrr, kwota ze znakiem i konto; plan i Dowództwo – miesiąc słownie; kontener, cel, pożyczka – nazwa i kwota;
+  saldo, boja, import, ustawienia – swoje; z oryginału, gdy nieczytelny – z kopii. Nazwa pliku z ULID tylko w dymku,
+  przy stronie „zapisał komputer X”, czasy jak w aplikacji. Różnice (karta, „Scal…”, Historia, Dziennik zmian, okno zmian
+  z drugiego komputera, odzyskanie): każde pole każdego schematu ma polską nazwę – `merge.ts` `LABELS`, a pole pod znanym
+  przedrostkiem składa się z nazw kluczy (`partsAfter`: „Reguły importu – kwota najwyżej”, dzień mapy jako data); test
+  przechodzi wszystkie ścieżki schematów zod i nie dopuszcza surowego klucza (klucz nowszej wersji zostaje, jak był).
+  Wartości: wyliczenia słowami (`VALUE_LABELS`: rodzaj operacji, saldo, sposób podziału, kierunek, pula…), tak / nie,
+  przecinek, daty i chwile po warszawsku, lista wartości jako wartości, obiekt jako jego pola po polsku – nigdy JSON;
+  obiekt tylko po jednej stronie rozpisany na pola (`readableChanges`), identyfikator wpisu nigdy nie jest różnicą ani
+  wyborem „Scal…” (scalona wersja ma id oryginału). Kwoty `awaitReturn`, `envelopeCovers`, usuniętych operacji importu –
+  w złotych. Historia: odrzucona strona konfliktu to „wersja niezachowana” (zamiast „odrzucona przy scalaniu”, DA.27).
+  Meldunki „podwójne korekty” mówią, że para liczy się tylko z dwóch komputerów (SA sp. 3). Tytuły wpisów z datą ISO
+  (`recordTitle`) – AP-23 (N4). Dopisek (integracja 2 N5): daty i chwile w różnicach jak wszędzie w aplikacji
+  (T403) – dzień `plDate`, chwila `plDateTime` (czas komputera; w Polsce – warszawski), liczby z minusem „−” i bez
+  zaokrągleń, lista obiektów liczona `countLabel` („22 pozycje”).
+- **T431** Konflikt rozstrzygany na wersjach, które okno pokazało (AP-27, AF-76, DA.28; rozszerza N17): „Scal…” trzyma
+  wersje, na których je otwarto (`opened`) – kopia albo oryginał zmienione w trakcie nie wchodzą po cichu: wybory zostają
+  na pokazanej treści, „Zapisz scalone” wyłączone, pasek „Kopia zmieniła się w trakcie scalania…” z „Scal od nowa”.
+  Proces główny przed każdą decyzją konfliktu czyta oba pliki z dysku jeszcze raz (`freshConflict` – watcher mógł nie
+  zdążyć): „Scal…” i „Zachowaj tę wersję” podają czasy plików, które okno pokazało, i strona zmieniona od tamtej chwili
+  odmawia (`ConflictChangedError` z bieżącym stanem dla okna) – nic nie jest zapisane ani przeniesione do Kosza;
+  „Zaakceptuj nowsze” (zbiorczo, bez wersji okna) też czyta pliki od nowa, więc odrzucona strona trafia do historii taka,
+  jaka jest na dysku, nigdy tylko do Kosza. „Zmieniona” – po treści: okno porównuje rekord bez znaczników zapisu
+  (`conflicts.ts` `changedSince` – zapis tego komputera tuż przed decyzją, `saveFirst`, który tylko odświeżył znaczniki,
+  zmianą nie jest; decyzja idzie z czasami plików, które okno zna po tym zapisie), proces główny – po skrócie treści
+  pliku przy czasie, który okno podało (okno za stanem procesu – odmowa). Odmowa jest w logu (strona i czasy).
+  Dopisek (przegląd N5): każda decyzja idzie z wersją pokazaną – także „Zachowaj tę wersję” i zbiorcze „Zaakceptuj
+  nowsze” (zmienia zdanie „bez wersji okna”). Okno zapamiętuje wersje z chwili kliknięcia (karta, lista kart), po
+  `saveFirst` porównuje je po treści z tym, co zna teraz (`conflicts.ts` `seenFor`, `newestOnShown`): strona zmieniona
+  w trakcie zapisu (watcher przyniósł nowszą kopię) – odmowa w oknie („Jedna z wersji zmieniła się w trakcie… wybierz od
+  nowa”, `CONFLICT_CHANGED_TEXT`; karta pokazuje już nową wersję), inaczej decyzja z czasami po zapisie i odmowa procesu
+  głównego jak dla „Scal…” (`resolveConflicts` z `asOf` każdej pozycji). Zbiorczo „nowsza” wybierana jest na wersjach
+  pokazanych; grupa kopii jednego pliku ze zmienioną (albo zniknięta) pozycją zostaje cała dla użytkownika, odmowa
+  w procesie głównym też zostawia resztę grupy („Pozostawione bez zmian…”); oryginał przepisany zachowaną kopią tej samej
+  paczki liczy się z czasem po tym zapisie (`own`). Zmiana z zewnątrz z odmowy idzie do okna osobno, po zapisach paczki
+  wysłanych jako zmiana tego komputera (`beforeRefusal`) – własny zapis nigdy nie przychodzi jako cudzy. Dopisek (przegląd 2
+  N5): własny zapis okna przed decyzją (`saveFirst` – niezapisane zmiany oryginału, także `fi.json`) nie jest „nowszą
+  kopią z OneDrive” – oryginał zmieniony z `updatedBy` tego komputera (`appInfo.machineName`) nie odmawia. Odmowa tylko
+  po stronie, którą decyzja odda bez wiedzy użytkownika: kopia zmieniona – zawsze (kopii okno nie pisze); oryginał
+  zmieniony z zewnątrz – tylko przy zachowaniu kopii (zastąpiłaby go); zachowanie oryginału zatrzymuje go, jaki jest.
+  Zbiorczo: grupa z własnym zapisem oryginału wybiera najnowszą na zapisanym oryginale; z oryginałem zmienionym
+  z zewnątrz zostaje dla użytkownika tylko, gdy najnowsza to kopia. „Scal…” bez zmian (wybory na obu pokazanych
+  stronach). Wcześniej E2E `sync` (kopia `fi.json`) padał: okno zapisało `fi.json` w `saveFirst` i odmawiało samo sobie.
+  Dopisek (przegląd 3 N5 – **zmienia** rozpoznanie i wybór zbiorczy z przeglądu 2): własny zapis rozpoznaje znak tego okna
+  i tej decyzji, nie nazwa komputera – niezapisana wersja oryginału wzięta tuż przed `saveFirst` (`SyncPage`
+  `unsavedOriginal`, `unsavedOf`) i oryginał po zapisie o tej treści (`sameContentAs`); ta sama nazwa komputera przy innej
+  treści (OneDrive przywraca wcześniejszy plik tego komputera, dwa komputery o jednej nazwie) to zmiana z zewnątrz.
+  „Zaakceptuj nowsze” zawsze według kart: zostaje wersja, którą karta oznaczyła „nowsza” – własny zapis oryginału nie
+  odwraca wyboru. Gdy na karcie nowsza była kopia, a oryginał ma teraz zapisane przed chwilą zmiany użytkownika, grupa
+  zostaje dla użytkownika (`newestOnShown` `mine`, komunikat „Nowsza na karcie była kopia, a oryginał ma Twoje zmiany…
+  żadnej wersji nie odrzucono, wybierz ręcznie”); oryginał nowszy na karcie zostaje z tymi zmianami.
+- **T432** Nowy komputer (AP-28, US.1, US.13, US.31, SW sp. 8): panele ustawień zapisanych w `config.json` mają jeden
+  znak „tylko ten komputer” (`MachineOnly` – rozmiar, prywatność kwot, szybki wpis, powiadomienia, dźwięki, ICTTJ: folder
+  i program, pliki z mBanku, bieżący i ostatnie foldery, zasobnik i start, aktualizacje, token). Pierwsze otwarcie
+  istniejącego budżetu (wystartowanego) na komputerze bez żadnego folderu w `config.json` zostawia w `localStorage`
+  (`fi.machineSetup`) prośbę: baner „Pierwsze otwarcie tego budżetu na tym komputerze…” z „Ustaw na tym komputerze” –
+  lista ICTTJ, skrót, start z Windows (z przełącznikiem), powiadomienia, token, każde ze stanem i „Ustaw…” do swojego
+  panelu; „Gotowe” albo × kończy, „Później” zostawia baner; pytanie o autostart nie pojawia się obok listy. Lista też
+  w Ustawieniach → Folder i kopie („Ustaw na tym komputerze…”). Folder tylko do odczytu – baner na każdej zakładce
+  Ustawień (na zakładkach komputera z dopiskiem, że ustawienia „tylko ten komputer” działają); pola budżetu wyłączone jak
+  dotąd. Scenariusz ICTTJ spoza listy: „nie ma w ICTTJ” tylko przy ICTTJ przeczytanym, inaczej „ICTTJ nie jest czytany na
+  tym komputerze” / „teraz niedostępny” (`missingForecastText`). Konto nowego wpisu (edytor i szybki wpis,
+  `calc/quick.ts` `entryAccount`): wybór tego komputera, a komputer bez wyboru – konto najnowszego wpisu ręcznego
+  w budżecie (bez operacji z banku), dopiero potem pierwsze konto. Format folderu bez zmian. Dopisek (integracja 2
+  N5): jedna reguła z T441 (4) – `entryAccount` bierze najpierw konto ostatniego wpisu ręcznego w folderze
+  (`lastAccountOf`, `typedByHand`; z kont otwartych – zamknięte pomija), potem wybór tego komputera, potem pierwsze
+  konto; nowy komputer dostaje więc konto z folderu jak tu, a drugi komputer – konto ostatniego wpisu w budżecie, nie
+  swój dawny wybór (AP-20: „ostatnie konto zapamiętane w folderze”, SW sp. 8).
+- **T433** Start z Windows tylko z decyzji na tym komputerze (AP-28, incydent 03.11.2026 – `main/loginItem.ts`
+  `loginItemWrites`, czyste reguły z testem): profil inny niż własny aplikacji (`FI_USER_DATA` – testy, laboratorium)
+  nigdy nie pisze w kluczu Run; start aplikacji i późny odczyt `config.json` nigdy niczego nie usuwają – przy włączonym
+  ustawieniu dopisują tylko brakujący (albo z innymi argumentami) wpis tego exe; wyłączenie tutaj (Ustawienia, kreator,
+  baner, lista nowego komputera – `setTrayPrefs` z `launchAtLogin`) usuwa wyłącznie wpisy tego exe (`launchItems` Electrona
+  są po ścieżce exe) – wpis o tej samej nazwie innej kopii zostaje; stare wpisy tego exe pod inną nazwą (B52) – tylko przy
+  zmianie ustawienia, po zapisie własnego. macOS: zapis przy zmianie albo przy włączonym. Do sprawdzenia w maszynie: dwie
+  kopie (zainstalowana i przenośna) dzielą `config.json`, a wpisy mają różne nazwy – wyłączenie w jednej nie usuwa wpisu
+  drugiej. Dopisek (przegląd N5 – **zmienia zdanie** „start aplikacji i późny odczyt `config.json` nigdy niczego nie
+  usuwają”): wpis w systemie odpowiada przełącznikowi. Zmiana przełącznika stosuje się do systemu i zasobnika od razu,
+  przed zapisem `config.json` (`config.ts` `changeTray`) – zapis odrzucony (plik zajęty, ponawiany – T434) nie zostawia
+  wpisu innego niż ustawienie; okno pokazuje ustawienie, które działa, z komunikatem „działają, a zapis ponawia się sam”
+  (`store/tray.ts`, jak `setMachinePrefs`). Start aplikacji i późny odczyt przy ustawieniu wyłączonym usuwają wpis tego
+  exe pod jego własną nazwą (tylko taki – `launchItems` po ścieżce exe; wpis innej kopii, także o tej samej nazwie, i
+  druga wersja instalator / portable z inną nazwą zostają); stare wpisy pod inną nazwą (B52) dalej tylko przy zmianie.
+  Zapis, który nie zdążył przed wyjściem, przepada jak każda zmiana `config.json` – następny start ustawia system według
+  pliku, więc ekran i system się zgadzają. Dopisek (przegląd 2 N5 – **cofa** zdanie o usuwaniu przy starcie): start aplikacji
+  i późny odczyt `config.json` znów nigdy niczego nie usuwają – „wyłączone” przy starcie bywa nie wyborem użytkownika,
+  a ustawieniem domyślnym (`config.json` uszkodzony i odłożony, usunięty z AppData, nieczytelny), a usunięcie po nazwie
+  to klasa incydentu 03.11. Wpis usuwa tylko przełącznik (Ustawienia, kreator, baner, lista nowego komputera), od razu,
+  przed zapisem `config.json` (`changeTray`), więc odrzucony zapis nie zostawia wpisu za ustawieniem. Zostaje znana
+  rozbieżność: wpis z wersji sprzed poprawki albo drugiej kopii przy „wyłączone” – usuwa go dopiero przełącznik
+  (włącz i wyłącz) w tej kopii. Dopisek (przegląd 3 N5): przełącznik pokazuje stan prawdziwego wpisu tej kopii w systemie
+  (`loginItem.ts` `loginEntryOf` – wpis tego exe, nie wyłączony w Menedżerze zadań; macOS – `openAtLogin`; `tray.ts`
+  `loginEntry`, `trayView().loginEntry`), czytany przy każdym pokazaniu Ustawień → Zasobnik i listy nowego komputera
+  (`refreshTrayPrefs`) i po każdej zmianie; inny niż `config.json` – stan systemu z notką („Windows uruchamia tę kopię…
+  przełącznik pokazuje stan systemu; wyłącz, żeby usunąć wpis” albo odwrotnie), a przełączenie zapisuje wpis według
+  wyboru. Profil testowy i wersja niespakowana – stan nieznany, przełącznik według `config.json`. Baner „Uruchamiać z
+  Windows?” nie pyta komputera, który już startuje z Windows. Start dalej niczego nie usuwa. Dopisek (przegląd 4 N5): wpis
+  wyłączony w Menedżerze zadań (`enabled: false` – `loginEntryDisabled`) – przełącznik „wyłączony”, a włączenie tutaj
+  zapisuje wpis z `enabled: true` (zgoda na start w systemie, `setLoginItemSettings`); przy ustawieniu „tak” notka
+  „Wpis startu tej kopii jest wyłączony w Menedżerze zadań – włącz go przełącznikiem tutaj albo tam”, gdyby system go nie
+  włączył. Start aplikacji wyboru z Menedżera zadań nie zmienia.
+- **T434** „Co nowego” bez sieci, kopie po zmianie folderu kopii, zapis `config.json` ponawiany (AP-28, AF-40, IN.26,
+  DA.14, DA.11, US.33): okno ma wbudowane 15 najnowszych sekcji CHANGELOG (`electron.vite.config.mts` `__FI_CHANGELOG__`,
+  `releaseNotes.ts` `notesOf`) – panel „Co nowego w wersji X” pokazuje się z nich, gdy notatek z GitHuba nie ma
+  (aktualizacja spoza aplikacji, offline), po aktualizacji z wersji Y także wersje pośrednie (`justUpdated.from`).
+  Zmiana folderu kopii zapamiętuje poprzedni dla tego folderu danych (`config.json` `backupDirsBefore`, addytywnie,
+  najwyżej 8, `backupDirsAfter`): jego kopie zostają na liście pod nagłówkiem „Wcześniejszy folder kopii”, liczą się do
+  „Ostatnia kopia” i dają się odzyskać (`listedBackup` czyta tylko kopie z folderów listy); powrót do folderu zdejmuje go
+  z listy; nieudany zapis ustawienia cofa folder kopii. Tekst panelu mówi o 5 ostatnich kopiach ręcznych. Nieudany zapis
+  `config.json` (plik zajęty) ponawia się sam co 5 s z najnowszym stanem, aż się uda (`ConfigStore.retryLater`) –
+  komunikat w oknie to mówi. Dopisek (przegląd N5): ustawienia ważne dopiero po zapisie (`config.ts` `ONLY_ONCE_SAVED`:
+  folder kopii i lista wcześniejszych, folder i program ICTTJ, token GitHub, sprawdzanie i pobieranie aktualizacji) przy
+  odrzuconym zapisie wracają w pamięci do tego, co ma `config.json` (pole zmienione w trakcie zostaje przy nowszej
+  wartości), z komunikatem „config.json jest zajęty… zmiana nie została zapamiętana. Spróbuj ponownie” (`ConfigNotSavedError`) –
+  ponowiony zapis nie przywraca ich po restarcie, a ekran (folder kopii w magazynie, odczyt ICTTJ, panel tokenu,
+  przełączniki aktualizacji) zostaje przy zapamiętanych. Reszta działa od razu i zapisuje się później: zasobnik i start
+  z Windows (T433), preferencje komputera, okno, folder danych i plików z mBanku, pobrana aktualizacja (gotowa do
+  instalacji, a nie „nie udało się pobrać”, gdy tylko `config.json` odmówił). Zmiany z chwili nieczytelnego `config.json` (`held`, B114) zostają, aż zapis je
+  weźmie: odczyt, po którym zapis jest odrzucony, kończy się (ustawienia działają, odczyt nie jest ponawiany), zmiany
+  idą do ponawianego zapisu, a kolejny odczyt nakłada je na plik jeszcze raz (także zmiany zrobione po odczycie, do
+  udanego zapisu) – wcześniej odczyt je zdejmował i przepadały z nieudanym zapisem. Dopisek (przegląd 2 N5): pamięć
+  zawsze = to, co ustawiono w tej sesji – każdy odczyt (także nieudany co 15 s, plik usunięty albo uszkodzony i odłożony)
+  nakłada zmiany `held` na swoją podstawę (plik albo domyślne), a plik usunięty albo odłożony dostaje je od razu; zasobnik,
+  ICTTJ, folder kopii i pobrana aktualizacja nie wracają do domyślnych. „Nie została zapamiętana” tylko wtedy, gdy
+  `config.json` naprawdę nie ma nowej wartości: zmiana zabrana przez wcześniejszy zapis z kolejki (każdy pisze najnowszy
+  stan) jest zapisana – bez komunikatu i bez cofania (`ConfigStore.update` porównuje z `saved`, stanem pliku).
+  Dopisek (przegląd 3 N5): zmiana czekająca na liście folderów (`recentDirs`, `backupDirsBefore`) jest zmianą elementów –
+  dopisane na początek i usunięte (`config.ts` `listChange`, `applyHeld`) – nakładaną na listę z pliku z jej granicą
+  (8), nigdy całą listą zbudowaną na domyślnych (folder otwarty przy nieczytelnym pliku zostawiał z 8 ostatnich folderów
+  tylko siebie, a wcześniejsze foldery kopii znikały).
+- **T435** Wpis ICTTJ z pierwszych dni budżetu (1.15.9, N5 – AP-26, AF-47 = C15, DO sp. 2; D72, T63; **zmienia zdanie T162**
+  „bez Portfela XTB dla okna zaczętego przed startem”): „sprzed startu” tylko wpis z datą przed startem (`deliveries`:
+  `!counted(e.date)`); wpis od startu, którego okno pary (−3 dni) zaczyna się przed startem, czeka na import jak każdy
+  („czeka na import”, na liście do zadokowania – okno dokowania pozwala zadokować na Portfelu XTB od razu). Po oknie
+  (plik banku sięga dalej) „Portfel XTB?” tylko, gdy historia banku kont z XTB sięga pierwszego dnia okna
+  (`DeliveriesInput.bankFrom` – najpóźniejszy z pierwszych wierszy z banku tych kont, `dock/state.ts` `coveredOf`) –
+  para sprzed startu byłaby w niej i dała „sprzed startu”; bez tej historii dostawa zostaje „czeka na import” z
+  `unseen` i tekstem „bez pary w mBanku – zadokuj na Portfelu XTB albo pomiń wpis, jeśli pieniądze wpłynęły przed
+  startem budżetu” (wybór użytkownika – bez ryzyka podwójnego liczenia saldem otwarcia). Para silnika bez zmian
+  (`pendingPairsFor` – tylko wpisy z operacją).
+- **T436** „Czeka na import do …” tylko z datą w przyszłości (1.15.9, N5 – AP-26, DO sp. 3): dostawa po oknie, gdy plik
+  banku kończy się w oknie (`coveredTo ≤ until`), ma `Delivery.fileTo` (koniec pliku); okno dokowania mówi „ostatni plik
+  z mBanku kończy się dd.mm.rrrr – zaimportuj nowszy” (`waitingText`), odprawa „czeka na nowszy plik z mBanku (ostatni
+  kończy się dd.mm)”; w oknie – jak dotąd „FI czeka na import do” dnia końca okna.
+- **T437** Dokowanie na ekranach (1.15.9, N5 – AP-26: DO sp. 5, 7, 13, MO.7, PR sp. 2; DM sp. 9 – **zmienia część T342**
+  „ostatnia dostawa (data, do zadokowania)”): (1) „ostatnia dostawa – dokąd poszła?” dopiero po dokowaniu – ostatni
+  wpływ `trading` z rekordem dokowania (`deliveryWhy(log, …, docked)`; para liczona według puli wpisu i wpływ XTB bez
+  dokowania to „Do zadokowania” w Stanie okrętu); dostawa to wypłata z XTB (słowniczek) – wpłata domownika nią nie jest
+  (DM sp. 9 bez zmian); (2) jedna data dostawy – dzień pieniędzy w banku (`deliveryDay`: operacja, bez niej wpis): wiersz
+  panelu Dokowanie (dzień wpisu w dymku), odprawa i Meldunki; okno dokowania pisze „wpis z dd.mm.rrrr” przy innym dniu
+  banku; (3) zadokowane dostawy zostają na liście przy wyłączonym ICTTJ albo nieodczytanym wpisie (`fromDocking` –
+  wpis z rekordu dokowania: pula, `entryDate`, kwota operacji; wpis usunięty w ICTTJ – jak dotąd do ponownego
+  dokowania); (4) toast: „Zapisz podział” zadokowanej – „Zmieniono podział dostawy X zł.”, nowe dokowanie – „Zadokowano
+  X zł”, zawsze kwota operacji (banku przy innej kwocie – B22), także „Wycofano dokowanie” (`dockedText`); (5) ostrzeżenia
+  folderu ICTTJ: wpis z nieznaną pulą osobno („Wpisy ICTTJ z nieznaną pulą (N) – FI je czyta”, nie „Pominięte pliki”),
+  wpis w dwóch plikach – plik pominięty z plikiem, który FI bierze. Po scaleniu z N2 (integracja 2 N5): (1) obejmuje
+  też część T342 z przeglądu 2 N2 – para wpisana na Portfelu XTB (B69) z częścią domownika i częścią spłaty pożyczki
+  czeka w „Do zadokowania” (wpływ bez tych części), nie w „ostatniej dostawie”; po „Zadokuj” staje się wypłatą XTB
+  (`asPayout`) i jest ostatnią dostawą według swojej puli.
+- **T438** Firewall – słowo i potwierdzenie (1.15.9, N5 – AP-26, DO sp. 6, 12; spec „Zasięg i firewall” – „czerwony alarm,
+  potwierdzenie i poważne naruszenie”, wnioski sekcja 5 – D99 pkt 9): (1) „firewall” w odprawie, Meldunkach
+  i powiadomieniu o zwrocie do masy tylko, gdy silnik liczy go wbrew rozkazowi (`againstFirewall` – alarm `firewall`
+  operacji dostawy); zwrot bez operacji w banku – bez werdyktu („do potwierdzenia.”); (2) dopłata do XTB wykryta tylko
+  z banku (alarm firewalla, bez wpisu ICTTJ w dostawach do zadokowania, czekających i zadokowanych) – meldunek „Firewall”
+  „Dopłata do XTB X zł z dd.mm wbrew rozkazowi firewall … – potwierdź” z „Pokaż” i „Potwierdź” (`topUpsToConfirm`, 30 dni
+  – `TOPUP_CONFIRM_DAYS`); potwierdzenie = rekord dokowania operacji bez wpisu i puli (`derivedId(tx, topup:…)` – dwa
+  komputery piszą jeden plik; „Cofnij”) – pieniędzy, alarmu ani naruszenia w grze nie zmienia. Dopłata z wpisem ICTTJ
+  potwierdza się jak dotąd w oknie dokowania. Telefon meldunku nie pokazuje (dokowanie tylko na komputerze). Bez zmian
+  formatu (rekord dokowania jak dotąd).
+  Dopisek (przegląd N5 5 – silnik pieniędzy): potwierdzenie zapisuje `countedFrom` = utworzenie operacji
+  (`topUpConfirmation`, `calc/inbox.ts` – jak dokowanie pary liczonej według puli, T363), więc chwila operacji w silniku
+  (`cameIn`) zostaje jej własna: przeniesienie środków celu (T340) i „Dopełnij kadłub z osłon” (T373) z jej dnia,
+  zrobione między importem a kliknięciem, liczą się po dopłacie jak przed potwierdzeniem – warstwy, alarm firewalla,
+  `drawShields` i dzień gry bez zmian. Wcześniej rekord bez pola liczył się od kliknięcia (T128): dopłata 9:00,
+  przeniesienie celu do osłon 12:00, potwierdzenie 20:00 – przeniesienie przed dopłatą, osłony przy niej wyżej, alarm
+  i naruszenie znikały (z dopełnieniem kadłuba – inne kadłub i osłony). Testy: scenariusz recenzji w oknie
+  (`n5-review1-fixb-store.test.ts`) i własność na 300 losowych dniach – stan silnika z potwierdzeniem i bez niego
+  identyczny (`n5-review1-fixb.test.ts`). Pole addytywne jak w T363; potwierdzeń sprzed poprawki w danych nie ma (1.15.9
+  niewydana).
+- **T439** Domownicy w grze, dzienniku i listach (1.15.9, N5 – AP-19: AF-22, AF-23, AF-58, OP sp. 1, SW sp. 3, SW.12,
+  SW sp. 9, DM sp. 6, 7; R-17 – D99 pkt 9; D80 b, D91 bez zmian): (1) „plan czy impuls?” od mojej części zakupu bez
+  tego, co z definicji zaplanowane: `impulseAmount` – linie własne (nie domownika, finansowane ani prezent), bez
+  płatności ładowni (kontener: czynsz, rata) i kategorii systemowej „Gotówka” (bankomat); `asksImpulse` liczy z tego
+  wszędzie – „?” na liście, edytor, Wywiad, Raporty, szybki wpis (części wspólnego zakupu i paragonu); zakup z celu nadal
+  pyta; (2) dziennik kapitański (Wywiad, Raport wachty) – kwota własna (`ownSpent`; przykład audytu: plan 1 060,98 zł
+  z częścią domownika 300 zł = 760,98 zł), oznaczony zakup samego domownika się nie liczy (jak w grze); (3) notka ciszy
+  nocnej przy zakupie domownika – „to nie Twój wydatek, w grze bez naruszenia” (`nightVerdict`, jak `game.ts`);
+  (4) domownik „pytaj” bez wartości domyślnej: szybki wpis nie zaznacza „przychód / zaliczka”, podgląd pyta, zapis
+  odmawia przy reszcie ponad dług („Wybierz, czym jest reszta X ponad to, co … ma oddać”; `restToChoose`; reszta po
+  częściach innych osób i części spłaty pożyczki – D100, `senderOwn`, integracja 2 N5); edytor Operacji
+  (zapis od razu) – bez zaznaczenia i z dopiskiem „pytaj: wybierz (do wyboru liczona jako przychód)”; pierwszy wybór
+  zapamiętany jak dotąd; (5) „Pokaż zakupy” przy „X: do oddania” (Meldunki) i linia odprawy – zakupy tej osoby do
+  oddania z całej historii (`refundablesFilter`: osoba + „do oddania” / „częściowo oddane”); „wydatki domowników ›” –
+  wszystkie jak dotąd; (6) saldo na start rozliczeń nigdy jako „1 zakup” (`openText`): Meldunki „wskaż, co spłaca
+  (do oddania: saldo na start rozliczeń)”, przy długu wyrównanym „zwrot … wyrównał dług – wskaż, co spłaca: …”; Radar
+  „rozliczony” zamiast „bez długu”, lista „do oddania: …” / „czeka na przypisanie zwrotu: …”; odprawa „zwrot czeka na
+  przypisanie (Meldunki)” – reguła księgi (D91 a) bez zmian; (7) dopisek „zmieni przychód zamkniętego miesiąca” przy
+  każdej wpłacie z miesiąca przed bieżącym (`waitingForPurchase(…, month)`, dotąd – tylko sprzed miesiąca zakupu),
+  miesiąc słownie; (8) szybki wpis „Za domownika” bez wybranej osoby – „wybierz, kto finansuje zakup”, nie imię i
+  zaliczka pierwszej osoby; (9) zwrot towaru w edytorze – „Czyj zakup: zakup: X” zamiast „Zwrot dla: finansuje: X”.
+- **T440** Szybki wpis – mniej klawiszy (1.15.9, N5 – AP-20, SW.36, SW sp. 5, 6): „Plan czy impuls” klawiszem z każdego
+  pola okna – Alt+P plan, Alt+I impuls (sam Alt: AltGr = Ctrl+Alt pisze polskie litery; `e.code`, więc niezależnie od
+  układu); sekcja dziennika zostaje na swoim miejscu, przy pytaniu podpowiedź „Alt+P / Alt+I”. Typowy wpis „Orlen 250
+  z planem” to 11 klawiszy zamiast 21 (licznik w `tests/e2e/ap20.spec.ts`, ≤ 12). Klawisz wciśnięty, zanim kwota dobiła
+  do progu, nic nie zapisuje: okno wysyła `impulse` tylko, gdy dziennik pyta (`asks`) – także gdy kwotę potem obniżono.
+  Tagi z „#” w nazwie i notatce widać przed zapisem jako przygaszone chipy obok pola tagów (`quick-tag-hash`; tag już
+  w polu nie powtarza się); chip pola tagów ma wyraźne „×” w osobnym polu za linią (ikona zamknięcia, dymek „Usuń tag
+  #…”). Przy okazji: `tagsLost` liczył tag z literą „s” jako nowy (`/s+/` zamiast `/\s+/`) – poprawione.
+- **T441** Kontrahenci, ostatnie konto i dziennik (1.15.9, N5 – AP-20, SW sp. 7, 8, 11, OP sp. 10, WY.13): (1) nazwa
+  operacji na liście, w Namierzonych celach i w dzienniku Wywiadu – `operationName`: kontrahent, a bez niego tytuł; tytuł
+  z banku bez dopisków banku (`cleanBankName` z miastem: „BANKOMAT EURONET 0412 /TESTOWO DATA TRANSAKCJI: …” →
+  „BANKOMAT EURONET 0412”), tytuł wpisany ręcznie bez zmian; dane i klucze bez zmian. (2) Same wielkie litery banku
+  jak pisze człowiek (`readableName`: „KEBAB ROMA” → „Kebab Roma”, „APTEKA DBAM O ZDROWIE” → „Apteka Dbam o Zdrowie”,
+  krótkie słowo bez samogłoski i słowo z cyfrą zostają – KFC, Z1234) – tylko w podpowiedziach szybkiego wpisu i
+  w Namierzonych celach; lista Operacji i edytor pokazują nazwę banku tak, jak przyszła (szukanie, „Zapamiętaj”).
+  Nazwa marki: sieć ze słownika, inaczej ostatnia wpisana ręcznie, inaczej ostatnia z banku. (3) Aliasy: „połącz
+  nazwy…” w Namierzonych celach – „[nazwa] to ten sam sprzedawca co [nazwa]” robi to samo co „Połącz nazwy” importu
+  (`mergeNames`, D78: jedna marka w Wywiadzie, Operacjach, u oficera i w kolejnych importach), toast z „Cofnij”,
+  rozłączenie jak dotąd w Ustawieniach → Import z banku. Bez łączenia samoczynnego („Mokka” w „KAWIARNIA MOKKA”) –
+  zgadywanie łączyłoby różne sklepy. (4) Ostatnie konto „w folderze” bez nowego pola: konto operacji wpisanej ręcznie
+  najpóźniej (`createdAt`, z każdego komputera folderu; import i pusty szkic się nie liczą – `lastAccountOf`), potem
+  zapamiętane na tym komputerze, potem pierwsze; to samo dla Ctrl+N. Nie w `fi.json`: zapis przy każdym wpisie to
+  scalanie `fi.json` między komputerami bez potrzeby, a rekordy już to wiedzą. Dopisek (integracja N5): „wpisana
+  ręcznie” to `typedByHand` – rekord nie ma znaku pochodzenia, więc operacje zapisane przez samą aplikację rozpoznają
+  rodzaj i znane pola: z banku (`bank`); rodzaj inny niż wydatek i wpływ (korekta potwierdzenia salda, operacja Portfela
+  XTB z dokowania, przelew – „Zaplanuj przelew własny”, pożyczka, PIT-38); płatność kontenera (`containerId` –
+  „Zapłacone” w Ładowni, rata pożyczki); zwrot gotówką domownika (tytuł „Zwrot gotówką: …”, `CASH_REPAY_TITLE`);
+  „Wykonaj teraz” boi (operacje z `done` boi); pusty szkic. Kreator, reguły i import nie zakładają operacji bez `bank`.
+  Wydatek wpisany w edytorze i powiązany z kontenerem też się nie liczy – rzadki, a pomyłka w drugą stronę (konto
+  z dokowania) gorsza; nowego pola pochodzenia nie ma – stare rekordy i tak by go nie miały. (5) Wywiad → Dziennik
+  kapitański: „Wpisy dziennika” – treść wpisów okresu (12 najnowszych, data, kontrahent, plan / impuls, kwota; klik
+  otwiera operację; `logEntries`). Dopisek (integracja N5): kwota to część własna (`ownSpent`), jak w licznikach
+  dziennika (R-17, T439); zakup bez części własnej (samego domownika) nie trafia na listę.
+- **T442** Fokus w oknach i palecie (1.15.9, N5 – AP-34, IN.28, AF-74, IN sp. 2): `components/trap.ts` (`useFocusTrap`)
+  w `Modal`, palecie komend i ściądze F1 (teraz `role="dialog"`): po otwarciu fokus wchodzi do okna (ramka okna z
+  `tabIndex=-1`, żeby Enter niczego nie kliknął; pole z `autoFocus` – palety – zostaje), Tab i Shift+Tab krążą po
+  elementach okna, fokus wypchnięty pod nakładkę wraca do okna; tylko wierzchnie okno trzyma fokus (stos jak Esc w
+  `Modal`). Po zamknięciu fokus wraca na element sprzed otwarcia (czytany przy pierwszym renderze), chyba że działanie
+  okna samo go gdzieś postawiło.
+- **T443** Operacje – Ctrl+N, okres i kolejność pól (1.15.9, N5 – AP-34, IN.3, IN sp. 3, 4, OP sp. 8, 9, AF-56; zmienia
+  B77 w części „bez filtrów”): (1) Ctrl+N nie czyści wyszukiwania; nowa operacja zostaje na liście także po zapisie
+  (`keptId`), dopóki filtr się nie zmieni; pozostałe filtry zdejmowane jak dotąd (widok, B88), okres – miesiąc nowej
+  operacji jak dotąd. (2) Okres listy pamięta ten komputer, gdy to „cała historia” albo „od – do”; wybrany miesiąc nie
+  (lista startuje na bieżącym, B81 – miesiąc to „gdzie patrzę teraz”). (3) „Mój filtr” wraca też do swojego okresu
+  (zapamiętanego albo bieżącego miesiąca), nie zostaje przy okresie widoku z Meldunków / Mostka. (4) Edytor wydatku:
+  Kwota → Kontrahent → Kategoria, potem Data i godzina, Konto, Tytuł – od kwoty do kategorii dwa Taby (szkic), trzy
+  z „wszystkie”; dawniej siedem. Inne rodzaje bez zmian kolejności.
+- **T444** Import i pary przelewów (1.15.9, N5 – AP-34, IM.8, IM.19, IM sp. 5, 9, ME sp. 2, AF-59, AF-61): (1) w wierszu
+  grupy pierwsza opcja kategorii to „(jak grupa: X)” (albo „(jak grupa)”), wybrana, dopóki wiersz nie ma własnej
+  decyzji – jej wybór oddaje wiersz grupie; „— bez kategorii —” to zawsze brak kategorii (B98). (2) Opłata banku (rodzaj
+  operacji `fee`) nigdy w temacie podpowiedzi mBanku – zawsze „Opłaty banku” bez kategorii, także gdy plik podaje
+  kategorię („Opłaty i odsetki”). (3) Temat podpowiedzi to jedna kategoria banku (klucz tematu z kategorią banku):
+  „Edukacja” i „Opłaty i odsetki”, choć dają tę samą kategorię, to dwa tematy – „Przyjmij podpowiedzi” nie łączy
+  tego, co bank rozróżnia. (4) Szukanie importu także po rodzaju operacji – jak go pisze bank i po nazwie (bank odmienia:
+  „WYPŁATA W BANKOMACIE” nie zawiera „bankomat”; `kindWords`: bankomat, karta, przelew, opłata / prowizja).
+  (5) Okno par przelewów sprzed 1.7.0: para, której żadna strona nie wskazuje konta (po samej kwocie i dniu), jest
+  niezaznaczona (`pairTickedFirst`) – zaznacza ją użytkownik; „zaznacz wszystkie” jak dotąd. (6) ME.8: ten sam wiersz
+  banku zapisany w dwóch operacjach (ten sam klucz albo klucz drugiego formatu z `altKeys`) to duplikat do scalenia,
+  nie sygnał „Dwa obciążenia z banku” – meldunki już sobie nie przeczą.
+- **T445** Kreator – podział i pierwszy miesiąc (1.15.9, N5 – AP-25, AF-10, KR.12, KR.23, R-4, KR.14, KR sp. 3, 5, 6):
+  krok 6 dzieli środki na początek dnia startu (`startMoney` w `calc/start.ts`: saldo wpisane „teraz” minus dzisiejsze
+  operacje – `openingFromNow`, ta sama reguła co zapis „Uruchom budżet”; puste pole konta z saldem otwarcia – saldo
+  otwarcia i operacje do wczoraj), napis „Środki na początek dnia startu”. Pod podziałem wiersze „W dniu startu”
+  (`startEffect` – kolejność silnika: podział, pierwsza pensja z osłon, brak z kadłuba – `paySalary`, potem zaliczki
+  domowników do depozytu jak `drawShields`): „Pierwsza pensja do energii” (pensja miesiąca minus wydane przed startem –
+  T45), „Depozyt domowników”, „Osłony po starcie (na Mostku)” – na czerwono i z ostrzeżeniem poniżej minimum z rozkazów
+  (`shieldsMinimum` = jak alarm silnika), pensja z kadłuba – żółte, częściowa – czerwone. Propozycje kopert dopasowane do
+  pensji (`fitEnvelopes`): gdy średnie 3 mies. (T47) przekraczają to, co pensja zostawia po ładowni, odkładkach i
+  kopertach wpisanych ręcznie, każda propozycja maleje proporcjonalnie, w dół do pełnych 10 zł (reszta zostaje
+  niezaplanowana – łupy); propozycja pensji (D70) bez zmian, kopert wpisanych ręcznie nie zmienia, z informacją pod
+  listą. Bez kopert codziennych – ostrzeżenie w kroku 4 („Energia dziś” 0,00 zł od startu) z kwotą do rozdzielenia; bez
+  historii nagłówek „bez historii: wpisz je sam” zamiast „średnie z 0 pełnych mies.”. Ślady przerwanego kreatora (AP-22
+  bez zmian) uzupełnione o folder ICTTJ wybrany w kroku 5 (cele jego prognozy w folderze) i import zrobiony w trakcie
+  (`noteImportTrace` po nowej paczce importu) – z „Cofnij import” w treści pytania.
+  Dopisek (przegląd N5 9, 11): informacja „propozycje zmniejszone” tylko, gdy coś zaproponowano (`fitEnvelopes`: bez
+  propozycji `fitted` false także wtedy, gdy pensja nic nie zostawia – było „Średnie wydatki (0,00 zł) są wyższe…”).
+  „Osłony po starcie” poniżej minimum z rozkazów – kwota kolorem akcentu (`data-state="below-min"`, jak w kursie)
+  z ostrzeżeniem pod spodem; na czerwono tylko kwota poniżej zera – zieleń i czerwień tylko dla kwot na plus i minus
+  (zmienia „na czerwono i z ostrzeżeniem poniżej minimum”).
+- **T446** Start budżetu w całości albo wcale (1.15.9, N5 – KR.29 / AF-14, część „zapis częściowy”; rozszerza T51;
+  przeglądy 3 i 4 N5 – najpierw `fi.json`, zastępuje wycofanie startu z przeglądów 1 i 2):
+  `finishWizard` najpierw zapisuje wszystko, co czekało (`saveFirst` – członek, cel, inna zmiana; folder, który tego nie
+  przyjmuje, nie dostaje niczego ze startu), potem buduje rekordy startu i sprawdza każdy schematem – salda otwarcia
+  (zastane saldo otwarcia z nową kwotą i dniem), plan miesiąca, kontener każdej wybranej propozycji (kontener odbiorcy już
+  jest – ten; nowy z id nadanym przed zapisem, więc `fi.json` trzyma jego zbiornik). Rekord odrzucony: start odmawia
+  („nie da się zapisać rekordu startu: kontener „…” (pole …)”), nic nie zapisane. Dalej **`fi.json` z `budget.start`**
+  i resztą ustawień startu jako następny zapis `fi.json` (`writeStart`, `store/data.ts`) z odpowiedzią folderu – do 15 s,
+  dłużej z toastem „Folder zapisuje wolno – start czeka…” i czekaniem dalej. Decyzja o zmianie `fi.json` z drugiego
+  komputera czeka – start odmawia z komunikatem (okno decyzji otwarte), nigdy nie zapisuje na wersji niewidzianej. Okno
+  dostaje start dopiero po odpowiedzi folderu, od razu razem z rekordami startu; zmiana `fi.json` z main z własnego zapisu
+  w trakcie startu do okna nie wchodzi (ta sama treść – bez drugiego zapisu). Od kliknięcia do rekordów startu zapisy
+  w tle są wstrzymane. Odmowa: w oknie i w folderze nie zmienia się nic – nie ma czego wycofywać; odpowiedzi zostają (także
+  szkic na tym komputerze), toast „Budżet nie wystartował – … Nic ze startu nie trafiło do folderu – …”, ponowne „Uruchom
+  budżet” zaczyna od nowa (bez drugiego kontenera). Przyjęty: rekordy startu zwykłym zapisem aplikacji (zapis odrzucony –
+  toast „Budżet uruchomiony – część zmian nie zapisała się jeszcze w folderze (…)”, autozapis ponawia sam); kontener
+  dopasowany do odbiorcy po odpowiedzi folderu – kontener odbiorcy dodany w czasie czekania jest tym kontenerem (zbiornik
+  przechodzi na niego, jedyny przypadek drugiego zapisu `fi.json`), płatności połączone (T379). Zmiana `fi.json` w oknie
+  w trakcie zapisu (edycja, wersja z drugiego komputera) zostaje – start nałożony na nią, zapisany razem z nią. Inny folder
+  pokazany w trakcie zapisu: „Budżet wystartował w poprzednim folderze (ustawienia zapisane), ale … dopisze baner
+  „Dokończ” po ponownym otwarciu tamtego folderu”. „Przerwij kreator” jak w N4: odpowiedzi przepadają, ślady (domownicy,
+  cele, folder ICTTJ, import) zostają i są wymienione – przed przyjętym `fi.json` nic ze startu nie jest zapisane.
+  Przycisk „Uruchom budżet” podaje obok tylko to, czego brakuje (`finishBlockers` – nazwy kont bez salda, pensja, podział
+  ponad środki), w folderze tylko do odczytu – powód folderu, a gdy zapisy teraz padają – że start poczeka. Wykrywanie
+  i zdejmowanie atrybutu „tylko do odczytu” z plików – czeka na decyzję użytkownika (bez zmian).
+  Start niedokończony (przegląd 4 N5): rekordy startu są zapisane na tym komputerze (pamięć okna, klucz `fi.start.left:`
+  z folderem – jak szkic kreatora) od przed wysłaniem `fi.json` do chwili, gdy każdy jest w folderze; do tego czasu żaden
+  zapis w tle nie rusza (gra – start i zamrażanie dni, cele ICTTJ, start rozliczeń). Okno zamknięte „bez zapisu” po pytaniu
+  o niezapisane, awaria albo inny folder w trakcie: po ponownym otwarciu folderu z tym `budget.start` baner „Start budżetu
+  niedokończony – w folderze brakuje: … Do ich zapisu gra, cele ICTTJ i rozliczenia czekają.” z „Dokończ” – zapisuje tylko
+  rekordy, których w folderze nie ma (po id; rekord zastany, który folder ma w starej wersji – saldo otwarcia albo plan
+  sprzed kreatora – zostaje, jak jest), kontenerowi dopasowuje odbiorcę jak start i łączy jego niepołączone płatności; w tym
+  samym oknie, gdy zapis rekordu startu padł, ten sam baner z powodem („Dokończ” ponawia zapis). Rekord startu, który
+  folder ma w swojej wersji – czeka decyzja o zmianie z drugiego komputera, zapisała go nowsza wersja (B67) – nie
+  wstrzymuje dłużej zapisów w tle, z komunikatem „folder ma już swoją wersję części rekordów startu (…)”; rekord usunięty
+  przez użytkownika nie wraca. Zapisane – pamięć znika. `fi.json` bez `budget.start` (start nigdy nie dotarł) – pamięć
+  znika przy otwarciu folderu. Pamięć jest tego komputera: drugi komputer, który zobaczy `fi.json` przed saldami, dostaje je
+  chwilę później przez OneDrive jak każdą zmianę i do tego czasu liczy budżet bez nich tylko na ekranie – zapisy w tle robi
+  tylko komputer „w użyciu” (D86), pierwsze zamrożenie dni czeka po otwarciu folderu i po każdej zmianie z drugiego
+  komputera (B33, T199), a pierwszy dzień gry to dzień po starcie, zamrażany najwcześniej dwa dni później. Zapis wszystkiego
+  (zamknięcie okna, zmiana folderu, Ctrl+S) czeka na zapis `fi.json` startu w drodze i zapisuje rekordy, które przyszły
+  z jego odpowiedzią. Rekordy startu (pamięć i czekanie) to zmiany z `apply` – klucze zapisów przed nim i po nim, bez
+  haka w zapisach; kolejka `fi.json` w `writeStart` własna, bo zwraca odpowiedź startu (`enqueue` zapisuje stan okna).
+  Zastąpione (przeglądy N5 1–3): rekordy startu przed `fi.json` i ich wycofanie przy odmowie (`refusedStart`,
+  `withdrawStart`, `WizardState.startWrites` / `startContainers` w szkicu, znacznik salda `byStart` w `budgetStartOf`,
+  banerze N23 i wyroczni, usunięcie warunkowe `deleteRecords(…, expected)` z `contentMark` i `ChangedSinceError` w procesie
+  głównym), a także cofanie `fi.json` w oknie po odmowie (`takeBackSettings`). Każda runda przeglądu znajdowała w wycofaniu
+  nowe przypadki – odczyt z pamięci zamiast pliku, błąd `stat` jako brak pliku, starsza wersja ignorująca `byStart`, ponowny
+  zapis nieaktualnej wersji po odmowie, salda `byStart` w warstwach, błąd przypisany innemu rekordowi. Odwrócona kolejność
+  zamyka tę klasę: przy odmowie nie ma czego wycofywać, a stan pośredni (`budget.start` przed saldami) niczego nie zapisuje
+  w tle i daje się dokończyć. Pole `byStart` nie zostało wydane – usunięte ze schematu bez śladu (bez `SCHEMA_VERSION`).
+  Rozważone i odrzucone: `fi.json` najpierw w oknie i zapis `writeNow` (okno liczyłoby budżet bez sald przez czas zapisu,
+  a odmowa wymagała cofania); znacznik „start w toku” w folderze (pole schematu, widoczne dla starszych wersji) – pamięć na
+  tym komputerze wystarcza, bo dokończyć może tylko komputer, który start zaczął; zapis wielu plików naraz w jednym kroku –
+  folder (OneDrive) tego nie ma.
+- **T447** Propozycje z historii i pierwsze dni (1.15.9, N5 – AP-25, AF-13, KR.19, KR sp. 9, ME sp. 3, AF-53; rozszerza
+  T286): rachunek o zmiennej kwocie także co 2 miesiące (`VARIABLE_MID_CYCLES`) – co najmniej 3 ostatnie płatności w
+  odstępie cyklu (±12 dni), kwoty ±60% mediany, w swoim dniu miesiąca (±6 dni), kwota = 75. percentyl roku w górę do
+  złotych, `variable`; co 3 i 6 miesięcy – dalej tylko stała kwota. Harmonogram nie powstaje z miesięcy jeden po drugim
+  (`cyclicRun` – także przez nowy rok: subskrypcja płacona co miesiąc i anulowana to nie opłata „w miesiącach”; opłata
+  sezonowa w ciągłych miesiącach – do dodania ręcznie). Nowe cele prognozy ICTTJ dostają priorytety według terminów
+  (najbliższy miesiąc pierwszy, bez terminu na końcu, przy równych – kolejność scenariusza); istniejące cele bez zmian.
+  Meldunki budżetu (bez kategorii, salda, duplikaty, przelewy…) dopiero od startu kreatora (`inboxStarted`:
+  `budget.start`), przed nim tylko sprawy folderu – także przy saldzie otwarcia z dawną historią. „Nowe dane gdzie
+  indziej” na folderze z innymi plikami nie zakłada podfolderu bez słowa: komunikat i „Utwórz podfolder FinancialIntel”
+  (jak „Otwórz istniejące”); podfolder z danymi FI otwiera się jak dotąd.
+- **T448** Raporty i plan na przełomie (1.15.9, N5 – AP-24, AF-68, RY sp. 2, 3, 6, PM sp. 3, 4, 5, 10, 12): jeden
+  „bieżący” tydzień raportu wachty – tydzień należny (`defaultWatchMonday`, od niedzieli 18:00 bieżący, wcześniej
+  poprzedni pełny); „później ›” nie przechodzi za niego (tydzień w toku nie jest raportowany), „Koperty na następny
+  tydzień” tylko przy nim. Raport wachty pokazuje pokrycia przekroczonych kopert z dni tygodnia (`weekCovers`, dzień
+  warszawski chwili pokrycia, tekst jak w dzienniku Dowództwa). Debriefing miesiąca w toku (Raporty): „Bilans paliwa –
+  miesiąc trwa – wynik po jego końcu”, bez stopy oszczędności. Łupy zmienione po decyzji (późny import) – jedna reguła
+  `lootChange` w Planie miesiąca i w Raportach → Debriefing („było / jest”, podział przeliczony). Plan miesiąca bieżącego
+  i przyszłego: debriefing podpisany „(ostatni zamknięty miesiąc)” z notką, że pokazany miesiąc trwa albo się nie zaczął.
+  „Pensja” zawsze pokazuje średnie koszty (przy pensji równej propozycji – „pensja równa propozycji”, bez przycisku).
+  „+ łupy z …” z dopiskiem „poza pensją – nie wchodzi do „Rozdzielone”” (PM sp. 3); w planie kampanii „rok wcześniej”
+  dla miesiąca sprzed pierwszej operacji – „— (przed historią)” (`YearCell.yearAgo` null), nie 0,00 zł.
+- **T449** Przegląd roczny (1.15.9, N5 – AP-24, R-19, AF-34, RY.24, RY sp. 5, RY.25): miesiące roku tylko z historią
+  (`yearSpan`: od pierwszego dnia danych – operacja albo saldo otwarcia – do bieżącego miesiąca); miesiące przed nim jednym
+  wierszem „styczeń … – sierpień …: brak historii”, przyszłe nie są w tabeli (sumy roku bez zmian). Pieniądze i siła
+  floty „na początku” w roku, w którym dane zaczynają się później niż 1 stycznia – z datą tego dnia: „saldo otwarcia
+  dd.mm.rrrr” (saldo otwarcia tego dnia) albo „początek historii dd.mm.rrrr” (kwota bez zmian – T81). Siła floty netto
+  „z należnościami, po odjęciu długu” (było „bez długu”). Cele osiągnięte w roku – z logu silnika i z `achievedAt`
+  (także zarchiwizowane później), w kolejności dojścia. Przypomnienie w styczniu: powiadomienie „Przegląd roczny” raz
+  (klucz `year:<rok>`) za rok zamknięty, gdy budżet w nim działał; własny przełącznik `NotifyPrefs.yearReview`
+  (config.json komputera, addytywnie, domyślnie włączony), kliknięcie – Raporty → Przegląd roczny (w styczniu rok
+  zamknięty); wiersz w tabeli powiadomień specyfikacji.

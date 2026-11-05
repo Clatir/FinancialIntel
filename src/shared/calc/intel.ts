@@ -4,13 +4,14 @@
  * forecast without any payout, the captain's log accuracy; and the reports – the watch report of a week and the year's
  * review. Pure.
  */
-import type { Balance, Transaction } from '../schema/records'
+import type { Balance, MonthPlan, Transaction } from '../schema/records'
 import type { Category, Orders } from '../schema/budget'
 import { addDays, addMonths, daysBetween, firstDayOf, lastDayOf, monthOf, monthRange, mondayOf, weekdayOf } from './dates'
 import type { FleetEvent } from './fleet'
 import { financedBy } from './household'
 import { incomeOfPeriod, plainIncomeContext, type IncomeContext } from './income'
-import { accountAmounts, asksImpulse, categoryIndex, costOf, partsOf, sum } from './operations'
+import { accountAmounts, asksImpulse, categoryIndex, costOf, ownSpent, partsOf, sum, upToDay } from './operations'
+import { operationName } from '../import/names'
 
 // ------------------------------------------------------------------ the wealth curve
 
@@ -277,22 +278,58 @@ export interface LogMonth {
   unmarked: number
 }
 
-/** „Plan czy impuls” month by month (spec): how many impulses, for how much. */
+/**
+ * „Plan czy impuls” month by month (spec): how many impulses, for how much – my own part of each purchase (R-17, D99 pkt 9
+ * – T439: as „sfinansowane przez domowników” is apart; a household member's purchase is no impulse of mine, as in the
+ * game).
+ */
 export function logAccuracy(transactions: readonly Transaction[], orders: Pick<Orders, 'impulseThreshold'>, months: readonly string[]): LogMonth[] {
   return months.map((month) => {
     const out: LogMonth = { month, plan: { count: 0, amount: 0 }, impulse: { count: 0, amount: 0 }, unmarked: 0 }
     for (const t of transactions) {
       if (monthOf(t.date) !== month || t.kind !== 'expense' || t.amount >= 0) continue
+      const own = ownSpent(t)
       if (t.impulse === 'plan') {
+        if (!own) continue
         out.plan.count++
-        out.plan.amount -= t.amount
+        out.plan.amount += own
       } else if (t.impulse === 'impulse') {
+        if (!own) continue
         out.impulse.count++
-        out.impulse.amount -= t.amount
+        out.impulse.amount += own
       } else if (asksImpulse(t, orders)) out.unmarked++
     }
     return out
   })
+}
+
+export interface LogEntry {
+  id: string
+  date: string
+  /** The operation's name (its counterparty, else its title). */
+  name: string
+  /** My own part of it (grosze > 0) – as the log's counts have it (R-17, `ownSpent`). */
+  amount: number
+  impulse: 'plan' | 'impulse' | null
+  /** What the captain wrote („wyprzedaż”, why at night). */
+  note: string
+}
+
+/**
+ * The captain's log as written (AP-20, SW sp. 11): the purchases of `from`–`to` with a word in their log, the newest
+ * first – what the Wywiad's counts are made of: my own part of each, a purchase with none of mine (a household member's
+ * alone) not at all, as in `logAccuracy` (R-17, T439, T441). At most `limit`; `total` – all of them.
+ */
+export function logEntries(transactions: readonly Transaction[], from: string, to: string, limit = 50): { entries: LogEntry[]; total: number } {
+  const all: LogEntry[] = []
+  for (const t of transactions) {
+    if (t.kind !== 'expense' || t.date < from || t.date > to || !t.logNote.trim()) continue
+    const own = ownSpent(t)
+    if (!own) continue
+    all.push({ id: t.id, date: t.date, name: operationName(t), amount: own, impulse: t.impulse ?? null, note: t.logNote.trim() })
+  }
+  all.sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+  return { entries: all.slice(0, limit), total: all.length }
 }
 
 // ------------------------------------------------------------------ the reports
@@ -353,9 +390,12 @@ export function nextWeekEnvelopes(envelopes: ReadonlyArray<{ categoryId: string;
 
 export interface YearNumbers {
   year: string
-  months: Array<{ month: string; costs: number; income: number }>
+  /** `planned` – the month's net costs dated after the budget's day (AP-36): apart from its costs. */
+  months: Array<{ month: string; costs: number; income: number; planned: number }>
   costs: number
   income: number
+  /** Net costs of the year's operations dated after the budget's day – „zaplanowane” (AP-36, T421). */
+  planned: number
   categories: Array<{ id: string; cost: number }>
   /** What household members financed in the year (D80): apart from the costs, by member. */
   financed: Array<{ memberId: string; amount: number }>
@@ -364,27 +404,69 @@ export interface YearNumbers {
 /**
  * A year in numbers (the year's review, spec: in January); `ctx` – what is income (D81). The year's income nets the
  * trading over the whole year (a withdrawal in January and a top-up in March cancel out), each month over itself.
+ * `today` – the budget's day (AP-36, T421): the year counted up to it, an operation dated later planned, apart.
  */
-export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ctx: IncomeContext = plainIncomeContext(transactions)): YearNumbers {
+export function yearNumbers(transactions: readonly Transaction[], categories: readonly Category[], year: string, ctx: IncomeContext = plainIncomeContext(transactions), today?: string): YearNumbers {
   const months = monthRange(`${year}-01`, `${year}-12`)
-  const spend = spendingByMonth(transactions, categories, months)
-  const income = months.map((m) => incomeOfPeriod(transactions.filter((t) => monthOf(t.date) === m), ctx).total)
+  const inYear = (t: Transaction) => t.date.startsWith(`${year}-`)
+  const now = today ? upToDay(transactions, today) : transactions
+  const later = today && now !== transactions ? transactions.filter((t) => t.date > today && inYear(t)) : []
+  const spend = spendingByMonth(now, categories, months)
+  const planned = later.length ? spendingByMonth(later, categories, months).totals : months.map(() => 0)
+  const income = months.map((m) => incomeOfPeriod(now.filter((t) => monthOf(t.date) === m), ctx).total)
   return {
     year,
-    months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]! })),
+    months: months.map((month, i) => ({ month, costs: spend.totals[i]!, income: income[i]!, planned: planned[i]! })),
     costs: sum(spend.totals),
-    income: incomeOfPeriod(transactions.filter((t) => t.date.startsWith(`${year}-`)), ctx).total,
+    income: incomeOfPeriod(now.filter(inYear), ctx).total,
+    planned: sum(planned),
     categories: [...spend.rows.map((r) => ({ id: r.id, cost: r.total })), { id: 'cargo', cost: sum(spend.cargo) }].filter((c) => c.cost > 0).sort((a, b) => b.cost - a.cost),
-    financed: financedBy(transactions.filter((t) => t.date.startsWith(`${year}-`)))
+    financed: financedBy(now.filter(inYear))
   }
 }
 
 /** The watch report's hour on Sunday (D73): the notification and the report's default week. */
 export const WATCH_TIME = '18:00'
 
-/** The watch report's week: this one from Sunday 18:00, else the last whole one. */
+/**
+ * The watch report's week: this one from Sunday 18:00, else the last whole one. The one „current” week of the report
+ * (AP-24, RY sp. 2, AF-68): „bieżący” goes to it, „później ›” never past it – a week in progress is not reported.
+ */
 export function defaultWatchMonday(today: string, time: string): string {
   return weekdayOf(today) === 7 && time >= WATCH_TIME ? mondayOf(today) : addDays(mondayOf(today), -7)
+}
+
+/** The covers of overrun envelopes made in a week (AP-24, PM sp. 12 – F28): the watch report's, as the command's log says them. */
+export function weekCovers(plans: readonly Pick<MonthPlan, 'envelopeCovers'>[], monday: string, at: (iso: string) => string): Array<{ date: string; from: string; to: string; amount: number }> {
+  const sunday = addDays(monday, 6)
+  return plans
+    .flatMap((p) => (p.envelopeCovers ?? []).map((c) => ({ date: at(c.at), from: c.from, to: c.to, amount: c.amount, stamp: c.at })))
+    .filter((c) => c.date >= monday && c.date <= sunday)
+    .sort((a, b) => a.stamp.localeCompare(b.stamp))
+    .map(({ stamp: _stamp, ...c }) => c)
+}
+
+/**
+ * Where a year's review has history (AP-24, R-19, AF-34): from the data's first day (the first operation or opening
+ * balance) to today. `before` – the year's months before it (no history: never „0,00 zł”); `last` – the last month that
+ * has begun (a month ahead is not in the review); `startsOn` – the first day of the data, when it falls in the year (the
+ * money „at the start” is then that day's, not 31 December's) and whether an opening balance is that day's.
+ */
+export interface YearSpan {
+  before: string[]
+  months: string[]
+  startsOn: { date: string; opening: boolean } | null
+}
+
+export function yearSpan(transactions: readonly Pick<Transaction, 'date'>[], balances: readonly Pick<Balance, 'date' | 'kind'>[], year: string, today: string): YearSpan {
+  let first: string | null = null
+  for (const t of transactions) if (t.date <= today && (!first || t.date < first)) first = t.date
+  for (const b of balances) if (b.kind === 'opening' && b.date <= today && (!first || b.date < first)) first = b.date
+  const all = monthRange(`${year}-01`, `${year}-12`)
+  const last = monthOf(today)
+  const from = first ? monthOf(first) : last
+  const startsOn = first && first > `${year}-01-01` && first.startsWith(`${year}-`) ? { date: first, opening: balances.some((b) => b.kind === 'opening' && b.date === first) } : null
+  return { before: all.filter((m) => m < from), months: all.filter((m) => m >= from && m <= last), startsOn }
 }
 
 /** The wealth of a year's review: at the end of the day before 1 January and of 31 December (or today, this year). */
@@ -394,17 +476,34 @@ export function yearWealth(transactions: readonly Transaction[], balances: reado
   return { start: a!, end: b! }
 }
 
-/** The goals that reached their target in a year (the engine's log: the first day their money came to the target). */
-export function goalsReachedIn(log: readonly FleetEvent[], goals: ReadonlyArray<{ id: string; name: string; target: number }>, year: string): string[] {
+/**
+ * The goals that reached their target in a year (the engine's log: the first day their money came to the target) – and
+ * the ones marked achieved then (`achievedAt`, AP-24, RY sp. 5: archived since, too), in the order they got there.
+ * `day` – a moment's Warsaw day.
+ */
+export function goalsReachedIn(
+  log: readonly FleetEvent[],
+  goals: ReadonlyArray<{ id: string; name: string; target: number; achievedAt?: string | null }>,
+  year: string,
+  day: (iso: string) => string = (iso) => iso.slice(0, 10)
+): string[] {
   const amount = new Map<string, number>()
   const reached = new Map<string, string>()
+  const byId = new Map(goals.map((g) => [g.id, g]))
   for (const e of log) {
     for (const [id, v] of Object.entries(e.moves.goals ?? {})) {
       const now = (amount.get(id) ?? 0) + v
       amount.set(id, now)
-      const g = goals.find((x) => x.id === id)
+      const g = byId.get(id)
       if (g && g.target > 0 && now >= g.target && !reached.has(id)) reached.set(id, e.date)
     }
   }
-  return goals.filter((g) => reached.get(g.id)?.startsWith(year)).map((g) => g.name)
+  for (const g of goals) {
+    const marked = g.achievedAt ? day(g.achievedAt) : null
+    if (marked && (!reached.has(g.id) || marked < reached.get(g.id)!)) reached.set(g.id, marked)
+  }
+  return goals
+    .filter((g) => reached.get(g.id)?.startsWith(year))
+    .sort((a, b) => reached.get(a.id)!.localeCompare(reached.get(b.id)!))
+    .map((g) => g.name)
 }

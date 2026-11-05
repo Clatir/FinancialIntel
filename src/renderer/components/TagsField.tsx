@@ -6,6 +6,7 @@
 import { useId, useState } from 'react'
 import { parseTags, tagKey, tagsLost, withTags, MAX_TAGS, MAX_TAG_LENGTH } from '@shared/calc/tags'
 import { toast } from '../store/ui'
+import { IconClose } from './icons'
 import { cx } from './ui'
 
 export function TagsField({
@@ -50,9 +51,17 @@ export function TagsField({
       {value.map((tag) => (
         <span key={tag} className={cx('chip gap-1 text-fg-strong', compact && 'h-[20px] px-1.5 text-[11px]')} data-testid={`${testId}-chip`} data-tag={tag}>
           #{tag}
+          {/* A clear way to take it off (AP-20, SW sp. 5): its own field beyond a line, the cross at the text's size. */}
           {!disabled && (
-            <button type="button" className="text-dim hover:text-down" onClick={() => remove(tag)} aria-label={`Usuń tag ${tag}`} data-testid={`${testId}-remove`}>
-              ×
+            <button
+              type="button"
+              className={cx('-my-px -mr-1 ml-0.5 flex items-center self-stretch border-l border-line-strong px-1 text-muted hover:bg-hover hover:text-fg-strong', compact ? 'text-[12px]' : 'text-[13px]')}
+              onClick={() => remove(tag)}
+              title={`Usuń tag #${tag}`}
+              aria-label={`Usuń tag ${tag}`}
+              data-testid={`${testId}-remove`}
+            >
+              <IconClose size={compact ? 9 : 10} />
             </button>
           )}
         </span>

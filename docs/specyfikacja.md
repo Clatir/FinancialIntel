@@ -80,7 +80,7 @@ Koperty codzienne → Energia dziś (jedna liczba na dziś)
 | --- | --- | --- |
 | mBank (ROR) | import CSV co 2–3 dni + szybki wpis | główne konto |
 | Portfel XTB z kartą | tylko szybki wpis | brak eksportu; zasilany z konta tradingowego |
-| Gotówka | bez osobnego portfela | wypłata z bankomatu = wydatek „Gotówka” |
+| Gotówka | konto „Gotówka” (D100) | wypłata z bankomatu = przelew własny mBank → Gotówka; zakupy gotówką – wydatki z konta Gotówka (szybki wpis); bez konta gotówki – wydatek „Gotówka” |
 
 Konto tradingowe XTB nie jest częścią FI; prowadzi je wyłącznie ICTTJ.
 
@@ -211,7 +211,7 @@ Kosztów tradingu nie zakładamy.
 **Przypadki szczególne**
 - Zwrot towaru to ujemny wydatek w tej samej kategorii.
 - Pożyczka udzielona to należność, a jej spłata nie jest przychodem. Własna rata to kontener w ładowni.
-- Wypłata z bankomatu to wydatek „Gotówka”.
+- Wypłata z bankomatu to przelew własny na konto „Gotówka” (D100); bez konta gotówki – wydatek „Gotówka”.
 
 **Debriefing i podział łupów (od 1. dnia miesiąca)**
 - Niewydane pieniądze z kopert dzieli się: do osłon, na cel albo na następny miesiąc. Bez decyzji w 7 dni trafiają do
@@ -347,6 +347,7 @@ w tle, bo FI startuje z Windows ukryty w zasobniku.
 | Zaległy import z mBanku | po 3 dniach |
 | Potwierdzenie sald | w niedzielę |
 | Raport wachty i debriefing | w niedzielę i 1. dnia miesiąca |
+| Przegląd roczny | w styczniu, raz – za rok zamknięty |
 | Nowa wypłata w ICTTJ do zadokowania | włączone |
 
 **Dźwięki** – osobno dla każdego zdarzenia (wpis, dokowanie, alarm, awans), z głośnością. Syntezowane w aplikacji

@@ -34,11 +34,13 @@ export interface UpdaterDeps {
   /** Allow plain http (only with an explicit test server). */
   allowInsecure: boolean
   prefs: () => UpdatePrefs
+  /** Saved or refused (config.json held – the change taken back, AP-28): applied only once saved. */
   savePrefs: (prefs: UpdatePrefs) => Promise<void>
   /** GitHub token of this computer (only for a private repository): sent only to `apiBase`. */
   token?: () => string | null
   tokenState?: () => UpdateTokenState
   pending: () => PendingUpdate | null
+  /** In `pending()` at once; a refused write of config.json is retried by itself (US.33). */
   savePending: (pending: PendingUpdate | null) => Promise<void>
   /** Version that ran on this machine last time (to say "updated to …"). */
   lastRunVersion: () => string | null
@@ -145,7 +147,7 @@ export class Updater {
     const pending = this.deps.pending()
     try {
       if (lastRun && isNewerVersion(currentVersion, lastRun)) {
-        this.state.justUpdated = { version: currentVersion, notes: pending && pending.version === currentVersion ? pending.notes : '' }
+        this.state.justUpdated = { version: currentVersion, notes: pending && pending.version === currentVersion ? pending.notes : '', from: lastRun }
         this.deps.log('info', `updated ${lastRun} -> ${currentVersion}`)
       }
     } catch {
@@ -311,7 +313,9 @@ export class Updater {
         }
       }
       const pending: PendingUpdate = { version: release.version, notes: release.notes, file: dest, sha256, mode: this.deps.mode }
-      await this.deps.savePending(pending)
+      // In effect at once (AP-28): config.json refused for a while (an antivirus) keeps it in memory and writes it later –
+      // the update is ready, never „nie udało się pobrać” while the next start would find it downloaded.
+      await this.deps.savePending(pending).catch((e: unknown) => this.deps.log('warn', 'pobrana aktualizacja – zapis config.json nie udał się (ponawiany)', e instanceof Error ? e.message : e))
       this.staged = pending
       this.deps.log('info', `update ready ${release.version} (${dest})`)
       this.set({ phase: 'ready', progress: null, error: null })

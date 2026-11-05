@@ -5,18 +5,18 @@
  * amounts (the hidden amounts are the screen's).
  */
 import { useMemo, useState, type ReactNode } from 'react'
-import { addDays, addMonths, isoWeekOf, mondayOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
+import { addDays, addMonths, isoWeekOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
-import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekNumbers, yearNumbers, yearWealth } from '@shared/calc/intel'
-import { setReportTab, setWatchMonday, useReportsUi, watchMondayOf, type ReportTab } from './state'
-import { debriefing, lootApplied, planFor } from '@shared/calc/plan'
+import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekCovers, weekNumbers, yearNumbers, yearSpan, yearWealth } from '@shared/calc/intel'
+import { readExportPeriod, setReportTab, setWatchMonday, storeExportPeriod, useReportsUi, watchMondayOf, type ReportTab } from './state'
+import { debriefing, lootApplied, lootChange, planFor } from '@shared/calc/plan'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
 import { arrangeBriefing, BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
 import { sum } from '@shared/calc/operations'
 import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
 import { netAdjustments } from '@shared/calc/netWorth'
-import { budgetWorkbook, monthRows, monthsCsv, operationRows, operationsCsv, reportHtml, type ReportSection } from '@shared/export/budget'
+import { budgetWorkbook, monthRows, monthsCsv, operationRows, operationsCsv, operationsOfPeriod, partRowsOf, partsCsv, reportHtml, type ReportSection } from '@shared/export/budget'
 import { formatPln, rangeText } from '@shared/format'
 import { ictOf } from '@shared/glossary'
 import { useData } from '../../store/data'
@@ -57,6 +57,8 @@ const failed = (e: unknown) => toast(`Nie udało się zapisać: ${e instanceof E
 
 /** The costs linked to the cargo's containers (N72): one name in every report – monthly and periodic fees alike. */
 const CARGO_LABEL = 'Ładownia (kontenery i opłaty okresowe)'
+/** The net costs of operations dated after today (AP-36): apart, as the balances and the engine see them. */
+const PLANNED_LABEL = 'Zaplanowane (operacje z datą po dziś – poza kosztami)'
 
 /** A gap of the plan (FVG) as on the screens (N33): a plus sign on the plus – unless the amounts are hidden. */
 const signed = (money: (g: number) => string, g: number): string => {
@@ -141,8 +143,11 @@ function WatchReport() {
   const mission = game?.view.missions.find((m) => m.week === week) ?? null
   const status = useMemo(() => (mission && game ? missionStatus(game.input, mission, fleet.today) : null), [mission, game, fleet.today])
   const days = game ? new Map(game.input.game.flatMap((g) => Object.entries(g.days))) : new Map()
-  const current = monday === mondayOf(fleet.today)
-  const next = current || addDays(monday, 7) === mondayOf(fleet.today) ? nextWeekEnvelopes(fleet.envelopes, fleet.today) : []
+  // One „current” week (AP-24, RY sp. 2): the week due – its plan for the next days; a week in progress is not reported.
+  const next = monday === due ? nextWeekEnvelopes(fleet.envelopes, fleet.today) : []
+  // The covers of the week's overruns (PM sp. 12, F28): as the command's log says them.
+  const plans = useRecordList('months')
+  const covers = useMemo(() => weekCovers(plans, monday, (iso) => warsawNow(iso).date), [plans, monday])
   const maxDay = Math.max(1, ...w.days.map((d) => d.costs))
   return (
     <Columns id="reports-watch" tracks={['minmax(420px,1fr)', 'minmax(340px,1fr)']} className="grid items-start">
@@ -153,7 +158,7 @@ function WatchReport() {
               <button className="btn h-[22px]" onClick={() => setMonday(addDays(monday, -7))} data-testid="reports-watch-prev">
                 ‹ tydzień wcześniej
               </button>
-              <button className="btn h-[22px]" disabled={monday >= mondayOf(fleet.today)} onClick={() => setMonday(addDays(monday, 7))}>
+              <button className="btn h-[22px]" disabled={monday >= due} onClick={() => setMonday(addDays(monday, 7))} data-testid="reports-watch-next">
                 później ›
               </button>
               {monday !== due && (
@@ -186,6 +191,14 @@ function WatchReport() {
                 <span className="label pb-0.5">Kategorie tygodnia</span>
                 {w.categories.slice(0, 6).map((c) => (
                   <Line key={c.id} label={c.id === 'cargo' ? CARGO_LABEL : c.id === '-' ? 'bez kategorii' : cats.label(c.id)} value={zl(c.cost)} />
+                ))}
+              </div>
+            )}
+            {covers.length > 0 && (
+              <div className="flex flex-col border-t border-line pt-1.5" data-testid="reports-watch-covers">
+                <span className="label pb-0.5">Pokrycia przekroczonych kopert</span>
+                {covers.map((c, i) => (
+                  <Line key={i} label={`${plDate(c.date).slice(0, 5)} ${cats.label(c.to)} z koperty ${cats.label(c.from)}`} value={`${zl(c.amount)} limitu`} />
                 ))}
               </div>
             )}
@@ -248,7 +261,7 @@ function useDebrief(month: string) {
     return {
       brief,
       log,
-      fuel: fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths),
+      fuel: fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today),
       plan: planFor(plans, month),
       game: {
         ok: days.filter((d) => d.status === 'ok').length,
@@ -273,14 +286,18 @@ function DebriefReport() {
   const b = d.brief
   // AP-31: the shields and the hull at the end of the 12 months up to this one (a month running – up to the one before).
   const cushion = useCushion(addMonths(month, 1))
-  // The split as the engine made it (B10): the loot now, a late import included.
+  // The split as the engine made it (B10): the loot now, a late import included – and said, when it changed after the
+  // decision (AP-24, RY sp. 3), as the month's plan says it.
   const loot = lootApplied(fleet.log, month)
+  const changed = lootChange(d.plan?.month === month ? d.plan.loot : null, loot)
   const sections = (money: (g: number) => string, label: (id: string) => string): ReportSection[] => [
     {
       title: 'Wynik wobec planu',
       lines: [
         ['Pensja od siebie', b.salary == null ? '—' : money(b.salary)],
         ['Koszty netto', money(b.costs)],
+        // The month counted up to today (AP-36): operations dated later apart, never in the costs.
+        ...(b.planned ? ([[PLANNED_LABEL, money(b.planned)]] as Array<[string, string]>) : []),
         [CARGO_LABEL, money(b.cargo)],
         // The parts of the costs without an envelope (N25): the rows add up to the net costs with the envelopes below.
         ...(b.outside.length ? ([['Bez koperty', `${money(sum(b.outside.map((o) => o.spent)))} (${b.outside.map((o) => label(o.categoryId)).join(', ')})`]] as Array<[string, string]>) : []),
@@ -294,12 +311,15 @@ function DebriefReport() {
               ['Wydane z energii (i ponad nią z osłon)', money(b.energy.used)]
             ] as Array<[string, string]>)
           : []),
-        // F25: what the month added to the ship and its savings rate beside the median of the 6 months before.
+        // F25: what the month added to the ship and its savings rate beside the median of the 6 months before – a month in
+        // progress has no balance yet (AP-24, RY sp. 6: before the salary from work it is only a minus).
         ...(d.fuel.month
-          ? ([
-              ['Bilans paliwa (przychód − koszty netto)', signed(money, d.fuel.month.balance)],
-              ['Stopa oszczędności', `${rateText(d.fuel.month.rate)}${d.fuel.median6 != null ? ` (mediana 6 mies.: ${rateText(d.fuel.median6)})` : ''}`]
-            ] as Array<[string, string]>)
+          ? !b.ended
+            ? ([['Bilans paliwa (przychód − koszty netto)', 'miesiąc trwa – wynik po jego końcu']] as Array<[string, string]>)
+            : ([
+                ['Bilans paliwa (przychód − koszty netto)', signed(money, d.fuel.month.balance)],
+                ['Stopa oszczędności', `${rateText(d.fuel.month.rate)}${d.fuel.median6 != null ? ` (mediana 6 mies.: ${rateText(d.fuel.median6)})` : ''}`]
+              ] as Array<[string, string]>)
           : []),
         // A month in progress is never „na plus” yet (N65).
         ['Miesiąc zamknięty na plus', !b.ended ? 'miesiąc trwa' : b.plus == null ? '—' : b.plus ? 'tak' : 'nie'],
@@ -346,7 +366,10 @@ function DebriefReport() {
               ['Na następny miesiąc', money(loot.nextMonth)],
               ['Do celów', money(loot.goals)],
               ['Do osłon', money(loot.shields)]
-            ] as Array<[string, string]>
+            ] as Array<[string, string]>,
+            ...(changed
+              ? { text: `Łupy zmieniły się po decyzji (było ${money(changed.decided)}, jest ${money(changed.now)} – późniejszy import operacji miesiąca): podział przeliczony – cele, następny miesiąc, reszta do osłon.` }
+              : {})
           }
         ]
       : [])
@@ -428,8 +451,14 @@ function YearReport() {
   const thisYear = fleet.today.slice(0, 4)
   // In January the review of the year just closed (spec).
   const [year, setYear] = useState(() => (fleet.today.slice(5, 7) === '01' ? String(Number(thisYear) - 1) : thisYear))
-  const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.incomeContext), [transactions, settings, year, fleet.incomeContext])
+  const y = useMemo(() => yearNumbers(transactions, settings.categories, year, fleet.incomeContext, fleet.today), [transactions, settings, year, fleet.incomeContext, fleet.today])
   const today = fleet.today
+  // The year's months with history only (AP-24, R-19): before the data's first day – „brak historii”, never 0,00 zł.
+  const span = useMemo(() => yearSpan(transactions, balances, year, today), [transactions, balances, year, today])
+  // „Zaplanowane” beside the months shown (AP-36, T421) when one of them has operations dated after today – a later
+  // month's are in the year's line „Zaplanowane”.
+  const plannedShown = y.months.some((m) => m.planned > 0 && span.months.includes(m.month))
+  const goalRecords = useRecordList('goals')
   const wealth = useMemo(() => yearWealth(transactions, balances, settings.accounts.map((a) => a.id), year, today), [transactions, balances, settings, year, today])
   // F24: „Siła floty netto” at both ends – the loans' open amounts and the household's balance beside the accounts.
   const loans = useRecordList('loans')
@@ -440,7 +469,10 @@ function YearReport() {
     return { start: wealth.start + adj[0]!, end: wealth.end + adj[1]! }
   }, [wealth, year, today, loans, transactions, containers, fleet.household])
   const achievements = (game?.input.game ?? []).flatMap((g) => g.achievements).filter((a) => (a.day ?? '').startsWith(year) && (ACHIEVEMENTS as readonly string[]).includes(a.id))
-  const reached = goalsReachedIn(fleet.log, fleet.goals, year)
+  // Every goal reached in the year – archived since, or marked achieved, too (RY sp. 5).
+  const reached = goalsReachedIn(fleet.log, goalRecords, year, (iso) => warsawNow(iso).date)
+  const endLabel = `${year}-12-31` < today ? '31.12' : 'dziś'
+  const startLabel = span.startsOn ? `${span.startsOn.opening ? 'saldo otwarcia' : 'początek historii'} ${plDate(span.startsOn.date)}` : '31.12 roku wcześniej'
   // AP-31: the year's months that ended – the shields and the hull at each one's end.
   const cushion = useCushion(`${Number(year) + 1}-01`)
   const sections = (money: (g: number) => string): ReportSection[] => [
@@ -448,13 +480,16 @@ function YearReport() {
       title: 'Rok w liczbach',
       lines: [
         ['Koszty netto', money(y.costs)],
+        // The year counted up to today (AP-36): operations dated later apart, never in the costs.
+        ...(y.planned ? ([[PLANNED_LABEL, money(y.planned)]] as Array<[string, string]>) : []),
         ['Sfinansowane przez domowników', financedText(y.financed, money, settings.household.members)],
         ['Przychody', money(y.income)],
         // The sum of the accounts' balances (T81, N63) – borrowed money and the household's advances in it.
-        ['Pieniądze na kontach na początku (31.12 roku wcześniej)', money(wealth.start)],
-        [`Pieniądze na kontach na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(wealth.end)],
-        ['Siła floty netto na początku (z należnościami, bez długu)', money(net.start)],
-        [`Siła floty netto na końcu (${`${year}-12-31` < today ? '31.12' : 'dziś'})`, money(net.end)],
+        [`Pieniądze na kontach na początku (${startLabel})`, money(wealth.start)],
+        [`Pieniądze na kontach na końcu (${endLabel})`, money(wealth.end)],
+        // Net of the debt (RY sp. 5): „bez długu” read as „the debt left out”.
+        [`Siła floty netto na początku (${startLabel}; z należnościami, po odjęciu długu)`, money(net.start)],
+        [`Siła floty netto na końcu (${endLabel})`, money(net.end)],
         // F25: what the year added to the ship.
         ['Bilans paliwa roku (przychody − koszty netto)', `${signed(money, y.income - y.costs)} · stopa oszczędności ${rateText(savingsRate(y.income - y.costs, y.income))}`],
         ['Zasięg teraz', fleet.range == null ? '—' : `${rangeText(fleet.range)}${fleet.shipClass ? ` (${SHIP_CLASS_LABEL[fleet.shipClass]})` : ''}`]
@@ -462,7 +497,15 @@ function YearReport() {
     },
     {
       title: 'Miesiące',
-      table: { head: ['Miesiąc', 'Koszty', 'Przychody'], rows: y.months.map((m) => [monthLabel(m.month), money(m.costs), money(m.income)]), numeric: [1, 2] },
+      // The months with history only (AP-24, T449), „Zaplanowane” apart (AP-36, T421).
+      table: {
+        head: ['Miesiąc', 'Koszty', 'Przychody', ...(plannedShown ? ['Zaplanowane'] : [])],
+        rows: [
+          ...(span.before.length ? [[span.before.length > 1 ? `${monthLabel(span.before[0]!)} – ${monthLabel(span.before.at(-1)!)}` : monthLabel(span.before[0]!), 'brak historii', '—', ...(plannedShown ? ['—'] : [])]] : []),
+          ...y.months.filter((m) => span.months.includes(m.month)).map((m) => [monthLabel(m.month), money(m.costs), money(m.income), ...(plannedShown ? [m.planned ? money(m.planned) : '—'] : [])])
+        ],
+        numeric: plannedShown ? [1, 2, 3] : [1, 2]
+      },
       // Why the months do not add up to the year's income (N66, T119).
       text: 'Trading netto liczony w każdym miesiącu osobno (dopłaty do XTB nie schodzą poniżej zera); przychody roku nettują dopłaty z całego roku. Pieniądze na kontach to suma sald – z pożyczonymi i depozytem domowników.'
     },
@@ -492,7 +535,7 @@ function YearReport() {
         }
       >
         <div className="flex flex-col gap-2 text-[12px]">
-          <select className="input h-[24px] self-start" value={year} onChange={(e) => setYear(e.currentTarget.value)} aria-label="Rok przeglądu">
+          <select className="input h-[24px] self-start" value={year} onChange={(e) => setYear(e.currentTarget.value)} aria-label="Rok przeglądu" data-testid="reports-year-select">
             {years.map((x) => (
               <option key={x} value={x}>
                 {x}
@@ -514,17 +557,24 @@ function ExportPanel() {
   const transactions = useRecordList('transactions')
   const plans = useRecordList('months')
   const containers = useRecordList('containers')
-  const [from, setFrom] = useState(`${fleet.today.slice(0, 4)}-01-01`)
-  const [to, setTo] = useState(fleet.today)
+  // The period as last chosen on this computer (AP-29): another tab, a restart keep it.
+  const [period, setPeriod] = useState(() => readExportPeriod(fleet.today))
+  const { from, to } = period
+  const choose = (next: { from: string; to: string }) => {
+    setPeriod(next)
+    storeExportPeriod(next.from, next.to, fleet.today)
+  }
   const ops = () => operationRows(transactions, settings.categories, settings.accounts, from, to, settings.household.members)
+  // The operations' lines (AP-29) in the order of „Operacje” – the same operations, so „Nr operacji” is its row.
+  const parts = () => partRowsOf(operationsOfPeriod(transactions, from, to), settings.categories, settings.accounts, settings.household.members)
   const months = () =>
     monthRows({ transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today, income: fleet.incomeContext }, monthRange(monthOf(from), monthOf(to) > fleet.month ? fleet.month : monthOf(to)))
   const name = (what: string, ext: string) => `financial-intel_${what}_${from}_${to}.${ext}`
-  // „Od” after „do” swap with a word (AP-15, AF-36): a range read backwards is no empty file with „Zapisano”.
+  // „Od” after „do” swap with a word (AP-15, AF-36): a range read backwards is no empty file with „Zapisano”. Both ends
+  // at once (AP-29 keeps the period): one after the other, the second would write the first one's end as it was.
   const setEnds = (nextFrom: string, nextTo: string) => {
     const r = orderRange(nextFrom, nextTo)
-    setFrom(r.from!)
-    setTo(r.to!)
+    choose({ from: r.from!, to: r.to! })
     if (r.swapped) toast(swappedText('daty', plDate(r.from!), plDate(r.to!)), 'info', 6000)
   }
   // Nothing in the period: said, no empty file (RE sp. 5). The rows counted once – the same ones written.
@@ -545,19 +595,28 @@ function ExportPanel() {
             <button className="btn h-[26px]" onClick={() => save(some(ops()), NO_OPERATIONS, (rows) => api.saveTextFile(name('operacje', 'csv'), operationsCsv(rows), csv))} data-testid="export-operations-csv">
               Operacje – CSV
             </button>
+            <button
+              className="btn h-[26px]"
+              onClick={() => save(some(parts()), NO_OPERATIONS, (rows) => api.saveTextFile(name('czesci', 'csv'), partsCsv(rows), csv))}
+              title="Każda część paragonu i wspólnego zakupu osobno, z kwotą i kategorią – operacja bez części jako jeden wiersz"
+              data-testid="export-parts-csv"
+            >
+              Części – CSV
+            </button>
             <button className="btn h-[26px]" onClick={() => save(some(months()), NO_MONTHS, (rows) => api.saveTextFile(name('miesiace', 'csv'), monthsCsv(rows), csv))} data-testid="export-months-csv">
               Miesiące – CSV
             </button>
-            <button className="btn h-[26px]" onClick={() => save(budgetWorkbook(ops(), months()), NO_DATA, (sheets) => api.saveXlsx(name('budzet', 'xlsx'), sheets))} data-testid="export-xlsx">
-              Excel (operacje + miesiące)
+            <button className="btn h-[26px]" onClick={() => save(budgetWorkbook(ops(), months(), parts()), NO_DATA, (sheets) => api.saveXlsx(name('budzet', 'xlsx'), sheets))} data-testid="export-xlsx">
+              Excel (operacje + części + miesiące)
             </button>
             <button className="btn h-[26px]" onClick={() => api.exportZip().then(saved, failed)} data-testid="export-zip">
               Pełna kopia danych – ZIP
             </button>
           </div>
           <span className="text-[11px] text-dim">
-            Pliki zawsze z prawdziwymi kwotami – ukrycie kwot (Ctrl+$) dotyczy tylko ekranu. CSV dla polskiego Excela (średnik, przecinek dziesiętny). Debriefing i
-            przegląd roczny jako PDF – w ich zakładkach.
+            Pliki zawsze z prawdziwymi kwotami – ukrycie kwot (Ctrl+$) dotyczy tylko ekranu. CSV dla polskiego Excela (średnik, przecinek dziesiętny). „Części” – wiersz na
+            każdą część paragonu (suma części = kwota operacji), do sumowania kategorii. Okres zapamiętany na tym komputerze. Debriefing i przegląd roczny jako PDF – w
+            ich zakładkach.
           </span>
         </div>
       </Panel>

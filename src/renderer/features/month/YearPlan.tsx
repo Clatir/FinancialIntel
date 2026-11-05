@@ -104,7 +104,7 @@ export function YearPlanPanel({ year, today, readOnly, onYear, onMonth }: { year
 }
 
 function Cell({ row, cell, name, readOnly }: { row: YearRow; cell: YearCell; name: string; readOnly: boolean }) {
-  const title = `${monthLabel(cell.month)}${cell.extra ? ` · limit w miesiącu ${zl(Math.max(0, (cell.limit ?? 0) + cell.extra))} (w tym ${cell.extra > 0 ? '+' : '−'}${zl(Math.abs(cell.extra))} zapasu i pokryć)` : ''} · rok wcześniej: ${zl(cell.yearAgo)}`
+  const title = `${monthLabel(cell.month)}${cell.extra ? ` · limit w miesiącu ${zl(Math.max(0, (cell.limit ?? 0) + cell.extra))} (w tym ${cell.extra > 0 ? '+' : '−'}${zl(Math.abs(cell.extra))} zapasu i pokryć)` : ''} · rok wcześniej: ${cell.yearAgo == null ? '— (przed historią)' : zl(cell.yearAgo)}`
   const set = (v: number | null) => (row.id === 'salary' ? setSalary(cell.month, v ?? 0) : setEnvelope(cell.month, row.id, v))
   return (
     <td className="group px-0.5 py-1 text-right align-top" title={title} data-testid="year-cell" data-month={cell.month} data-own={cell.own || undefined} data-over={cell.over || undefined}>

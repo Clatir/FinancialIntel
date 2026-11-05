@@ -23,7 +23,7 @@ import { queryAmount } from '../operationsView'
 import { HOUSE_MEMBER_ID, type ImportRule } from '../schema/budget'
 import { transactionSchema, type BankRow, type Share, type Split, type Transaction } from '../schema/records'
 import { SCHEMA_VERSION } from '../schema/common'
-import { classifyRow, counterpartyKey, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
+import { classifyRow, counterpartyKey, isAtmOperation, isCashExpenseRule, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
 import { accountNumberOf, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
@@ -306,6 +306,8 @@ export interface ImportPlan {
   /** Pending operations of the file's period the file does not have any more. */
   vanished: Transaction[]
   period: { from: string; to: string } | null
+  /** The cash account an ATM withdrawal went onto (AP-33, `ClassifyContext.cash`); none – an expense „Gotówka”. */
+  cash?: string | null
 }
 
 /**
@@ -725,8 +727,10 @@ export function planImport(
     plans[c.i] = { status: 'merge', row, key: keys[c.i]!, tx: c.tx, loose: c.exact ? 'name' : 'amount', ask: !looseSure(c, row.operation) }
   }
 
-  // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is).
-  const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, ctx)))
+  // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is). The cash
+  // is another account than the file's (AP-33): never a transfer onto itself.
+  const classifyCtx = ctx.cash && ctx.cash.id === accountId ? { ...ctx, cash: null } : ctx
+  const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, classifyCtx)))
   shareMerged(classified, file.rows)
   const plannedOf = (i: number): Planned => {
     const { decision, hint, brand, direction, target } = classified[i]!
@@ -746,7 +750,7 @@ export function planImport(
   // A transfer's other side gone from the list (F10) is not offered: removing it would take the transfer's other side too.
   const vanished =
     period && file.format === 'lista' ? budget.pending.filter((t) => !used.has(t.id) && !locked(t) && !isSideView(t) && t.date >= period.from && t.date <= period.to) : []
-  return { accountId, format: file.format, rows, vanished, period }
+  return { accountId, format: file.format, rows, vanished, period, cash: classifyCtx.cash?.id ?? null }
 }
 
 /** Keys of a row (`altKeys`) with more of them, each once, the last 20. */
@@ -812,6 +816,16 @@ export function opKindOf(operation: string): OpKind {
   if (/^(PRZELEW|BLIK P2P|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|PRZEKAZ|OBCIĄŻENIE|OBCIAZENIE)/.test(operation)) return 'transfer'
   if (isFeeOperation(operation)) return 'fee'
   return 'other'
+}
+
+/**
+ * The words the import's search finds a type of operation by (AP-34, IM sp. 9): the bank writes it inflected
+ * („WYPŁATA W BANKOMACIE” – no „bankomat” in it), one searches by its name.
+ */
+function kindWords(operation: string): string {
+  if (isAtmOperation(operation)) return 'bankomat wypłata gotówka gotówki'
+  const kind = opKindOf(operation)
+  return kind === 'card' ? 'karta kartą zakup' : kind === 'transfer' ? 'przelew' : kind === 'fee' ? 'opłata opłaty banku prowizja' : ''
 }
 
 /**
@@ -897,7 +911,10 @@ export function importGroups(plan: ImportPlan | null, restored: Readonly<Record<
       if (p.hint) hints.set(`${p.hint}|${p.row.category}`, (hints.get(`${p.hint}|${p.row.category}`) ?? 0) + 1)
     }
     const most = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null
-    const [hint, bankCategory] = (most(hints)?.split('|') ?? [null, '']) as [string | null, string]
+    // A bank's fee is never a hint's (AP-34, IM.19): mBank names its category („Opłaty i odsetki”), the theme is „Opłaty
+    // banku” – the fee waits there without a category, never with the courses of one bank's category.
+    const fee = opKindOf(first.row.operation) === 'fee'
+    const [hint, bankCategory] = (fee ? [null, ''] : (most(hints)?.split('|') ?? [null, ''])) as [string | null, string]
     const source = weakest.decision.source
     const dates = rows.map((p) => p.row.date).sort()
     out.push({
@@ -918,7 +935,13 @@ export function importGroups(plan: ImportPlan | null, restored: Readonly<Record<
       byTitle: first.decision.byTitle,
       hint,
       bankCategory,
-      theme: byProposal(source, first.decision) ? `${first.direction}|=${proposalSig(first.decision)}` : hint ? `${first.direction}|hint:${hint}` : `${first.direction}|op:${opKindOf(first.row.operation)}`
+      // A hint's theme is one category of the bank (AP-34, IM sp. 5): „Edukacja” and „Opłaty i odsetki” hinting the same
+      // category are two themes – „Przyjmij podpowiedzi” never gives one category to what the bank tells apart.
+      theme: byProposal(source, first.decision)
+        ? `${first.direction}|=${proposalSig(first.decision)}`
+        : hint
+          ? `${first.direction}|hint:${hint}|${bankCategory}`
+          : `${first.direction}|op:${opKindOf(first.row.operation)}`
     })
   }
   return out.sort((a, b) => b.rows.length - a.rows.length || a.label.localeCompare(b.label))
@@ -973,7 +996,8 @@ export function searchGroups(groups: readonly ImportGroup[], query: string, labe
     const rows = g.rows.filter((p) => {
       if (amount != null && Math.abs(p.row.amount) === amount) return true
       const d = p.row.date
-      return has(`${groupText} \u0001 ${fold([p.row.description, p.row.title, p.row.category, `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`].join(' \u0001 '))}`)
+      // The type of operation too (AP-34, IM sp. 9): as written and by its name – „bankomat” finds „WYPŁATA W BANKOMACIE”.
+      return has(`${groupText} \u0001 ${fold([p.row.description, p.row.title, p.row.category, p.row.operation, kindWords(p.row.operation), `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`].join(' \u0001 '))}`)
     })
     if (rows.length) out.set(g.group, rows.length === g.rows.length ? 'all' : rows)
   }
@@ -1617,6 +1641,9 @@ export function buildImport(
     const c = own ?? choices.themes[g.theme]
     const imported = g.rows.filter((p) => !choices.skip[p.key]).length
     if (!c || !g.brand || g.byTitle || !imported || !learnable(c, g.direction)) continue
+    // An ATM withdrawal as the expense „Gotówka” while the budget has its cash account (AP-33, T422): the rule would give
+    // way to the own transfer at the next import – none learned.
+    if (plan.cash && isCashExpenseRule(c) && g.rows.every((p) => isAtmOperation(p.row.operation))) continue
     if (!(own ? choices.remember[g.group] : choices.rememberThemes[g.theme])) continue
     if ((g.source === 'rule' || g.source === 'builtin') && sameChoice(c, g.proposed)) continue
     const rule = amountRuleOf(g)

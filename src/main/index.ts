@@ -14,8 +14,8 @@ import { COLLECTIONS, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
-import { ConfigStore, publicConfig } from './config'
-import { ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError } from './datastore/store'
+import { ConfigStore, backupDirsAfter, changeTray, earlierBackupDirsOf, publicConfig, type TrayPatch } from './config'
+import { ConflictChangedError, ConflictCopyError, DataStore, RemovedOutsideError, SettingsFileError, type ConflictVersions } from './datastore/store'
 import { FolderWatcher, RefreshQueue } from './datastore/watch'
 import { IN_USE_MS, PresenceKeeper, readOtherMachines } from './datastore/presence'
 import { initLog, log } from './log'
@@ -29,7 +29,7 @@ import type { XlsxSheet } from '@shared/export/xlsx'
 import { Updater } from './update/updater'
 import { startPortableSwap, startSilentInstaller } from './update/apply'
 import { setupDetach } from './detach'
-import { AppTray, HIDDEN_ARG, applyLoginItem } from './tray'
+import { AppTray, HIDDEN_ARG, applyLoginItem, loginState } from './tray'
 import { QuickEntry } from './quick'
 import { isZoomKey, patchMachinePrefs, zoomByKey, type MachinePrefs } from '@shared/machine'
 import { windowBounds } from '@shared/bounds'
@@ -191,8 +191,12 @@ function appTray(): AppTray {
 }
 
 /** Tray settings as the window shows them. */
-function trayView(): TrayPrefs & { loginSupported: boolean } {
-  return { ...config.get().tray, loginSupported: app.isPackaged && (process.platform === 'win32' || process.platform === 'darwin') }
+/**
+ * The tray of this computer for the window; `loginEntry` – the start with the system as the system has it, `loginDisabled`
+ * – its entry turned off in Task Manager (T433).
+ */
+function trayView(): TrayPrefs & { loginSupported: boolean; loginEntry: boolean | null; loginDisabled: boolean } {
+  return { ...config.get().tray, loginSupported: app.isPackaged && (process.platform === 'win32' || process.platform === 'darwin'), ...loginState() }
 }
 
 /**
@@ -226,7 +230,10 @@ function updateTokenState(): UpdateTokenState {
   return { present: !!token, hint: token ? `…${token.slice(-4)}` : null, encrypted: config.get().updates.tokenEncrypted }
 }
 
-/** Saves (or removes) the GitHub token of this computer, encrypted when the system allows it. */
+/**
+ * Saves (or removes) the GitHub token of this computer, encrypted when the system allows it. Only once saved
+ * (`ONLY_ONCE_SAVED`, AP-28): config.json refused takes it back and says so – the token panel and the next start agree.
+ */
 async function saveUpdateToken(token: string | null): Promise<void> {
   const value = typeof token === 'string' ? token.trim() : ''
   if (value && !validUpdateToken(value)) throw new Error('Token GitHub ma niepoprawny format (litery, cyfry i „_”, np. github_pat_…).')
@@ -363,6 +370,25 @@ function send(change: ChangeSet | null): void {
 /** A write's changes, only while its folder is still the open one: the window never gets the previous folder's records (B31). */
 function sendFrom(s: DataStore, change: ChangeSet | null): void {
   if (s === store) send(change)
+}
+
+/** The versions of a conflict the window decided on (its two files' `mtimeMs`); anything else – none. */
+function conflictVersions(seen: unknown): ConflictVersions | undefined {
+  const sides = seen && typeof seen === 'object' ? (seen as { canonical?: unknown; copy?: unknown }) : {}
+  return typeof sides.canonical === 'number' && typeof sides.copy === 'number' ? { canonical: sides.canonical, copy: sides.copy } : undefined
+}
+
+/** A conflict decided: a side changed meanwhile (AP-27) refuses – the window gets the versions as they are now. */
+async function conflictDecision(s: DataStore, decide: () => Promise<ChangeSet | null>): Promise<void> {
+  try {
+    sendFrom(s, await decide())
+  } catch (e) {
+    if (e instanceof ConflictChangedError) {
+      log('info', `konflikt: wersja zmieniła się od pokazanej – decyzja odrzucona (${e.detail})`)
+      sendFrom(s, e.change)
+    }
+    throw e
+  }
 }
 
 async function trash(absPath: string): Promise<void> {
@@ -598,9 +624,16 @@ const sameDir = (a: string, b: string): boolean => {
 /** This computer's data folder now or before (B53): found empty or missing, it gets no new data unasked. */
 const rememberedDir = (dir: string): boolean => [config.get().dataDir, ...config.get().recentDirs].some((d) => !!d && sameDir(d, dir))
 
-/** A backup of the list (F3): only a ZIP the backups folder holds is read. */
+/** The folders of backups this data folder used before the current one (AP-28): their backups listed too. */
+function earlierBackupDirs(s: DataStore): string[] {
+  return earlierBackupDirsOf(config.get().backupDirsBefore ?? [], s.root, s.backupsDir, sameDir)
+}
+
+/** A backup of the list (F3): only a ZIP a folder of the list holds is read. */
 async function listedBackup(s: DataStore, path: string): Promise<BackupInfo> {
-  const listed = (await listBackups(s.backupsDir)).find((f) => f.path === path)
+  let listed: BackupInfo | undefined
+  // Only a backup on the list – of the current folder of backups or of one used before (AP-28) – is ever read.
+  for (const dir of [s.backupsDir, ...earlierBackupDirs(s)]) if (!listed) listed = (await listBackups(dir)).find((f) => f.path === path)
   if (!listed) throw new Error('Tej kopii nie ma już na liście kopii (mogła zostać usunięta) – odśwież listę.')
   return listed
 }
@@ -670,10 +703,22 @@ async function openFolder(dir: string, createIfEmpty: boolean, force = false): P
       return { ok: false, reason: 'not-data', problem: 'ictj', message: 'To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder.' }
     }
     // A folder of other files gets a FinancialIntel subfolder – not the proposal itself (already named so) and not a
-    // folder of FI data whose fi.json has not arrived yet.
+    // folder of FI data whose fi.json has not arrived yet. Its data there opens; new data – only after the question
+    // (AP-25, AF-53: never a subfolder made without a word – the button „Utwórz podfolder FinancialIntel”).
     if (kind === 'other' && createIfEmpty && basename(dir) !== DATA_FOLDER_NAME) {
-      target = join(dir, DATA_FOLDER_NAME)
-      kind = await untilAborted(DataStore.inspect(target), signal)
+      const sub = join(dir, DATA_FOLDER_NAME)
+      const subKind = await untilAborted(DataStore.inspect(sub), signal)
+      if (subKind === 'missing' || subKind === 'empty')
+        return {
+          ok: false,
+          reason: 'not-data',
+          dir,
+          problem: kind,
+          subfolder: sub,
+          message: `W tym folderze są inne pliki – nowe dane Financial Intel nie powstaną obok nich. Można utworzyć w nim podfolder „${DATA_FOLDER_NAME}”.`
+        }
+      target = sub
+      kind = subKind
     }
     if (kind === 'partial' || (kind === 'other' && createIfEmpty)) {
       return {
@@ -1026,20 +1071,19 @@ function registerIpc(): void {
     sendFrom(s, change)
     return saved
   })
-  handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy') => {
+  handle('resolveConflict', async (id: string, keep: 'canonical' | 'copy', seen?: unknown) => {
     const s = writableStore()
-    sendFrom(s, await s.resolveConflict(id, keep))
+    await conflictDecision(s, () => s.resolveConflict(id, keep, conflictVersions(seen)))
   })
   handle('mergeConflict', async (id: string, merged: unknown, seen?: unknown) => {
     const s = writableStore()
-    const sides = seen && typeof seen === 'object' ? (seen as { canonical?: unknown; copy?: unknown }) : {}
-    const asOf = typeof sides.canonical === 'number' && typeof sides.copy === 'number' ? { canonical: sides.canonical, copy: sides.copy } : undefined
-    sendFrom(s, await s.mergeConflict(id, merged, asOf))
+    await conflictDecision(s, () => s.mergeConflict(id, merged, conflictVersions(seen)))
   })
-  handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string }>) => {
+  handle('resolveConflicts', async (items: Array<{ id: string; keep: 'canonical' | 'copy'; group?: string; seen?: unknown }>) => {
     const s = writableStore()
-    const { results, change } = await s.resolveConflicts(items)
-    sendFrom(s, change)
+    // Each with the versions the window showed (AP-27, T431): a side changed since refuses that decision.
+    const { results, changes } = await s.resolveConflicts((Array.isArray(items) ? items : []).map((i) => ({ id: i.id, keep: i.keep, group: i.group, asOf: conflictVersions(i.seen) })))
+    for (const change of changes) sendFrom(s, change)
     return results
   })
   handle('trashProblemFile', async (rel: string) => {
@@ -1062,22 +1106,17 @@ function registerIpc(): void {
     if (err) throw new Error(err)
   })
   handle('trayPrefs', () => trayView())
-  handle('setTrayPrefs', async (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>) => {
-    const cur = config.get().tray
-    const next: TrayPrefs = {
-      ...cur,
-      ...(typeof patch?.closeToTray === 'boolean' ? { closeToTray: patch.closeToTray } : {}),
-      // The start with Windows set or answered here: chosen on this computer, never asked again (N100).
-      ...(typeof patch?.launchAtLogin === 'boolean' ? { launchAtLogin: patch.launchAtLogin, autostartAsked: true } : {}),
-      ...(patch?.autostartAsked === true ? { autostartAsked: true } : {})
-    }
-    await config.update({ tray: next })
-    const view = trayView()
-    applyLoginItem(view, log)
-    if (view.closeToTray) appTray().ensure()
-    else tray?.destroy()
-    log('info', `zasobnik: zamykaj do zasobnika ${view.closeToTray ? 'tak' : 'nie'}, z systemem ${next.launchAtLogin ? 'tak' : 'nie'}`)
-    return view
+  handle('setTrayPrefs', async (patch: TrayPatch | undefined) => {
+    // In effect before config.json's write (AP-28): a refused write (retried – US.33) never leaves the system's entry
+    // other than the setting the window shows.
+    await changeTray(config, patch, (next, login) => {
+      // Only the setting chosen here writes the system's entry (AP-28, T433): the tray's switch or „zapytano” leaves it alone.
+      if (login) applyLoginItem(next, log, true)
+      if (next.closeToTray) appTray().ensure()
+      else tray?.destroy()
+      log('info', `zasobnik: zamykaj do zasobnika ${next.closeToTray ? 'tak' : 'nie'}, z systemem ${next.launchAtLogin ? 'tak' : 'nie'}`)
+    })
+    return trayView()
   })
   handle('openLogs', async () => {
     const dir = join(app.getPath('userData'), 'logs')
@@ -1125,7 +1164,12 @@ function registerIpc(): void {
   })
   handle('listBackups', async () => {
     const s = requireStore()
-    return { dir: s.backupsDir, files: await listBackups(s.backupsDir), failure: backupFailure?.dir === s.backupsDir ? backupFailure : null }
+    const earlier: Array<{ dir: string; files: BackupInfo[] }> = []
+    for (const dir of earlierBackupDirs(s)) {
+      const files = await listBackups(dir)
+      if (files.length) earlier.push({ dir, files })
+    }
+    return { dir: s.backupsDir, files: await listBackups(s.backupsDir), failure: backupFailure?.dir === s.backupsDir ? backupFailure : null, earlier }
   })
   handle('backupNow', async () => {
     const s = requireStore()
@@ -1219,8 +1263,19 @@ function registerIpc(): void {
       // Financial Intel never writes in ICT Trade Journal's data folder (B121) – its backups neither.
       if ((await DataStore.inspect(dir)) === 'ictj' || (await insideIctj(dir))) throw new Error('To folder danych ICT Trade Journal – Financial Intel nigdy w nim nie zapisuje. Wybierz inny folder na kopie.')
     }
-    await config.update({ backupDirOverride: dir })
+    const before = s.backupsDir
+    const overrideBefore = config.get().backupDirOverride
     s.setBackupDir(dir)
+    // The backups made so far stay listed under the folder they are in (AP-28, DA.14) – never „Brak kopii.” after a change.
+    const backupDirsBefore = backupDirsAfter(config.get().backupDirsBefore ?? [], s.root, before, s.backupsDir, sameDir)
+    try {
+      // Taken back in memory too (AP-28, `ONLY_ONCE_SAVED`): the retried write never makes it the folder after a restart.
+      await config.update({ backupDirOverride: dir, backupDirsBefore })
+    } catch (e) {
+      // Not remembered on this computer: the backups stay where they were.
+      s.setBackupDir(overrideBefore)
+      throw e
+    }
     return s.backupsDir
   })
   handle('showPath', async (abs: string) => {
@@ -1283,12 +1338,15 @@ function registerIpc(): void {
       if (kind === 'data') throw new Error('To folder danych Financial Intel – wskaż folder ICT Trade Journal.')
       if (kind !== 'ictj') throw new Error('W tym folderze nie ma danych ICT Trade Journal (brak pliku journal.json).')
     }
+    // Remembered first (`ONLY_ONCE_SAVED`, AP-28): a refused write of config.json takes it back and says so – the folder
+    // read stays the one the screen and the next start have.
     await config.update({ ictj: { ...config.get().ictj, dir: next } })
     log('info', `ICTTJ: folder ${next ? 'wybrany' : 'wyłączony'}`)
     return ictjSource().setDir(next)
   })
   handle('ictjProgram', () => findIctjExe(config.get().ictj.exe))
   handle('ictjPickExe', async (mode: 'pick' | 'clear') => {
+    // As the folder: a refused write takes the program back (`ONLY_ONCE_SAVED`) – the screen keeps the one remembered.
     if (mode === 'clear') await config.update({ ictj: { ...config.get().ictj, exe: null } })
     else {
       const res = await dialog.showOpenDialog(mainWindow!, {
@@ -1683,7 +1741,7 @@ function retryConfig(): void {
       if (config.loadFailed) return
       clearInterval(timer)
       log('info', 'config.json odczytany ponownie – ustawienia tego komputera wczytane')
-      applyLoginItem(trayView(), log)
+      applyLoginItem(trayView(), log, false)
       if (config.get().tray.closeToTray) appTray().ensure()
       else tray?.destroy()
       quick?.applyShortcut(config.get().prefs.quickShortcut)
@@ -1716,8 +1774,9 @@ app.whenReady().then(async () => {
   registerIpc()
   void ictjSource().setDir(ictjDirOf())
   watchBankFiles()
-  // The autostart only from a config.json read (B114): defaults in its place would remove the entry.
-  if (!config.loadFailed) applyLoginItem(trayView(), log)
+  // The autostart only from a config.json read (B114); a start never removes an entry, of any copy (AP-28, 03.11.2026;
+  // T433 – „off” may be the defaults of a broken or missing config.json).
+  if (!config.loadFailed) applyLoginItem(trayView(), log, false)
   // The tray icon is there from the start while closing hides to it: the app is reachable after the first close.
   if (config.get().tray.closeToTray) appTray().ensure()
   createWindow()

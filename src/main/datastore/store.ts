@@ -21,6 +21,7 @@ import {
   type FileKind
 } from '@shared/paths'
 import { sameContentAs } from '@shared/merge'
+import { CONFLICT_CHANGED_TEXT } from '@shared/conflicts'
 import { SCHEMAS, parseRecordObject, parseRecordText, serializeRecord, type AnyRecord, type RecordTypes } from '@shared/records'
 import { SCHEMA_VERSION, type SettingsFile } from '@shared/schema'
 import { atomicFailure, dataRootOf, mkdirWithin, pathExists, removeFile, sha1, withRetry, writeFileAtomic } from './atomic'
@@ -100,6 +101,22 @@ export class ConflictCopyError extends Error {
 }
 
 /**
+ * A conflict's file changed on the disk since the window showed it (AP-27, T431 – OneDrive brought a newer copy, a save
+ * of the record): the merge or the choice is refused, nothing is written or moved. `change` – the versions as they are
+ * now, for the window at once („Scal od nowa” on them).
+ */
+export class ConflictChangedError extends Error {
+  constructor(
+    readonly change: ChangeSet | null = null,
+    /** For the log: which side, the version shown and the one on the disk. */
+    readonly detail = ''
+  ) {
+    super(CONFLICT_CHANGED_TEXT)
+    this.name = 'ConflictChangedError'
+  }
+}
+
+/**
  * The record's file was removed from outside a moment before its write (B49): the write is refused, the window asks.
  * `change` – the removal as a change from outside, for the window at once (a later write's change would carry it as
  * this computer's own).
@@ -128,6 +145,12 @@ export class RemovedOutsideError extends Error {
 }
 
 type FileStat = { mtimeMs: number; size: number }
+
+/** The versions of a conflict's two files the window showed (their `mtimeMs`). */
+export interface ConflictVersions {
+  canonical: number
+  copy: number
+}
 
 /** One conflict of `resolveConflicts`: resolved, failed (why) or left as it is (`skipped`). */
 export type ConflictResult = { id: string; error?: string; skipped?: boolean }
@@ -1710,8 +1733,9 @@ export class DataStore {
   // ---------------------------------------------------------------- conflicts & problems
 
   /** One conflict resolved (`keep` = the version that stays): the change from inside the queue, no rescan (W23). */
-  resolveConflict(conflictId: string, keep: 'canonical' | 'copy'): Promise<ChangeSet | null> {
+  resolveConflict(conflictId: string, keep: 'canonical' | 'copy', asOf?: ConflictVersions): Promise<ChangeSet | null> {
     return this.writing(async () => {
+      await this.freshConflict(conflictId, asOf)
       const settingsWritten = await this.resolveOne(conflictId, keep)
       return this.diff(this.buildViews(), settingsWritten)
     })
@@ -1721,41 +1745,102 @@ export class DataStore {
    * A conflict merged field by field (N17): both versions go to the history, the merged one is written at the original's
    * path (the original's id), every other file of the pair to the bin – as keeping the copy, with the merged content.
    */
-  mergeConflict(conflictId: string, merged: unknown, asOf?: { canonical: number; copy: number }): Promise<ChangeSet | null> {
+  mergeConflict(conflictId: string, merged: unknown, asOf?: ConflictVersions): Promise<ChangeSet | null> {
     return this.writing(async () => {
       // Merged from the versions the window saw: a side changed since (a save of this record, OneDrive) is never
-      // written over by a merge that does not know it.
-      const conflict = this.buildViews().conflicts.find((c) => c.id === conflictId)
-      if (asOf && conflict && (conflict.canonical.mtimeMs !== asOf.canonical || conflict.copy.mtimeMs !== asOf.copy))
-        throw new Error('Jedna z wersji zmieniła się w trakcie scalania – otwórz „Scal…” jeszcze raz.')
+      // written over by a merge that does not know it – the files read again first, not only as the last scan saw them.
+      await this.freshConflict(conflictId, asOf)
       const settingsWritten = await this.resolveOne(conflictId, 'copy', merged)
       return this.diff(this.buildViews(), settingsWritten)
     })
   }
 
   /**
-   * Many conflicts at once („Zachowaj nowsze” – W23), in the order given, one change set at the end. A group whose copy
-   * could not be kept leaves its other conflicts as they are (nothing newer goes to the bin).
+   * The two files of a conflict read again from the disk before it is decided (AP-27, T431): a copy OneDrive brought a
+   * moment ago (the watcher not there yet) goes to the history as it is, never as an older read saw it – nothing of it
+   * is lost to the bin alone. With `asOf` (the versions the window showed) a side changed since refuses the decision.
+   * `batch` – many decisions in one go (`resolveConflicts`): an original this batch rewrote counts with its file time
+   * after that write (`own`), and the batch's own writes go out as this computer's change before a refusal's change
+   * from outside (`beforeRefusal`). Returns the original's path (none = no such conflict).
    */
-  resolveConflicts(items: ReadonlyArray<{ id: string; keep: 'canonical' | 'copy'; group?: string }>): Promise<{ results: ConflictResult[]; change: ChangeSet | null }> {
+  private async freshConflict(conflictId: string, asOf?: ConflictVersions, batch?: { own: ReadonlyMap<string, number>; beforeRefusal: () => void }): Promise<string | null> {
+    const before = this.buildViews().conflicts.find((c) => c.id === conflictId)
+    if (!before) return null
+    const sides = ['canonical', 'copy'] as const
+    const rels = [...new Set([before.canonical.relPath, before.copy.relPath])]
+    const again = new Map<string, FileState | null>()
+    for (const rel of rels) again.set(rel, await this.loadFile(rel))
+    const own = batch?.own.get(before.canonical.relPath)
+    const shown = asOf && own != null ? { ...asOf, canonical: own } : asOf
+    // A side is the one the window showed when it showed the version read before and the disk still says the same
+    // (its content – a new file time alone, e.g. a read through another handle, is no change).
+    const changed = shown
+      ? sides.filter((side) => {
+          const was = this.files.get(before[side].relPath)
+          const is = again.get(before[side].relPath) ?? undefined
+          return shown[side] !== before[side].mtimeMs || !!was !== !!is || (was?.hash ?? '') !== (is?.hash ?? '')
+        })
+      : []
+    if (changed.length) batch?.beforeRefusal()
+    for (const rel of rels) {
+      const state = again.get(rel)
+      if (state) this.files.set(rel, state)
+      else if (this.files.get(rel)) this.files.delete(rel)
+    }
+    if (changed.length) {
+      const detail = changed.map((side) => `${side}: pokazana ${shown![side]}, przed odczytem ${before[side].mtimeMs}, teraz ${again.get(before[side].relPath)?.mtimeMs ?? 'brak'}`).join('; ')
+      throw new ConflictChangedError(this.diff(this.buildViews(), false, 'external'), detail)
+    }
+    return before.canonical.relPath
+  }
+
+  /**
+   * Many conflicts at once („Zachowaj nowsze” – W23), in the order given: this computer's change set at the end, and
+   * before it the change from outside of each refused one. Each decision with the versions the window showed (`asOf`,
+   * AP-27): a side changed since refuses it (`ConflictChangedError`'s text) – the window gets that version. A group
+   * whose copy could not be kept, or with a refused decision, leaves its other conflicts as they are (nothing newer goes
+   * to the bin, nothing decided on versions no longer there).
+   */
+  resolveConflicts(items: ReadonlyArray<{ id: string; keep: 'canonical' | 'copy'; group?: string; asOf?: ConflictVersions }>): Promise<{ results: ConflictResult[]; changes: ChangeSet[] }> {
     return this.writing(async () => {
       const results: ConflictResult[] = []
+      const changes: ChangeSet[] = []
       const failed = new Set<string>()
       let settingsWritten = false
+      // An original rewritten by a kept copy of its group: the group's next decisions count it with this file time.
+      const own = new Map<string, number>()
+      const beforeRefusal = () => {
+        const local = this.diff(this.buildViews(), settingsWritten)
+        settingsWritten = false
+        if (local) changes.push(local)
+      }
       for (const item of items) {
         if (item.group != null && failed.has(item.group)) {
           results.push({ id: item.id, skipped: true })
           continue
         }
         try {
+          const canonical = await this.freshConflict(item.id, item.asOf, { own, beforeRefusal })
           if (await this.resolveOne(item.id, item.keep)) settingsWritten = true
+          if (canonical && item.keep === 'copy') {
+            const written = this.files.get(canonical)
+            if (written) own.set(canonical, written.mtimeMs)
+            else own.delete(canonical)
+          }
           results.push({ id: item.id })
         } catch (e) {
+          const refused = e instanceof ConflictChangedError
+          if (refused) {
+            if (e.change) changes.push(e.change)
+            this.log?.('info', `konflikt: wersja zmieniła się od pokazanej – decyzja odrzucona (${item.id}: ${e.detail})`)
+          }
           results.push({ id: item.id, error: (e as Error).message })
-          if (item.keep === 'copy' && item.group != null) failed.add(item.group)
+          if (item.group != null && (item.keep === 'copy' || refused)) failed.add(item.group)
         }
       }
-      return { results, change: this.diff(this.buildViews(), settingsWritten) }
+      const last = this.diff(this.buildViews(), settingsWritten)
+      if (last) changes.push(last)
+      return { results, changes }
     })
   }
 

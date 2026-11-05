@@ -410,6 +410,24 @@ describe('aktualizacje: sprawdzanie', () => {
     expect(t.updater.applyOnQuit()).toBe(true)
     expect(t.applied.at(-1)).toMatchObject({ kind: 'portable', p: { staged, version: '1.2.0' } })
   })
+
+  it('config.json zajęty przy zapisie pobranej wersji (przegląd N5): gotowa do instalacji, nie „nie udało się pobrać” – zapis ponawia się sam', async () => {
+    // As ConfigStore does it: in memory at once, the write refused (an antivirus) and retried later.
+    let cfgPending: PendingUpdate | null = null
+    const t = await setup({
+      deps: {
+        pending: () => cfgPending,
+        savePending: async (p) => {
+          cfgPending = p
+          throw Object.assign(new Error('EPERM: operation not permitted, rename config.json'), { code: 'EPERM' })
+        }
+      }
+    })
+    const s = await checkAndWait(t.updater)
+    expect(s).toMatchObject({ phase: 'ready', error: null, release: { version: '1.2.0' } })
+    expect(t.updater.applyOnQuit()).toBe(true)
+    expect(t.applied.at(-1)).toMatchObject({ kind: 'portable', p: { staged: `${t.portableFile}.update`, version: '1.2.0' } })
+  })
 })
 
 describe('aktualizacje: prywatne repozytorium (token)', () => {

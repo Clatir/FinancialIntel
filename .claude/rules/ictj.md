@@ -25,7 +25,7 @@ paths:
 - Para do zadokowania liczy się od razu według puli wpisu (T341, od 1.15.6): `pendingPairsOf` → `FleetInput.pendingPairs`;
   ekrany mówią o niej osobno („Do zadokowania” – `FleetState.toDock`, T342). Bez odczytu ICTTJ na komputerze – zwykła
   kolejność do dokowania. „Zadokuj” na parze zapisuje `countedFrom` (chwila jej operacji – T363): bez zmienionego
-  podziału warstwy się nie zmieniają.
+  podziału warstwy się nie zmieniają; potwierdzenie dopłaty z meldunku „Firewall” – tak samo (`topUpConfirmation`, T438).
 - Dopasowanie: wypłata z ICTTJ bez pary w CSV z mBanku przez 3 dni robocze (D72) → Portfel XTB (potwierdzenie przy
   dokowaniu); wpływ z XTB w mBanku bez wpisu w ICTTJ → dokuje normalnie + przypomnienie o wpisie w ICTTJ.
 - Przycisk „Otwórz ICTTJ” w menu bocznym FI; w ICTTJ nic się nie zmienia.
@@ -33,7 +33,10 @@ paths:
   odczyt zostawia ostatnią dobrą migawkę (`LAST_READ_FAILED`); dwa pliki jednego wpisu – ostrzeżenie (`oneEntryPerId`).
 - Dostawy (`calc/dock.ts` `deliveries`): stany pending / waiting / docked / skipped / before-start, okno −3 dni … +3 dni
   robocze; operacja Portfela i dokowanie z id wpisu (`derivedId`); usunięty wpis albo zmieniona pula oznaczane, nie
-  gubione (`entryGone`, `poolChanged`).
+  gubione (`entryGone`, `poolChanged`). „Sprzed startu” tylko wpis z datą przed startem (T435 – okno sprzed startu: Portfel
+  XTB dopiero z historią banku `bankFrom`); zadokowane bez wpisu w migawce – z rekordu dokowania (`fromDocking`, T437);
+  dzień dostawy na ekranach – `deliveryDay` (operacja banku); „ostatnia dostawa” tylko zadokowana; „firewall” w tekstach
+  tylko z alarmem silnika (`againstFirewall`, T438).
 - Cele ICTTJ: `syncIctjGoals` – rekordy z id ICTTJ; pula Cele najpierw do celów ICTTJ.
 - Testy: `FI_ICTJ_DIR`, `FI_ICTJ_APPDATA`, `FI_ICTJ_LAUNCH=dry`; przykładowy folder ICTTJ tylko zanonimizowany.
 

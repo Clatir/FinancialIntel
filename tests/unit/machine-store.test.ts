@@ -3,6 +3,7 @@ import { DEFAULT_MACHINE_PREFS, patchMachinePrefs, type MachinePrefs } from '@sh
 
 // The window's side of this computer's preferences: window.fi answers when the test says so (the main process's order).
 const answers: Array<(p: MachinePrefs) => void> = []
+let mainTray = { closeToTray: true, launchAtLogin: true, notified: true, autostartAsked: true, loginSupported: true }
 let broadcast: ((p: MachinePrefs) => void) | null = null
 const api = {
   getConfig: vi.fn(async () => ({ prefs: DEFAULT_MACHINE_PREFS })),
@@ -12,7 +13,10 @@ const api = {
     broadcast = cb
     return () => undefined
   }),
-  revealAmounts: vi.fn(async (minutes: number | null) => ({ ...DEFAULT_MACHINE_PREFS, hideAmounts: false, _minutes: minutes }))
+  revealAmounts: vi.fn(async (minutes: number | null) => ({ ...DEFAULT_MACHINE_PREFS, hideAmounts: false, _minutes: minutes })),
+  // The tray of this computer as the main process has it (config.json in memory).
+  trayPrefs: vi.fn(async () => mainTray),
+  setTrayPrefs: vi.fn(async (_patch: { launchAtLogin?: boolean }) => mainTray)
 }
 const dataset: Record<string, string> = {}
 const win = Object.assign(new EventTarget(), { fi: api })
@@ -20,6 +24,8 @@ vi.stubGlobal('window', win)
 vi.stubGlobal('document', { documentElement: { dataset } })
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined })
 const machine = await import('../../src/renderer/store/machine')
+const trayStore = await import('../../src/renderer/store/tray')
+const { useUi } = await import('../../src/renderer/store/ui')
 await machine.loadMachinePrefs()
 machine.installLook()
 machine.installZoomKeys()
@@ -138,5 +144,51 @@ describe('ustawienia komputera w oknie (1.6.6, F30)', () => {
     expect(prefs().hideAmounts).toBe(false)
     await machine.revealAmounts(null)
     expect(api.revealAmounts).toHaveBeenLastCalledWith(null)
+  })
+})
+
+describe('zasobnik i start z Windows przy zajętym config.json (przegląd N5, uwaga 1)', () => {
+  it('nieudany zapis: ekran pokazuje ustawienie, które działa (proces główny zmienił je i ponawia zapis) – z przyczyną, bez błędu w górę', async () => {
+    await trayStore.loadTrayPrefs()
+    expect(trayStore.useTray.getState().prefs?.launchAtLogin).toBe(true)
+    // Switched off: the main process applies it (the system's entry too) and its write of config.json is refused.
+    api.setTrayPrefs.mockImplementationOnce(async () => {
+      mainTray = { ...mainTray, launchAtLogin: false }
+      throw new Error('EPERM: operation not permitted, rename config.json')
+    })
+    const shown = await trayStore.setTrayPrefs({ launchAtLogin: false })
+    // Before: the switch stayed „on” on the screen while the system and the retried write said „off”.
+    expect(shown.launchAtLogin).toBe(false)
+    expect(trayStore.useTray.getState().prefs?.launchAtLogin).toBe(false)
+    expect(useUi.getState().toasts.at(-1)?.text).toMatch(/działają, a zapis ponawia się sam/)
+  })
+})
+
+describe('przełącznik startu z Windows pokazuje stan systemu (przegląd 3 N5, T433)', () => {
+  const view = (launchAtLogin: boolean, loginEntry: boolean | null | undefined) => ({ closeToTray: true, launchAtLogin, notified: true, autostartAsked: false, loginSupported: true, loginEntry })
+  it('config.json mówi „nie”, a Windows ma wpis tej kopii (plik odłożony albo usunięty): przełącznik włączony z notką; zgodne albo nieznane – bez notki', () => {
+    // Before: the switch showed config.json's „off” while Windows kept starting the app.
+    expect(trayStore.autostartOf(view(false, true))).toMatchObject({ on: true, note: expect.stringMatching(/stan systemu/) })
+    expect(trayStore.autostartOf(view(true, false))).toMatchObject({ on: false, note: expect.stringMatching(/stan systemu/) })
+    expect(trayStore.autostartOf(view(true, true))).toEqual({ on: true, note: null })
+    expect(trayStore.autostartOf(view(false, null))).toEqual({ on: false, note: null })
+    expect(trayStore.autostartOf(view(false, undefined))).toEqual({ on: false, note: null })
+    // A computer whose app starts with Windows already is never asked whether it should.
+    expect(trayStore.asksAutostart(view(false, true), true)).toBe(false)
+    expect(trayStore.asksAutostart(view(false, false), true)).toBe(true)
+  })
+
+  it('pokazanie Ustawień czyta stan systemu od nowa (nie z pierwszego odczytu)', async () => {
+    mainTray = { ...mainTray, launchAtLogin: false, loginEntry: true } as typeof mainTray
+    await trayStore.refreshTrayPrefs()
+    expect(trayStore.autostartOf(trayStore.useTray.getState().prefs!).on).toBe(true)
+  })
+})
+
+describe('wpis startu wyłączony w Menedżerze zadań (przegląd 4 N5)', () => {
+  it('ustawienie „tak”, wpis wyłączony w Menedżerze zadań: przełącznik „wyłączony” z notką, gdzie go włączyć; ustawienie „nie” – bez notki', () => {
+    const view = (launchAtLogin: boolean) => ({ closeToTray: true, launchAtLogin, notified: true, autostartAsked: true, loginSupported: true, loginEntry: false, loginDisabled: true })
+    expect(trayStore.autostartOf(view(true))).toMatchObject({ on: false, note: expect.stringMatching(/wyłączony w Menedżerze zadań.*Aplikacje autostartu/) })
+    expect(trayStore.autostartOf(view(false))).toEqual({ on: false, note: null })
   })
 })

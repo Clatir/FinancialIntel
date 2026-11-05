@@ -1,4 +1,7 @@
 // adapted from ICTTJ src/shared/merge.ts @ 84a8339
+import { countLabel, formatPln, plDate, plDateTime } from './format'
+import { ICTJ_POOL_LABEL } from './ictj'
+import { TX_KIND_LABEL } from './schema/records'
 /**
  * Field-level differences and three-way merges of records (JSON values).
  * - Objects are compared key by key; arrays of objects with a string `id` (split lines, categories,
@@ -7,7 +10,6 @@
  *   values it is a conflict (`choose` decides, by default "mine"). Bookkeeping fields (updatedAt, updatedBy,
  *   schemaVersion, computed) never conflict: the newer / theirs wins.
  */
-import { countLabel, plDate, plDateTime } from './format'
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type Path = Array<string>
@@ -359,7 +361,132 @@ const LABELS: Record<string, string> = {
   'settings.import.coveredTo': 'Zasięg plików z banku',
   'settings.import.accountNumbers': 'Numery rachunków',
   'settings.import.log': 'Dziennik importów',
-  'settings.seeded': 'Ustawienia startowe'
+  'settings.seeded': 'Ustawienia startowe',
+  // AP-27 (T430): every field of every record by a Polish name – the audit found „tags”, the id and raw keys after a
+  // known prefix („Reguły importu – maxAmount”). A key of its own here names it under any prefix (`fieldLabelOf`).
+  id: 'Identyfikator wpisu',
+  createdAt: 'Utworzono',
+  since: 'Od dnia',
+  updatedAt: 'Zapisano',
+  updatedBy: 'Zapisał komputer',
+  schemaVersion: 'Wersja formatu',
+  tags: 'Tagi',
+  format: 'Format pliku',
+  key: 'Klucz wiersza',
+  bankName: 'Nazwa w banku',
+  category: 'Kategoria mBanku',
+  importedAt: 'Zaimportowano',
+  altKeys: 'Inne klucze wiersza',
+  description: 'Opis z banku',
+  pending: 'Nierozliczona',
+  operation: 'Rodzaj operacji',
+  forecastId: 'Scenariusz prognozy',
+  currency: 'Waluta',
+  version: 'Wersja',
+  parentId: 'Kategoria nadrzędna',
+  system: 'Kategoria systemowa',
+  envelope: 'Koperta',
+  importFormat: 'Format importu',
+  page: 'Ekran',
+  panels: 'Panele',
+  collapsed: 'Zwinięty',
+  height: 'Wysokość',
+  hidden: 'Ukryty',
+  columns: 'Kolumny',
+  shields: 'Osłony',
+  hull: 'Kadłub',
+  goals: 'Cele',
+  tanks: 'Zbiorniki ładowni',
+  match: 'Dopasowanie',
+  mode: 'Sposób',
+  maxAmount: 'Kwota najwyżej',
+  label: 'Nazwa',
+  household: 'Domownik',
+  loanAmount: 'Część pożyczki',
+  learned: 'Nauczona z decyzji',
+  hits: 'Użycia',
+  inflow: 'Reszta wpłaty',
+  opening: 'Saldo na start',
+  owed: 'Do oddania',
+  deposit: 'Zaliczka',
+  via: 'Przekazuje przez',
+  bankNames: 'Nazwy w banku',
+  members: 'Osoby',
+  lines: 'Osoby',
+  value: 'Udział',
+  filter: 'Filtr',
+  withPeriod: 'Z okresem',
+  ignored: 'Pominięte',
+  ok: 'Uznane za w porządku',
+  tagGoals: 'Cele tagów',
+  cpi: 'Inflacja GUS (CPI)',
+  days: 'Dni',
+  cls: 'Klasa dnia',
+  clsBefore: 'Klasa dnia przed nowymi danymi',
+  cargo: 'Ładownia',
+  missions: 'Misje',
+  template: 'Rodzaj misji',
+  week: 'Tydzień',
+  evaluatedAt: 'Oceniona',
+  params: 'Parametry',
+  promotions: 'Awanse',
+  at: 'Chwila',
+  rank: 'Stopień',
+  change: 'Zmiana',
+  day: 'Dzień',
+  achievements: 'Osiągnięcia',
+  savedAt: 'Zapisano operacje',
+  fileName: 'Plik z banku',
+  period: 'Okres',
+  counts: 'Liczby wierszy',
+  created: 'Dodane operacje',
+  createdHashes: 'Odciski dodanych operacji',
+  updated: 'Zmienione operacje',
+  removed: 'Usunięte operacje',
+  rules: 'Reguły importu',
+  before: 'Przed importem',
+  after: 'Po imporcie',
+  lastImport: 'Ostatni import',
+  coveredTo: 'Zasięg plików z banku',
+  accountNumber: 'Numer rachunku',
+  inflows: 'Wpływy',
+  ownName: 'Własna nazwa',
+  confirmations: 'Potwierdzenia sald',
+  undoneAt: 'Cofnięty',
+  'settings.orders.quietHours.from': 'Rozkazy – cisza nocna od',
+  'settings.orders.quietHours.to': 'Rozkazy – cisza nocna do',
+  'settings.household.openingIds': 'Domownicy – operacje w saldzie na start',
+  'settings.household.assignFrom': 'Domownicy – zwroty wskazują zakupy od',
+  'settings.operationViews': 'Zapisane widoki Operacji',
+  'settings.cargo': 'Ładownia',
+  'settings.cargo.ignored': 'Ładownia – nie proponuj',
+  'settings.anomalies': 'Anomalie',
+  'settings.anomalies.ok': 'Anomalie – w porządku',
+  'settings.intel': 'Wywiad',
+  'settings.import.rules.updatedAt': 'Reguły importu – zmieniona',
+  'loot.decidedAt': 'Podział łupów – zdecydowano',
+  'bank.format': 'Dane z banku – format pliku',
+  'bank.source': 'Dane z banku – źródło',
+  'bank.altKeys': 'Dane z banku – inne klucze wiersza',
+  'counterBank.counterparty': 'Dane z banku drugiego konta – kontrahent',
+  'counterBank.operation': 'Dane z banku drugiego konta – rodzaj operacji',
+  'counterBank.key': 'Dane z banku drugiego konta – klucz wiersza',
+  awaitReturn: 'Czeka na zwrot',
+  'awaitReturn.amount': 'Czeka na zwrot – kwota',
+  'awaitReturn.until': 'Czeka na zwrot – do',
+  'awaitReturn.closedAt': 'Czeka na zwrot – zamknięty',
+  inflowKind: 'Rodzaj wpływu',
+  coversOpeningMembers: 'Spłaca saldo na start – domownicy',
+  priceIgnored: 'Nowa cena pominięta',
+  variable: 'Kwota zmienna',
+  status: 'Stan',
+  frozenAt: 'Zamrożony',
+  aliveAt: 'Ostatnia płatność',
+  violations: 'Naruszenia',
+  'splits.tags': 'Podział – tagi',
+  'share.lines.memberId': 'Wspólnie – domownik',
+  'share.lines.value': 'Wspólnie – udział',
+  'share.lines.gift': 'Wspólnie – prezent'
 }
 
 /** A path's part that is an id (ULID, `#id` of a list item): named by `names` when it is known (N92). */
@@ -370,11 +497,18 @@ const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/
  * path (an envelope's category, a goal of the loot) by its name from `names`.
  */
 export function fieldLabel(path: Path, names?: ReadonlyMap<string, string>): string {
-  const base = fieldLabelOf(path)
-  const id = [...path].reverse().map((p) => (p.startsWith('#') ? p.slice(1) : p)).find((p) => ULID.test(p))
-  const name = id ? names?.get(id) : undefined
-  return name && !base.includes(name) ? `${base.replace(/ – [0-9A-HJKMNP-TV-Z]{26}$/, '')} – ${name}` : base
+  let base = fieldLabelOf(path)
+  if (!names) return base
+  // An id as a key of the path (an envelope's category, a goal of the loot): its name in its place.
+  base = base.replace(/(^| – )([0-9A-HJKMNP-TV-Z]{26})(?= – |$)/g, (whole, sep: string, id: string) => (names.get(id) ? `${sep}${names.get(id)}` : whole))
+  // A list item's id (the account of „Konta – nazwa”): its name at the end.
+  const item = [...path].reverse().flatMap((p) => (p.startsWith('#') && ULID.test(p.slice(1)) ? [p.slice(1)] : []))[0]
+  const name = item ? names.get(item) : undefined
+  return name && !base.includes(name) ? `${base} – ${name}` : base
 }
+
+/** „Kwota” → „kwota” after a prefix; an abbreviation („ICTTJ – …”, „PIT-38”) stays as it is. */
+const lowerFirst = (s: string): string => (/^\p{Lu}{2}/u.test(s) ? s : `${s.charAt(0).toLowerCase()}${s.slice(1)}`)
 
 function fieldLabelOf(path: Path): string {
   const named = path.filter((p) => !p.startsWith('#'))
@@ -382,9 +516,53 @@ function fieldLabelOf(path: Path): string {
   if (LABELS[key]) return LABELS[key]
   for (let i = named.length - 1; i > 0; i--) {
     const prefix = LABELS[named.slice(0, i).join('.')]
-    if (prefix) return `${prefix} – ${named.slice(i).join('.')}`
+    if (prefix) return [prefix, ...partsAfter(named.slice(i))].join(' – ')
   }
   return key || '(cały wpis)'
+}
+
+/**
+ * The parts of a path after a known prefix (AP-27): each by its own name (the longest known key first), a day or a
+ * month of a map („days.2026-11-03”) as the app writes dates; an id or a newer version's key as it is.
+ */
+function partsAfter(rest: readonly string[]): string[] {
+  const out: string[] = []
+  let i = 0
+  while (i < rest.length) {
+    let j = rest.length
+    while (j > i && !LABELS[rest.slice(i, j).join('.')]) j--
+    if (j > i) {
+      out.push(lowerFirst(LABELS[rest.slice(i, j).join('.')]!))
+      i = j
+      continue
+    }
+    const part = rest[i]!
+    out.push(ISO_DATE.test(part) || ISO_MONTH.test(part) ? (dateValueText(part) ?? part) : part)
+    i++
+  }
+  return out
+}
+
+/** Values of the enums by their Polish words (AP-27): the full key first, then the field's own key. */
+const lowerAll = (r: Readonly<Record<string, string>>): Record<string, string> => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, lowerFirst(v)]))
+const VALUE_LABELS: Record<string, Record<string, string>> = {
+  kind: { ...lowerAll(TX_KIND_LABEL), opening: 'saldo otwarcia', confirmation: 'potwierdzenie salda' },
+  'settings.accounts.kind': { bank: 'bank', wallet: 'portfel', cash: 'gotówka', other: 'inne' },
+  type: { fixed: 'stały', subscription: 'abonament', installment: 'rata' },
+  mode: { equal: 'po równo', percent: 'procenty', amounts: 'kwoty' },
+  'settings.import.rules.mode': { exact: 'nazwa kontrahenta', contains: 'nazwa zawiera', keyword: 'słowo w opisie', amount: 'kwota' },
+  inflowKind: { repay: 'spłata', income: 'przychód', advance: 'zaliczka' },
+  inflow: { ask: 'pytaj', advance: 'zaliczka', income: 'przychód' },
+  impulse: { plan: 'plan', impulse: 'impuls' },
+  direction: { in: 'wpływ', out: 'wydatek', given: 'pożyczona komuś', taken: 'pożyczona od kogoś' },
+  envelope: { daily: 'codzienna', planned: 'planowana' },
+  pool: lowerAll(ICTJ_POOL_LABEL)
+}
+
+function valueLabel(path: Path | undefined, v: string): string | undefined {
+  const named = (path ?? []).filter((p) => !p.startsWith('#'))
+  if (!named.length) return undefined
+  return VALUE_LABELS[named.join('.')]?.[v] ?? VALUE_LABELS[named[named.length - 1]!]?.[v]
 }
 
 /**
@@ -409,6 +587,11 @@ const AMOUNT_FIELDS = [
   'schedule.amount',
   'transfers.amount',
   'hullTopUps.amount',
+  // AP-27: the amounts a conflict or the history showed in raw grosze.
+  'awaitReturn.amount',
+  'envelopeCovers.amount',
+  'removed.amount',
+  'removed.splits.amount',
   'past.target',
   'settings.layers.assumedCosts',
   'settings.orders.impulseThreshold',
@@ -431,23 +614,85 @@ export function isAmountPath(path: Path): boolean {
 /** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */
 export const isAmountKey = (key: string): boolean => isAmountPath(key.replace(/\[\d+\]/g, '').split('.').filter(Boolean))
 
+/** How a value is written in the diff lists: amounts (hidden with Ctrl+$ in the window) and names of ids. */
+export interface ValueText {
+  /** Where the value is (a field's label inside an object, an amount by its path). */
+  path?: Path
+  /** An amount in grosze as the window writes it (masked with the amounts); default `formatPln` + „ zł”. */
+  amount?: (grosze: number) => string
+  names?: ReadonlyMap<string, string>
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+const ISO_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
+const ISO_MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
+
 /**
- * Short text of a value for the diff lists, as the screens write values (AP-23): a day 'dd.mm.rrrr', a moment
- * 'dd.mm.rrrr, gg:mm', a month 'mm.rrrr', a decimal with a comma, a yes / no as „tak” / „nie”.
+ * A date, a month or a moment of a record as the app writes them (AP-23, AP-27 – `plDate`, `plDateTime`): „14.10.2026”,
+ * „11.2026”, „03.11.2026, 12:24”; null – no date.
  */
-export function formatValue(v: unknown, max = 80): string {
+export function dateValueText(v: string): string | null {
+  if (ISO_DATE.test(v)) return plDate(v)
+  if (ISO_MONTH.test(v)) return `${v.slice(5)}.${v.slice(0, 4)}`
+  if (ISO_MOMENT.test(v) && !Number.isNaN(Date.parse(v))) return plDateTime(v)
+  return null
+}
+
+/**
+ * Short text of a value for the diff lists, as the screens write values (AP-23, AP-27): Polish words for yes / no, a
+ * decimal comma and the typographic minus, dates as dd.mm.rrrr (`dateValueText`), an amount by its path, a list of words
+ * as the words, an object as its fields by their Polish names – never JSON.
+ */
+export function formatValue(v: unknown, max = 80, opts: ValueText = {}): string {
+  const cut = (s: string) => (s.length > max ? `${s.slice(0, max - 1)}…` : s)
   if (v === undefined) return '—'
   if (v === null || v === '') return 'puste'
-  if (typeof v === 'string') {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return plDate(v)
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) && !Number.isNaN(Date.parse(v))) return plDateTime(v)
-    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) return `${v.slice(5)}.${v.slice(0, 4)}`
-    return v.length > max ? `${v.slice(0, max - 1)}…` : v
-  }
-  if (typeof v === 'boolean') return v ? 'tak' : 'nie'
+  if (typeof v === 'number' && opts.path && isAmountPath(opts.path)) return opts.amount ? opts.amount(v) : `${formatPln(v)} zł`
+  if (typeof v === 'string') return opts.names?.get(v) ?? valueLabel(opts.path, v) ?? dateValueText(v) ?? cut(v)
   // As written, never rounded: the comma and the typographic minus (AP-23).
   if (typeof v === 'number') return String(v).replace(/^-/, '−').replace('.', ',')
-  if (Array.isArray(v)) return v.length === 0 ? 'puste' : countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')
-  const s = JSON.stringify(v)
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+  if (typeof v === 'boolean') return v ? 'tak' : 'nie'
+  if (Array.isArray(v)) {
+    if (v.length === 0) return 'puste'
+    // Words, days, numbers (tags, the days of a reminder): the values themselves, each as the field writes it.
+    if (v.every((x) => typeof x === 'string' || typeof x === 'number' || typeof x === 'boolean')) return cut(v.map((x) => formatValue(x, max, opts)).join(', '))
+    return countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')
+  }
+  if (isObject(v)) {
+    const path = opts.path ?? []
+    const prefix = fieldLabelOf(path)
+    const parts = Object.entries(v)
+      .filter(([k, x]) => k !== 'id' && x !== undefined)
+      .map(([k, x]) => {
+        const full = fieldLabelOf([...path, k])
+        const label = path.length && full.startsWith(`${prefix} – `) ? full.slice(prefix.length + 3) : full
+        return `${label.charAt(0).toLowerCase()}${label.slice(1)}: ${formatValue(x, 40, { ...opts, path: [...path, k] })}`
+      })
+    return parts.length ? cut(parts.join(', ')) : 'puste'
+  }
+  return cut(String(v))
+}
+
+/**
+ * The differences as a person reads them (AP-27): an object on one side only (bank data added, a split line removed)
+ * by its own fields, each with its Polish name, and never the record's id (two plans of one month have two – the card
+ * says which record it is).
+ */
+export function readableChanges(changes: readonly FieldChange[]): FieldChange[] {
+  const out: FieldChange[] = []
+  const add = (path: Path, before: unknown, after: unknown) => {
+    const a = isObject(before)
+    const b = isObject(after)
+    const obj = (a ? before : after) as Record<string, unknown>
+    if (a === b || Object.keys(obj).length === 0) {
+      out.push({ path, before, after })
+      return
+    }
+    for (const k of Object.keys(obj)) {
+      if (k === 'id' || (path.length === 0 && BOOKKEEPING.has(k))) continue
+      add([...path, k], a ? obj[k] : undefined, a ? undefined : obj[k])
+    }
+  }
+  for (const c of changes) if (!(c.path.length === 1 && c.path[0] === 'id')) add(c.path, c.before, c.after)
+  return out
 }

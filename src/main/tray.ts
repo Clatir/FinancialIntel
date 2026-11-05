@@ -7,6 +7,7 @@
  */
 import { Menu, Notification, Tray, app, nativeImage } from 'electron'
 import type { TrayPrefs } from '@shared/api'
+import { loginEntryDisabled, loginEntryOf, loginItemWrites } from './loginItem'
 import icon from '../../resources/icon.png?asset'
 
 /** Argument of the login start: the window stays hidden (in the tray). */
@@ -104,27 +105,46 @@ export class AppTray {
 /** The name of the entry in Windows' Run key: one per kind of the app, the same in every version (B52). */
 export const loginItemName = (portable: boolean): string => (portable ? 'Financial Intel (portable)' : 'Financial Intel')
 
-const samePath = (a: string, b: string) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)
+/**
+ * This copy's start with the system as the system has it now (`loginEntryOf`; null = not known – not packaged, a test
+ * profile) and whether its entry is turned off in Task Manager (`loginEntryDisabled`).
+ */
+export function loginState(): { loginEntry: boolean | null; loginDisabled: boolean } {
+  const unknown = { loginEntry: null, loginDisabled: false }
+  if (!app.isPackaged || (process.platform !== 'win32' && process.platform !== 'darwin')) return unknown
+  try {
+    const path = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
+    const windows = process.platform === 'win32'
+    const ownProfile = !process.env.FI_USER_DATA
+    const settings = ownProfile ? app.getLoginItemSettings(windows ? { path, args: [HIDDEN_ARG] } : undefined) : null
+    const items = settings?.launchItems ?? []
+    return { loginEntry: loginEntryOf({ ownProfile, windows, path, items, openAtLogin: settings?.openAtLogin }), loginDisabled: loginEntryDisabled({ ownProfile, windows, path, items }) }
+  } catch {
+    return unknown
+  }
+}
 
-/** Start at login (Windows / macOS; packaged app only – in development it would register electron.exe). */
-export function applyLoginItem(prefs: TrayPrefs, log: TrayDeps['log']): void {
+/**
+ * Start at login (Windows / macOS; packaged app only – in development it would register electron.exe). `changed`: the
+ * setting was switched just now on this computer; a start of the app or a late read of config.json is not a change, and
+ * never removes an entry (AP-28 – the rules in `loginItem.ts`).
+ */
+export function applyLoginItem(prefs: TrayPrefs, log: TrayDeps['log'], changed: boolean): void {
   if (!app.isPackaged || (process.platform !== 'win32' && process.platform !== 'darwin')) return
   try {
     // The portable build runs from a temporary folder: its launcher exe is the one to start.
     const portable = !!process.env.PORTABLE_EXECUTABLE_FILE
     const path = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
     const args = [HIDDEN_ARG]
-    const name = loginItemName(portable)
-    if (process.platform === 'win32') {
-      // Before 1.5.3 the entry was named after the app's id – for the portable a temporary folder new in every version:
-      // the entries piled up and switching off removed only the last one (B52). Every other entry of this exe goes.
-      for (const item of app.getLoginItemSettings({ path, args }).launchItems ?? []) {
-        if (item.name === name || !samePath(item.path, path)) continue
-        app.setLoginItemSettings({ openAtLogin: false, name: item.name, path: item.path, args: item.args })
-        log('info', `uruchamianie z systemem: usunięty stary wpis „${item.name}”`)
-      }
+    const windows = process.platform === 'win32'
+    const ownProfile = !process.env.FI_USER_DATA
+    const items = windows && ownProfile ? (app.getLoginItemSettings({ path, args }).launchItems ?? []) : []
+    const writes = loginItemWrites({ want: prefs.launchAtLogin, changed, ownProfile, windows, name: loginItemName(portable), path, args, items })
+    if (!ownProfile && changed) log('info', 'uruchamianie z systemem: profil testowy (FI_USER_DATA) – wpis systemu bez zmian')
+    for (const w of writes) {
+      app.setLoginItemSettings(w)
+      log('info', `uruchamianie z systemem: ${w.openAtLogin ? 'zapisany' : 'usunięty'} wpis „${w.name}”`)
     }
-    app.setLoginItemSettings({ openAtLogin: prefs.launchAtLogin, path, args, name })
   } catch (e) {
     log('warn', 'uruchamianie z systemem – nie udało się zapisać', e)
   }
