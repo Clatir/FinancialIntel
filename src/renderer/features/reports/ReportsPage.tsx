@@ -4,16 +4,17 @@
  * CSV and Excel (operations, months), PDF (debriefing, year's review), the whole data as a ZIP. The files carry the real
  * amounts (the hidden amounts are the screen's).
  */
-import { useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { addDays, addMonths, isoWeekOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
 import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekCovers, weekNumbers, yearNumbers, yearSpan, yearWealth } from '@shared/calc/intel'
 import { readExportPeriod, setReportTab, setWatchMonday, storeExportPeriod, useReportsUi, watchMondayOf, type ReportTab } from './state'
-import { debriefing, lootApplied, lootChange, planFor } from '@shared/calc/plan'
+import { debriefing, lootApplied, lootChange, planFor, transactionsOfMonth } from '@shared/calc/plan'
+import { energyFlows, monthFlows, outsideMoney } from '@shared/calc/sankey'
 import { memberName } from '@shared/calc/household'
 import { SHIP_CLASS_LABEL } from '@shared/calc/fleet'
 import { arrangeBriefing, BIAS_LABEL, dailyBias } from '@shared/calc/briefing'
-import { sum } from '@shared/calc/operations'
+import { categoryIndex, sum } from '@shared/calc/operations'
 import { fuelSummary, rateText, savingsRate } from '@shared/calc/fuel'
 import { netAdjustments } from '@shared/calc/netWorth'
 import { budgetWorkbook, monthRows, monthsCsv, operationRows, operationsCsv, operationsOfPeriod, partRowsOf, partsCsv, reportHtml, type ReportSection } from '@shared/export/budget'
@@ -33,6 +34,7 @@ import { countLabel, dayLabel, monthLabel, plDate, WEEKDAY_PL } from '../../lib/
 import { useCategories } from '../operations/pickers'
 import { useBriefingItems } from '../bridge/BridgePage'
 import { cushionSection, useCushion } from '../intel/Cushion'
+import { MonthSankey, sankeyPdfSvg, type SankeyView } from './MonthSankey'
 
 const zl = (g: number) => `${plnText(g)} zł`
 /** The files: the real amounts (D73). */
@@ -258,10 +260,16 @@ function useDebrief(month: string) {
     // The missions judged in the month (their Sunday in it).
     const missions = (game?.input.game ?? []).flatMap((x) => x.missions).filter((m) => m.evaluatedAt && sundayOf(m.week).startsWith(month))
     const achievements = (game?.input.game ?? []).flatMap((x) => x.achievements).filter((a) => (a.day ?? '').startsWith(month))
+    const fuel = fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today)
+    // AP-46 (T490): the month's flows from these numbers – the operations the debriefing reads (up to the budget's day).
+    const ops = transactionsOfMonth(transactions, month).filter((t) => t.date <= fleet.today)
+    const cats = categoryIndex(settings.categories)
+    const money = monthFlows({ brief, fuel: fuel.month, outside: outsideMoney(ops, month, fleet.incomeContext, brief.financed), label: (id) => cats.label(id) })
     return {
       brief,
       log,
-      fuel: fuelSummary(transactions, fleet.incomeContext, month, fleet.historyMonths, fleet.today),
+      fuel,
+      flows: { money, energy: energyFlows(brief) },
       plan: planFor(plans, month),
       game: {
         ok: days.filter((d) => d.status === 'ok').length,
@@ -282,6 +290,7 @@ function DebriefReport() {
   const first = fleet.start ? monthOf(fleet.start) : fleet.month
   const months = monthRange(first, fleet.month).reverse()
   const [month, setMonth] = useState(() => (months[1] ?? months[0])!)
+  const [view, setView] = useState<SankeyView>('money')
   const d = useDebrief(month)
   const b = d.brief
   // AP-31: the shields and the hull at the end of the 12 months up to this one (a month running – up to the one before).
@@ -374,10 +383,17 @@ function DebriefReport() {
         ]
       : [])
   ]
-  const pdf = () =>
-    api
-      .savePdf(`debriefing_${month}.pdf`, reportHtml(`Debriefing – ${monthLabel(month)}`, `Financial Intel · ${plDate(fleet.today)}`, sections(fileZl, cats.label)))
+  // AP-46 (T491): the PDF draws both views of „Skąd i dokąd” after the result, with the real amounts (D73).
+  const flowSections = (): ReportSection[] => [
+    ...(d.flows.money.links.length ? [{ title: 'Skąd i dokąd – przychód i koszty', svg: sankeyPdfSvg(d.flows.money, fileZl) }] : []),
+    ...(d.flows.energy?.links.length ? [{ title: 'Skąd i dokąd – pensja i energia', svg: sankeyPdfSvg(d.flows.energy, fileZl) }] : [])
+  ]
+  const pdf = () => {
+    const [result, ...rest] = sections(fileZl, cats.label)
+    return api
+      .savePdf(`debriefing_${month}.pdf`, reportHtml(`Debriefing – ${monthLabel(month)}`, `Financial Intel · ${plDate(fleet.today)}`, [result!, ...flowSections(), ...rest]))
       .then(saved, failed)
+  }
   return (
     <Columns id="reports-debrief" tracks={['minmax(460px,1fr)']} className="grid items-start">
       <Panel
@@ -398,8 +414,11 @@ function DebriefReport() {
               </option>
             ))}
           </select>
-          {sections(zl, cats.label).map((s) => (
-            <SectionView key={s.title} s={s} />
+          {sections(zl, cats.label).map((s, i) => (
+            <Fragment key={s.title}>
+              <SectionView s={s} />
+              {i === 0 && <MonthSankey money={d.flows.money} energy={d.flows.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={view} onView={setView} />}
+            </Fragment>
           ))}
         </div>
       </Panel>

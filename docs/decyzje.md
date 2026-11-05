@@ -3973,3 +3973,31 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zdanie o zasadzie „tylko do odczytu, nie zapisuj, gdy aplikacja działa” i „Opis formatu folderu i przykładowy skrypt ›”,
   otwiera w przeglądarce `FOLDER_FORMAT_PAGE` (plik w publicznym repozytorium – D61; `shared/update.ts`). Opisu nie ma
   w aplikacji (bez sieci link się nie otworzy) – w Ustawieniach, nie w F1, bo dotyczy folderu.
+- **T490** Sankey miesiąca – liczby (1.17.0, R2 – AP-46; zmienia „Sankey – nie” z T294): wykres tylko układa liczby,
+  które już są (`calc/sankey.ts`), nic nie liczy od nowa. Dwa widoki: „Przychód i koszty” – przychody z pracy i dostawy
+  z ICTTJ (praca i trading netto z Bilansu paliwa), zwroty ponad zakupy kategorii (część kosztów poniżej zera – źródło,
+  nigdy wstęga ujemna) i – gdy koszty były wyższe od przychodu – „Z osłon i kadłuba” (na czerwono) → „Miesiąc” → kategorie
+  główne pod nagłówkami „Koperty codzienne” (z „Bez kategorii” – pula codzienna), „Koperty planowe”, „Bez koperty”
+  (wiersze debriefingu), „Ładownia” i „Dołożone do okrętu” (na zielono); bilans = przychód − koszty netto debriefingu
+  (= Bilans paliwa, te same operacje do dnia budżetu – AP-36). Pod nagłówkiem „Poza przychodem i kosztami” – od źródła
+  prosto do celu, obok miesiąca: zakupy ze środków celów, zakupy domowników (`financed` debriefingu), wpłaty domowników
+  (to, czego `incomeParts` nie liczy jako przychód, bez pożyczek i puli „Podatek”: zaliczki z księgi domowników do
+  depozytu, reszta do osłon i kadłuba), pożyczki (wypływy; wpływy do długu – `loanBacks`, odsetki są przychodem – T70),
+  przelewy własne poza budżet i spoza niego (dwustronny – nic; para jednostronnych w budżecie – netto) i dopłaty do XTB
+  ponad wypłaty miesiąca (trading netto poniżej zera – N4). „Pensja i energia” – energia debriefingu: pensja od siebie
+  i łupy poprzedniego miesiąca → energia → odkładki do zbiorników, raty celów, wydane (z energii i ponad nią), zostało;
+  wynik energii poniżej zera – źródło „Ponad energię – z osłon”. Poza wykresem: pula „Podatek” i PIT-38 (poza budżetem),
+  korekty sald, wpływ ujemny. Miesiąc w toku – do dziś, nazwy „(do dziś)”, „Ponad koszty (do dziś)” zamiast „Dołożone”.
+  Kategorie poniżej 1% wszystkich pieniędzy wykresu – „Pozostałe” swojej grupy (z nazwami w dymku), gdy są co najmniej
+  dwie. Test: każdy węzeł zbilansowany, koszty, przychód, bilans paliwa i energia co do grosza
+  (`tests/unit/sankey-ap46.test.ts`).
+- **T491** Sankey miesiąca – wygląd (1.17.0, R2 – AP-46): własne SVG bez biblioteki (`shared/sankeyLayout.ts` – ta sama
+  geometria na ekranie i w PDF): trzy kolumny (skąd, miesiąc / energia, dokąd), słupek i wstęga proporcjonalne do kwoty,
+  wstęga „poza przychodem i kosztami” przechodzi pod węzłem miesiąca (niewidoczny węzeł kolumny), etykiety z kwotą
+  (źródła po lewej, reszta po prawej, za długa – ucięta „…”), nagłówki grup z sumą. Wstęgi i słupki szare, akcent tylko
+  pod wskaźnikiem, zieleń / czerwień tylko dla kwot na plus / minus, kwoty `.num`, bez gradientów i cieni; dymek – nazwa,
+  kwota i procent wszystkich pieniędzy wykresu. Ukryte kwoty (Ctrl+$) – kwoty `•••`, miejsca na etykiety liczone z
+  prawdziwych kwot, więc słupki się nie ruszają. Miejsce: Raporty → Debriefing, pod „Wynik wobec planu”, miesiąc z
+  wyboru debriefingu, widok przełącznikiem (domyślnie „Przychód i koszty”, wybór do zmiany ekranu). PDF debriefingu –
+  oba widoki po „Wyniku wobec planu”, jasne barwy druku, prawdziwe kwoty (D73; `ReportSection.svg`). Okno węższe niż
+  640 px przewija wykres w bok; Raporty nie są na telefonie (D92).

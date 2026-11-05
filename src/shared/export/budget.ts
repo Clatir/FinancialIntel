@@ -425,6 +425,8 @@ export interface ReportSection {
   lines?: ReadonlyArray<readonly [string, string]>
   table?: { head: readonly string[]; rows: ReadonlyArray<readonly string[]>; numeric?: readonly number[] }
   text?: string
+  /** A chart of own SVG (AP-46 – the debriefing's Sankey, `sankeySvg`): built by the app, its texts escaped – never markup typed in. */
+  svg?: string
 }
 
 const esc = (s: string) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
@@ -441,7 +443,8 @@ export function reportHtml(title: string, subtitle: string, sections: readonly R
             .join('')}</tbody></table>`
         : ''
       const text = s.text ? `<p>${esc(s.text)}</p>` : ''
-      return `<section><h2>${esc(s.title)}</h2>${lines}${table}${text}</section>`
+      const svg = s.svg ? `<div class="chart">${s.svg}</div>` : ''
+      return `<section><h2>${esc(s.title)}</h2>${svg}${lines}${table}${text}</section>`
     })
     .join('')
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>${esc(title)}</title><style>
@@ -449,6 +452,6 @@ body{font-family:'Segoe UI',Arial,sans-serif;color:#1d232a;font-size:11px;margin
 h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:16px 0 6px;border-bottom:1px solid #c9ced4;padding-bottom:3px}
 .sub{color:#5f6873;margin-bottom:8px}table{border-collapse:collapse;width:100%}td,th{padding:3px 6px;text-align:left}
 .grid th{border-bottom:1px solid #9aa3ad;font-weight:600}.grid td{border-bottom:1px solid #e3e6ea}.num{text-align:right;font-variant-numeric:tabular-nums}
-.lines td:first-child{color:#5f6873;width:55%}p{margin:4px 0;color:#3b434c}section{break-inside:avoid}
+.lines td:first-child{color:#5f6873;width:55%}p{margin:4px 0;color:#3b434c}section{break-inside:avoid}.chart svg{max-width:100%;height:auto}
 </style></head><body><h1>${esc(title)}</h1><div class="sub">${esc(subtitle)}</div>${body}</body></html>`
 }
