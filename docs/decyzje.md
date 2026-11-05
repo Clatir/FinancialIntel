@@ -3893,7 +3893,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   pomijane (`accountMapping` – `safeParse`; 7). Mapowanie, którego `fi.json` nie zachowa (kolumna od 200, nagłówek ponad
   200 komórek albo komórka ponad 200 znaków), nie jest zapisywane – kreator mówi dlaczego; nazwa nowego konta skracana
   przed numerem do 40 znaków („… 2”), zmieniona – ze słowem (5). Inny separator albo kodowanie: role po nazwach nowego
-  nagłówka, inaczej tylko te w kolumnach pliku (`columnsFor`; 11). Kwota z drugim znakiem dziesiętnym poza tysiącami
+  nagłówka, inaczej tylko te w kolumnach pliku (`columnsFor`; 11). Drugi przegląd R1 (4, zmienia 11): inne kodowanie
+  nie rusza ról; inny separator – znikają tylko role poza kolumnami pliku, ustawione ręcznie zostają (żadna nie została –
+  po nazwach nagłówka). Kwota z drugim znakiem dziesiętnym poza tysiącami
   („12.50” przy „,”) – nieczytelna, wiersz pominięty z powodem (14).
 - **T461** Tożsamość wiersza CSV innego banku (1.16.0, R1 – AP-43; przegląd R1 1): `bank.key` =
   `csv:<odcisk(konto|data|WIERSZ|kwota)>:<n>`; WIERSZ – wszystkie komórki wiersza w ich kolejności (bez pustych na
@@ -3903,8 +3905,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   pozycja w dniu – pozycja zmienia się, gdy plik zaczyna się później albo bank dopisze operację w środku dnia. Bank,
   który zmienia komórki wiersza (operacja w toku zaksięgowana – saldo, stan, data zakończenia), daje mu inny klucz: miara
   B5 (kwota, ±3 dni, podobna nazwa, dzień w okresie pliku) obejmuje dla CSV także operacje tego samego formatu
-  (`byMeasure`) – tylko te, których klucz pliku nie znalazł; nowy klucz dopisany do `altKeys`. Usunięte operacje CSV
-  wracają do miary tylko z innego formatu (inaczej nowy zakup taki sam dzień później zostałby poza importem). Klucze
+  (`byMeasure`) – tylko te, których klucz pliku nie znalazł; nowy klucz dopisany do `altKeys`. Drugi przegląd R1 (1,
+  zmienia): usunięte operacje CSV tego samego formatu też – tylko te, których wiersza plik nie ma po kluczu
+  (`DeletedRow.keys`: `bank.key` i `altKeys`); wiersz usuniętej obecny po kluczu zostaje poza importem po kluczu, a nowy
+  taki sam zakup dzień później wchodzi. Drugi przegląd R1 (7): pola banku w granicach wpisu (`bankRowSchema`,
+  `transactionSchema` – opis 2000, kontrahent 300, rodzaj 200, tytuł 1000 znaków); dłuższy opis skrócony z odciskiem
+  całego tekstu na końcu (`within`) – tożsamość z pełnego wiersza, ta sama przy B35 i w panelu duplikatów. Klucze
   `csv:` sprzed przeglądu nie były wydane (R1 bez wydania) – bez migracji. Ponowny import pliku – wszystko „już zaimportowane”,
   plik zachodzącego okresu – wspólne dni znane, reszta nowa. Format wiersza mówi przedrostek klucza (`keyKindOf`,
   `formatOfBanks` → 'csv'), bo klucz zachowuje każda wersja: `bank.format` zostaje 'mbank' (w 1.15.9 zamknięty enum –
@@ -3926,7 +3932,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   opłata banku (wydatek: prowizja, odsetki, „opłata za kartę / prowadzenie”), przelew, płatność kartą; bez słowa – każdy
   wpływ i wydatek z numerem rachunku kontrahenta to przelew (wpłata domownika, spłata, przelew własny – po nazwie),
   wydatek bez słowa zostaje bez rodzaju (zakup – po nazwie). Kreator bez kolumny rodzaju mówi o tym i pokazuje rodzaj
-  w podglądzie.
+  w podglądzie. Drugi przegląd R1 (2, 8, 9): jedno rozpoznanie rodzaju – rodzaj banku zostaje tylko, gdy czyta go
+  `classify.ts` (`readsOperation`: `isAtmOperation`, `isFeeOperation`, `isReturnOperation`, `isTransferOperation` w kierunku
+  wiersza, `opKindOf` 'card'); goły „BLIK” czy „OBCIĄŻENIE” – ze słów jak bez kolumny (wpływ z „BLIK” to przelew osoby,
+  nie karta); bankomat po kierunku – wypływ to wypłata, wpływ „WPŁATA WE WPŁATOMACIE” (nie przelew na konto gotówki);
+  podgląd kreatora nazywa rodzaj tym samym (`operationKindText`). (6) Przelew własny bierze konto drugiej strony z numeru
+  rachunku kontrahenta, potem z opisu – nigdy konto pliku (opis CSV to cały wiersz, z numerem własnego rachunku).
 - **T463** Import w Web Workerze (1.16.0, R1 – AP-35, AF-30, IM.55): otwarcie pliku – dekodowanie, odczyt wierszy, wybór
   konta, mapowanie konta i plan – w Workerze (`renderer/features/import/worker.ts`, klient `analysis.ts`); jedna czysta
   funkcja `shared/import/analyze.ts` (`analyzeImport`) w Workerze i w oknie, dane budżetu jako `PlanSource` (zwykłe dane
@@ -3941,6 +3952,11 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   plan po jego przyjściu – także podjęte w międzyczasie (`replanImport(plan)`); jeden naraz, zmiana w trakcie – plan
   jeszcze raz po nim; inny plik, konto albo folder albo zapis importu w międzyczasie – plan odrzucony. W oknie zostają:
   zmiana konta pliku, „Cofnij” innego pliku i plan przed zapisem (`runImport` – synchroniczny z podpisem planu).
+  Drugi przegląd R1 (10): Worker trzyma plik swojej analizy i ostatnio wysłane operacje (`answerer` – sesja to id prośby
+  analizy); ponowny plan wysyła tylko konto, ustawienia, usunięte i zmiany operacji (`operationsDelta`: kolejność id
+  i rekordy inne niż wysłane – rekord sklepu nie zmienia się w miejscu); Worker bez tej sesji (inny plik, nowy Worker) –
+  plan w oknie. (5) Każde niepowodzenie drogi przez Workera – błąd, odpowiedź niepasująca do danych okna („plan bez
+  operacji”, „plan nie z tego pliku”) – analiza albo plan w oknie, nigdy błąd importu ani stary plan.
   Worker jako moduł ES (`worker.format: 'es'` – electron-vite i telefon; telefon nie importuje plików, build go ma).
 - **T464** Plan przez wiadomość Workera (1.16.0, R1 – AP-35): operacje planu jadą jako odnośniki (`txRef`: id i widok –
   druga strona przelewu w jednej operacji `sideOf`, strona przelewu sprzed 1.7.0 `legacySideOf`) i wracają z listy

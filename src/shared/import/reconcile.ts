@@ -164,8 +164,9 @@ export function formatsOf(txs: readonly Transaction[]): (t: Transaction) => Mban
  * The bank's operations a file's rows are matched to by the B5 measure (the same row in other words – the amount, ±3
  * days, a similar name) when no key finds them: of mBank's other format; of another bank's CSV any – its own too (T461,
  * przegląd R1 1): a bank that rewrote a row's cells (a pending one booked – its balance, its state) gives it another
- * key, the measure finds it still – never a second operation. Not the deleted ones of the CSV's own format: their row is
- * found by its key – by the measure a new purchase like it (the same shop and amount a day later) would stay out with them.
+ * key, the measure finds it still – never a second operation. A deleted one of the CSV's own format only when the file
+ * has not its row by its key (`DeletedRow.keys`): by the measure a new purchase like it (the same shop and amount a day
+ * later) would stay out with it.
  */
 export const byMeasure = (operation: MbankFile['format'], file: MbankFile['format']): boolean => operation !== file || file === 'csv'
 
@@ -474,6 +475,11 @@ export interface DeletedRow {
   deletedAt: string
   /** A booked one: the format of the file it came from (none = a pending one). */
   format?: MbankFile['format']
+  /**
+   * Its row's keys (`bank.key`, `altKeys`): a file holding one of them has its row by the key – another bank's CSV
+   * matches by the measure only the deleted ones it does not (drugi przegląd R1, 1).
+   */
+  keys?: readonly string[]
 }
 
 /** The key a bank's operation has on an account (B35): its date, the bank's description and amount, its occurrence – of its kind (T461). */
@@ -650,7 +656,11 @@ export function planImport(
   //   format (by its key) takes its deleted one as well – the row is there, its deleted copy hides no other purchase.
   const deletedOut = new Set<number>()
   const deletedOther = new Set<number>()
-  const gone = deletedRows.filter((d) => d.accountId === accountId && (!d.format || (d.format !== file.format && covers(d.date))))
+  // Of another bank's CSV also of its own format (drugi przegląd R1, 1 – a row whose cells the bank changed, another key):
+  // only a deleted one whose row the file has not by its key – else a new purchase like it would stay out with it.
+  const fileKeys = file.format === 'csv' ? new Set(keys) : null
+  const byKeyHere = (d: DeletedRow) => !!fileKeys && !!d.keys?.some((k) => fileKeys.has(k))
+  const gone = deletedRows.filter((d) => d.accountId === accountId && (!d.format || (byMeasure(d.format, file.format) && !byKeyHere(d) && covers(d.date))))
   if (gone.length) {
     const goneOn = new Map<string, number[]>()
     gone.forEach((d, at) => push(goneOn, d.date, at))

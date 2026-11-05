@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { categoryIndex } from '@shared/calc/operations'
 import { createDefaultSettings } from '@shared/defaults'
-import { answer, csvAccountsFor, planFor, planFromWire, type AnalyzeMessage, type PlanSource } from '@shared/import/analyze'
+import { answerer, csvAccountsFor, operationsDelta, planFor, planFromWire, type AnalyzeMessage, type PlanSource } from '@shared/import/analyze'
 import { columnsFor, completeMapping, decodeAs, draftOf, guessCsv, NO_COLUMNS, operationOf, parseCsvAmount, parseMappedCsv, type CsvDraft } from '@shared/import/csv'
 import type { MbankFile } from '@shared/import/mbank'
 import { parseCsv } from '@shared/import/text'
@@ -158,21 +158,32 @@ describe('przegląd R1 5, 7, 11, 14 – mapowanie, konta, kolumny, kwoty', () =>
 describe('przegląd R1 15 – ponowny plan otwartego pliku w Workerze', () => {
   it('prośba o ponowny plan: plan z Workera równy planowi okna – te same wiersze pliku i operacje (także widoki stron)', () => {
     const m = mappingOf(guessed())
-    const f = read(m)
     const existing: Transaction[] = [
-      transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, kind: 'transfer', amount: 100000, date: '2026-10-03', accountId: MBANK_ACCOUNT_ID, counterAccountId: BANK_B, bothSides: true, counterparty: 'Z Banku B' }),
-      transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, amount: -8745, date: '2026-10-01', accountId: BANK_B, counterparty: 'Biedronka' })
+      transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, kind: 'transfer', amount: 100000, date: '2026-10-03', accountId: MBANK_ACCOUNT_ID, counterAccountId: BANK_B, bothSides: true, counterparty: 'Z Banku B' })
     ]
     const source: PlanSource = { transactions: existing, containers: [], loans: [], accounts: settings.accounts, categories: settings.categories, rules: [], aliases: {}, members: [], ownNames: ['JAN KAPITAN'], accountNumbers: {}, locked: new Set(), docked: new Set() }
-    const input = { file: f, accountId: BANK_B, source, deletedKeys: new Set<string>(), deletedRows: [] }
-    const direct = planFor(input)
+    const worker = answerer()
     const messages: AnalyzeMessage[] = []
-    answer(structuredClone({ id: 3, replan: input }), (msg) => messages.push(structuredClone(msg)))
+    const post = (msg: AnalyzeMessage) => messages.push(structuredClone(msg))
+    // The file's analysis: the Worker keeps the file and the operations.
+    worker(structuredClone({ id: 3, input: { bytes: CSV, chosen: '', fallback: MBANK_ACCOUNT_ID, mapping: { accountId: BANK_B, mapping: m }, source, deletedKeys: new Set<string>(), deletedRows: [] } }), post)
+    const loaded = messages.at(-1)!
+    if (loaded.type !== 'done' || loaded.analysis.kind !== 'plan') throw new Error(loaded.type)
+    const f = loaded.analysis.file
+    // A purchase typed by hand since: only it goes (the order of all of them).
+    const typed = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: makeId(), createdAt: NOW, updatedAt: NOW, amount: -8745, date: '2026-10-01', accountId: BANK_B, counterparty: 'Biedronka' })
+    const now = [...existing, typed]
+    const sent = new Map(existing.map((t) => [t.id, t]))
+    const operations = operationsDelta(now, sent)
+    expect(operations.changed).toEqual([typed])
+    const { transactions: _all, ...rest } = source
+    worker(structuredClone({ id: 4, replan: { session: 3, accountId: BANK_B, source: rest, operations, deletedKeys: new Set<string>(), deletedRows: [] } }), post)
     const done = messages.at(-1)!
     if (done.type !== 'planned') throw new Error(done.type)
     // Without the file's rows (the window has them): the message is the plan's own.
     expect(done.plan.rows.every((r) => !('row' in r))).toBe(true)
-    const back = planFromWire(done.plan, existing, f.rows)
+    const direct = planFor({ file: f, accountId: BANK_B, source: { ...source, transactions: now }, deletedKeys: new Set(), deletedRows: [] })
+    const back = planFromWire(done.plan, now, f.rows)
     expect(back).toEqual(direct)
     back.rows.forEach((p, i) => {
       expect(p.row).toBe(f.rows[i])
@@ -180,6 +191,10 @@ describe('przegląd R1 15 – ponowny plan otwartego pliku w Workerze', () => {
       if ('tx' in p && 'tx' in q) expect(p.tx).toBe(q.tx)
     })
     expect(back.rows.some((p) => p.status === 'merge' && p.side === 'other' && isSideView(p.tx))).toBe(true)
-    expect(() => planFromWire(done.plan, existing, f.rows.slice(1))).toThrow()
+    expect(back.rows.some((p) => p.status === 'merge' && p.tx === typed)).toBe(true)
+    expect(() => planFromWire(done.plan, now, f.rows.slice(1))).toThrow()
+    // Another session (the Worker keeps another file): no plan – the window plans it.
+    worker(structuredClone({ id: 5, replan: { session: 9, accountId: BANK_B, source: rest, operations, deletedKeys: new Set<string>(), deletedRows: [] } }), post)
+    expect(messages.at(-1)).toMatchObject({ id: 5, type: 'fail' })
   })
 })

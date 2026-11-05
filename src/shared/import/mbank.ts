@@ -281,7 +281,7 @@ export function parseMbank(text: string, progress?: Progress): MbankFile & { for
 // ------------------------------------------------------------------ identity of a row across imports
 
 /** FNV-1a (64-bit as two 32-bit halves): a short, stable fingerprint of a text. */
-function fingerprint(text: string): string {
+export function fingerprint(text: string): string {
   let h1 = 0x811c9dc5
   let h2 = 0x01000193
   for (let i = 0; i < text.length; i++) {
