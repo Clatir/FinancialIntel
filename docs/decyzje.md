@@ -4129,6 +4129,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w miesiącach harmonogramu, a koszty bez części, którą średnia ma z rat (`loanCosts`: płatności kontenerów pożyczek
   wziętych w miesiącach średniej ÷ ich liczba, także spłaconej już pożyczki; przyjęte koszty – 0) – inaczej po ostatniej
   racie prognoza płaciłaby ją dalej. Dług na koniec roku – jak zasięg kursu (dług minus raty do miesiąca).
+  **Przegląd R2 (zmienia zdanie o racie w roku 1; także kurs):** pożyczka wzięta bez kontenera (spłata z osłon) w roku 1
+  nie wychodziła z pieniędzy, a dług malał – siła floty rosła o raty. Teraz rata każdej pożyczki wziętej wychodzi w swoim
+  miesiącu w każdym roku, w kursie też (`courseInputOf` → `extras`; zaległa – w tym miesiącu; rata tego miesiąca pożyczki
+  z kontenerem w ładowni to jego termin w `restNeeds`, nie drugi raz), a miesiące kursu i prognozy wydają średnie koszty
+  bez części, którą są płatności kontenerów pożyczek wziętych (`CourseInput.loanCosts`; kontenery z `courseInputOf`,
+  indeks płatności kontenerów po miesiącu raz na listę operacji – `containerCostsByMonth`, jak `costsByMonth`). Zasięg
+  i cel kadłuba w kursie czytają średnią całą (Mostek), od roku 2 prognozy – koszty roku bez rat. Testy: kurs = silnik
+  w miesiącu z ratą (spłata z osłon i rata z kontenera), scenariusz recenzji (12 000 zł, 12 rat: siła floty 8 000 zł po
+  roku, nie 20 000).
 - **T487** Siła floty netto na koniec roku (1.17.0, R2 – AP-44): jak przegląd roczny (F24, T449) – pieniądze na kontach
   (osłony, kadłub i cele z kursu + reszta warstw – T486 – minus rezerwa podatkowa: PIT-38 płatny w ciągu roku) + należności
   (saldo domowników jak dziś, pożyczki udzielone jeszcze otwarte) − dług − **wszystkie braki dotąd** (`short` kursu:
@@ -4136,7 +4145,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   = konta + należności − dług (test: = przegląd roczny przez `netAdjustments`). Wynik też: miesiąc osiągnięcia każdego celu
   (pierwszy w całej prognozie; pełny teraz – „teraz”), „Osłony do zera” – pierwszy miesiąc z najniższym punktem osłon 0
   (resztę płaci kadłub albo brakuje), „Brakuje na koszty od” – pierwszy miesiąc z brakiem (resztka tego miesiąca – „teraz”),
-  zasięg na koniec roku.
+  zasięg na koniec roku. **Przegląd R2:** „Osłony do zera” – „teraz”, gdy resztka tego miesiąca je opróżnia (najniższy
+  punkt osłon w resztce – `Course.restLow`: po tym, co płaci z nich, przed tym, co wpływa), spójnie z „Brakuje na koszty od”.
 - **T488** Założenia scenariuszy w `fi.json` (1.17.0, R2 – AP-44; addytywnie, bez podbijania `SCHEMA_VERSION`):
   `settings.intel.forecast.{cautious|base|optimistic}` = `{ wages, inflation, deliveries, oneOff }` (procenty rocznie
   od −50 do 100; grosze ≥ 0), brak scenariusza – jego założenia domyślne (`FORECAST_DEFAULTS`: ostrożny 0 % / 5 %, bazowy
@@ -4146,7 +4156,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   i w folderze na OneDrive; zmiana przez scalanie trójstronne jak inne ustawienia (nazwy pól w `merge.ts`, kwoty
   w `AMOUNT_FIELDS`, opis w `docs/format-folderu.md`). Liczba lat na ekranie (3 / 5 / 10, domyślnie 5) to wybór widoku –
   na tym komputerze (`localStorage`, jak linia majątku). Pole zapisuje po wyjściu z pola; „domyślne” pod zmienionym
-  scenariuszem z „Cofnij” (cofa tylko, gdy scenariusz nadal jest domyślny – AP-22).
+  scenariuszem z „Cofnij” (cofa tylko, gdy scenariusz nadal jest domyślny – AP-22). **Przegląd R2 (zmienia „pole spoza
+  zakresu – cały scenariusz domyślnie”):** scenariusz nieczytelny zostaje w pliku w swojej postaci (schemat
+  `z.union([założenia, z.unknown()])` – następny zapis `fi.json` go nie gubi), prognoza liczy go z założeniami domyślnymi
+  i mówi to pod tabelą założeń (`unreadableScenarios`), „domyślne” jest i pod nim. Pola kwot odmawiają ponad granicę
+  schematu (`FORECAST_MAX_AMOUNT` – 100 000 000 zł) z komunikatem, procenty – zakres schematu (`FORECAST_PCT_RANGE`), nic
+  nie zapisuje się po to, by przy odczycie wrócić do domyślnych. Pola nowszej wersji w scenariuszu (obok czterech) zostają:
+  zapis pola zmienia tylko cztery, „domyślne” zapisuje założenia domyślne obok nich (bez nich – scenariusz znika), „Cofnij”
+  przywraca scenariusz w całości (gdy nadal jest taki, jak „domyślne” go zostawiło).
 - **T489** Zaokrąglenia i ekran prognozy (1.17.0, R2 – AP-44): każda kwota roku zaokrąglana raz do grosza (`Math.round`)
   od dzisiejszej – czynnik roku jako liczba zmiennoprzecinkowa, nigdy zaokrąglona kwota roku poprzedniego × wzrost (test:
   rok 4); dostawy rocznie ÷ 12 do grosza (rok może różnić się od wpisanej kwoty o kilka groszy); pensja, koszty, wpływy
