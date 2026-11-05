@@ -59,12 +59,10 @@ notatki, dalej od pierwszej grupy niewydanej.
 całości + jeden high na poprawkach, dalej tylko przy poważnych uwagach; numery T przydzielaj podagentom z góry.
 
 ### Do Twojej decyzji
-- **Rekordy z atrybutem „tylko do odczytu”** (np. po przywróceniu kopii): zapis takiego rekordu pada (EPERM, 8 prób), nic nie
-  ginie. Propozycja: wykrywać przy otwarciu folderu i dać przycisk „Zdejmij blokadę” w Synchronizacji (jawnie, za
-  zgodą); alternatywy: zdejmować po cichu przy zapisie albo tylko czytelny komunikat. Bez Twojej zgody nic nie zmieniam.
+- **Rekordy z atrybutem „tylko do odczytu”** – ✅ **Zatwierdzone przez użytkownika 05.11.2026:** wdrożono wariant rekomendowany (wykrywanie przy otwarciu folderu z czytelnym komunikatem i przyciskiem „Zdejmij blokadę” w Synchronizacji / Ustawieniach, T500).
 
 ### Do potwierdzenia (zasada wątpliwości, D101 pkt 4)
-Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – wybrany wariant rekomendowany; możesz go odwrócić.
+Zachowanie widoczne dla Ciebie, którego nie rozstrzygały D99 i D100 – ✅ **Wszystkie warianty rekomendowane zaakceptowane przez użytkownika 05.11.2026 („Zgadzam się na wszystko”).** Poniższa tabela stanowi trwały zapis przyjętych ustaleń:
 
 | Grupa | Sprawa | Wybrany wariant | Gdzie |
 | --- | --- | --- | --- |
