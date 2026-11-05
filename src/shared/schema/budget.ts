@@ -569,6 +569,34 @@ export const anomalySettingsSchema = z.looseObject({
   ok: z.array(z.string().max(200)).catch([]).default([])
 })
 
+// ------------------------------------------------------------------ the forecast for years (1.17.0)
+
+/** The forecast's scenarios (AP-44): the cautious, the base and the optimistic one. */
+export const FORECAST_SCENARIOS = ['cautious', 'base', 'optimistic'] as const
+export type ForecastScenario = (typeof FORECAST_SCENARIOS)[number]
+
+/**
+ * One scenario's assumptions of the forecast for years (AP-44, T488) – typed by the captain, shared by the computers:
+ * the income from work and the costs grow by % a year, the ICTTJ deliveries a year are the captain's assumption (never
+ * read from ICTTJ – the trading is not FI's), the one-off expenses a year in today's prices. A field out of its range
+ * (a hand-edited fi.json) – the whole scenario counts by its defaults (`calc/forecast.ts`).
+ */
+export const forecastAssumptionsSchema = z.looseObject({
+  wages: z.number().min(-50).max(100),
+  inflation: z.number().min(-50).max(100),
+  deliveries: grosze.min(0).max(100_000_000_00),
+  oneOff: grosze.min(0).max(100_000_000_00)
+})
+export type ForecastAssumptions = z.infer<typeof forecastAssumptionsSchema>
+
+/** The scenarios edited (AP-44): absent – the scenario's defaults. */
+export const forecastSettingsSchema = z.looseObject({
+  cautious: forecastAssumptionsSchema.optional().catch(undefined),
+  base: forecastAssumptionsSchema.optional().catch(undefined),
+  optimistic: forecastAssumptionsSchema.optional().catch(undefined)
+})
+export type ForecastSettings = z.infer<typeof forecastSettingsSchema>
+
 // ------------------------------------------------------------------ the intelligence (1.10.0)
 
 export const intelSettingsSchema = z.looseObject({
@@ -578,7 +606,12 @@ export const intelSettingsSchema = z.looseObject({
    * The CPI of GUS typed by hand, month by month (F36, D87 – no network): the year-on-year change in % as published
    * („4,9”) – „Twoja inflacja” against it.
    */
-  cpi: lenientRecord(z.number().min(-50).max(200)).transform((r) => Object.fromEntries(Object.entries(r).filter(([k]) => /^\d{4}-(0[1-9]|1[0-2])$/.test(k))))
+  cpi: lenientRecord(z.number().min(-50).max(200)).transform((r) => Object.fromEntries(Object.entries(r).filter(([k]) => /^\d{4}-(0[1-9]|1[0-2])$/.test(k)))),
+  /**
+   * The forecast for years' assumptions (1.17.0, AP-44, T488 – additive, no `SCHEMA_VERSION` change): absent – every
+   * scenario by its defaults; an older version keeps it (a loose object).
+   */
+  forecast: forecastSettingsSchema.optional().catch(undefined)
 })
 
 // ------------------------------------------------------------------ saved views of Operacje (1.7.0, F18)

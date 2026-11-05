@@ -172,17 +172,27 @@ export function restNeeds(fleet: Pick<FleetState, 'daily' | 'envelopes' | 'tanks
   const d = fleet.daily
   const pool = d ? Math.max(0, d.limit - d.spentBefore - d.spentToday + d.returned) : 0
   const planned = sum(fleet.envelopes.filter((e) => e.kind === 'planned').map((e) => Math.max(0, e.left)))
-  // Each tank once: two dues of one fee (a late one and this month's) share what it holds.
-  const tanks = new Map(fleet.tanks.map((t) => [t.containerId, Math.max(0, t.amount)]))
-  let fees = 0
+  return pool + planned + feesDue(fleet.tanks, cargo).energy
+}
+
+/**
+ * The fees still to pay this month (`cargoStatuses`), by what pays them: a periodic one's tank what it holds (each tank
+ * once: two dues of one fee – a late one and this month's – share it), the month's energy the rest (`restNeeds`). The
+ * forecast for years (AP-44, T486) reads the tanks' part: that money leaves the budget this month too.
+ */
+export function feesDue(tanks: Pick<FleetState, 'tanks'>['tanks'], cargo: ReadonlyArray<Pick<CargoStatus, 'containerId' | 'cycleMonths' | 'amount' | 'state'>> = []): { energy: number; tanks: number } {
+  const held = new Map(tanks.map((t) => [t.containerId, Math.max(0, t.amount)]))
+  let energy = 0
+  let fromTanks = 0
   for (const s of cargo) {
     if (s.state === 'paid') continue
-    const have = s.cycleMonths > 1 ? (tanks.get(s.containerId) ?? 0) : 0
+    const have = s.cycleMonths > 1 ? (held.get(s.containerId) ?? 0) : 0
     const fromTank = Math.min(have, s.amount)
-    if (fromTank) tanks.set(s.containerId, have - fromTank)
-    fees += s.amount - fromTank
+    if (fromTank) held.set(s.containerId, have - fromTank)
+    fromTanks += fromTank
+    energy += s.amount - fromTank
   }
-  return pool + planned + fees
+  return { energy, tanks: fromTanks }
 }
 
 /**

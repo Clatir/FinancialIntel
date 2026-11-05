@@ -481,6 +481,16 @@ const LABELS: Record<string, string> = {
   'settings.anomalies': 'Anomalie',
   'settings.anomalies.ok': 'Anomalie – w porządku',
   'settings.intel': 'Wywiad',
+  // AP-44 (T488): the forecast for years – each scenario, each assumption.
+  'settings.intel.forecast': 'Prognoza wieloletnia',
+  'settings.intel.forecast.cautious': 'Prognoza wieloletnia – scenariusz ostrożny',
+  'settings.intel.forecast.base': 'Prognoza wieloletnia – scenariusz bazowy',
+  'settings.intel.forecast.optimistic': 'Prognoza wieloletnia – scenariusz optymistyczny',
+  // The assumption's own key under any scenario (`partsAfter`).
+  wages: 'Wzrost wpływów z pracy (%/rok)',
+  inflation: 'Inflacja kosztów (%/rok)',
+  deliveries: 'Dostawy z ICTTJ rocznie',
+  oneOff: 'Wydatki jednorazowe rocznie',
   'settings.import.rules.updatedAt': 'Reguły importu – zmieniona',
   'loot.decidedAt': 'Podział łupów – zdecydowano',
   'bank.format': 'Dane z banku – format pliku',
@@ -624,7 +634,10 @@ const AMOUNT_FIELDS = [
   'settings.import.rules.loanAmount',
   // AP-45: a rule's condition „kwota od–do”.
   'settings.import.rules.conditions.min',
-  'settings.import.rules.conditions.max'
+  'settings.import.rules.conditions.max',
+  // AP-44 (T488): the forecast's assumptions a year.
+  'settings.intel.forecast.*.deliveries',
+  'settings.intel.forecast.*.oneOff'
 ].map((f) => f.split('.'))
 
 /** Is the field at `path` an amount in grosze (B7)? Items of lists (`#id`, `[n]`) do not count as keys. */

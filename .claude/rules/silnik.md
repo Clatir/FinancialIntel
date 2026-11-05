@@ -126,6 +126,11 @@ paths:
   operacje do dnia budżetu (`upToDay`), późniejsze – osobno `planned` („Zaplanowane”); nowe zestawienie miesiąca w toku
   tak samo – jak salda i silnik.
 
+- Prognoza wieloletnia (AP-44, T485–T487, `calc/forecast.ts`): rok 1 to `course` z tym samym wejściem (`courseInputOf`) –
+  zmiana kursu zmienia prognozę (test „rok 1 = kurs”); lata dalej – założenia scenariusza, boje i harmonogramy pożyczek
+  z `later`. **Pułapka:** rata pożyczki wziętej jest w średnich kosztach – od roku 2 w miesiącach harmonogramu, koszty bez
+  niej (`loanCosts`), inaczej płaciłaby się dwa razy albo po ostatniej racie. Dostawy z ICTTJ – tylko założenie kapitana.
+
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`, `pastStates`); wyniki
   tylko do odczytu. Stan opłat: symulacja „Zapłacone (dziś)” i płatności zaplanowane tylko przy terminie do zapłaty (T399).
@@ -142,8 +147,8 @@ z domownikami), `repayments.ts` (zwroty przypisane do zakupów), `share.ts` (wsp
 (przychody), `history.ts` (zakres historii do średnich), `balances.ts` (salda otwarcia, potwierdzenia), `operations.ts`
 (części operacji, koszt, przelewy dwustronne),
 `transfers.ts`, `kinds.ts`, `radar.ts` (radar 90 dni), `scheduled.ts` (boje), `ahead.ts` (salda kont naprzód),
-`course.ts` (kurs i manewry), `cushion.ts` (osłony + kadłub i zasięg na koniec miesięcy), `yearPlan.ts` (plan
-roczny), `cargoStatus.ts` / `cargoWatch.ts` (opłaty, ceny, ciche kontenery), `anomalies.ts`, `returns.ts` (zwroty
+`course.ts` (kurs i manewry), `forecast.ts` (prognoza wieloletnia), `cushion.ts` (osłony + kadłub i zasięg na koniec
+miesięcy), `yearPlan.ts` (plan roczny), `cargoStatus.ts` / `cargoWatch.ts` (opłaty, ceny, ciche kontenery), `anomalies.ts`, `returns.ts` (zwroty
 w drodze), `tags.ts` (tagi i wyprawy), `drill.ts`, `fuel.ts` (bilans paliwa), `netWorth.ts`, `inflation.ts`, `why.ts`
 („skąd ta liczba?”), `game.ts` (oceny dni, stopnie, misje), `intel.ts` (analizy ICT), `inbox.ts` (meldunki), `quick.ts`
 (szablony szybkiego wpisu), `effect.ts` (skutek zmiany zbiorczej).
