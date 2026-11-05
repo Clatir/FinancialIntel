@@ -5,7 +5,7 @@
  * Pure; the main process only reads the file's bytes.
  */
 import { fold } from '../fold'
-import { CSV_DATE_FORMATS, CSV_SEPARATORS, type CsvMapping } from '../schema/budget'
+import { CSV_DATE_FORMATS, CSV_SEPARATORS, csvMappingSchema, type CsvMapping } from '../schema/budget'
 import { cleanBankName } from './names'
 import { PROGRESS_EVERY, type MbankFile, type MbankRow, type Progress } from './mbank'
 import { decodeText, parseCsv, type Rows } from './text'
@@ -62,7 +62,8 @@ export function parseCsvDate(cell: string, format: string): string | null {
 /**
  * A cell's amount with the mapping's decimal mark → grosze and the currency written with it (null – none): „-1 234,56”,
  * „1.234,56 PLN”, „PLN -12,00”, „(12,00)” (minus), „12,00 zł”; with '.' – „-1,234.56”, „1234.5”. Null – no amount (an
- * empty cell, more than two decimals, letters).
+ * empty cell, more than two decimals, letters, the other mark where no thousands are – „12.50” read with ',' is no
+ * 1250 zł: przegląd R1 14).
  */
 export function parseCsvAmount(cell: string, decimal: string): { grosze: number; currency: string | null } | null {
   let t = cell.replace(/[\s  ']/g, '').replace(/[−–]/g, '-')
@@ -85,8 +86,13 @@ export function parseCsvAmount(cell: string, decimal: string): { grosze: number;
     negative = true
     t = t.slice(1, -1)
   }
-  if (decimal === '.') t = t.replace(/,/g, '')
-  else t = t.replace(/\./g, '').replace(',', '.')
+  // The other mark only between groups of three digits (thousands): „1.234,56”, „1,234.56” – never „12.50” with ','.
+  const [mark, other] = decimal === '.' ? ['.', ','] : [',', '.']
+  const whole = t.split(mark)[0]!.replace(/^[+-]/, '')
+  const thousands = other === '.' ? /^\d{1,3}(\.\d{3})+$/ : /^\d{1,3}(,\d{3})+$/
+  if (whole.includes(other) && !thousands.test(whole)) return null
+  t = t.split(other).join('')
+  if (mark === ',') t = t.replace(',', '.')
   const m = /^([+-]?)(\d+)(?:\.(\d{1,2}))?$/.exec(t)
   if (!m) return null
   const grosze = Number(m[2]) * 100 + Number((m[3] ?? '0').padEnd(2, '0'))
@@ -124,6 +130,39 @@ export function mappingFits(bytes: Uint8Array, m: CsvMapping): boolean {
   return first.length > 0 && first.every((r) => !!readRow(r, m, 0).row)
 }
 
+/**
+ * The row as the bank wrote it – all its cells in their order (the empty ones at its end aside): its identity across
+ * imports (`rowIdentity`, T461), whatever role the mapping gives each column – a change of the roles never makes the same
+ * rows new (przegląd R1 1).
+ */
+export const rowText = (r: readonly string[]): string => {
+  const cells = r.map((c) => c.replace(/\s+/g, ' ').trim())
+  while (cells.length && !cells.at(-1)) cells.pop()
+  return cells.join(' | ')
+}
+
+/** Types of operation the import's recognition knows (mBank's words – `classify.ts`): kept as the bank wrote them. */
+const KNOWN_OPERATION =
+  /^(PRZELEW|BLIK|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|OBCIĄŻENIE|OBCIAZENIE|ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA|POS ZWROT|ZWROT|PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK|WYPŁATA|WYPLATA|KAPITALIZACJA|SPŁATA|SPLATA|STORNO|KOREKTA)(?=$|[^\p{L}\p{N}])/u
+
+/**
+ * The type of operation the import's recognition reads (T462, przegląd R1 4): the bank's own when it is one of the words
+ * it knows, else told by the row's words, its direction and the other side's account number – an ATM, a product's return,
+ * a fee of the bank, a card payment, a transfer (every inflow without a card's word is one: a member's money, a loan's
+ * repayment, an own transfer are transfers). '' – nothing tells (an outflow of no word: a card payment by the name).
+ */
+export function operationOf(written: string, text: string, amount: number, accountNo: string): string {
+  if (KNOWN_OPERATION.test(written)) return written
+  const t = ` ${fold(`${written} ${text}`).replace(/[^a-z0-9]+/g, ' ')} `
+  if (/ bankomat| wyplata gotowki | atm | cash withdrawal /.test(t)) return 'WYPŁATA Z BANKOMATU'
+  if (amount > 0 && / (refund|zwrot (towaru|zakupu|platnosci|transakcji)) /.test(t)) return 'ZWROT'
+  if (amount < 0 && / (prowizja|odsetki|oplata za (karte|prowadzenie|rachunek|konto)|fee|bank charge) /.test(t)) return 'OPŁATA'
+  if (/ (przelew|transfer|top ?up|zlecenie|polecenie) /.test(t)) return amount > 0 ? 'PRZELEW PRZYCHODZĄCY' : 'PRZELEW WYCHODZĄCY'
+  if (/ (karta|karty|kart|card|blik|zakup|platnosc|payment|purchase) /.test(t)) return 'PŁATNOŚĆ KARTĄ'
+  if (amount > 0 || accountNo) return amount > 0 ? 'PRZELEW PRZYCHODZĄCY' : 'PRZELEW WYCHODZĄCY'
+  return written
+}
+
 /** One row of the file by the mapping: the operation, or why it is left out. */
 function readRow(r: readonly string[], m: CsvMapping, line: number): { row?: MbankRow; skip?: string } {
   const c = m.columns
@@ -158,20 +197,20 @@ function readRow(r: readonly string[], m: CsvMapping, line: number): { row?: Mba
   if (currency && currency !== 'PLN' && currency !== 'ZŁ' && currency !== 'ZL') return { skip: `kwota w ${currency} – FI prowadzi tylko PLN` }
   const who = cellOf(r, c.counterparty)
   const what = cellOf(r, c.description)
-  const operation = cellOf(r, c.operation).toUpperCase()
+  const accountNo = cellOf(r, c.accountNo).replace(/[\s']/g, '')
+  const operation = operationOf(cellOf(r, c.operation).toUpperCase(), `${who} ${what}`, amount, accountNo)
   const balance = c.balance != null ? parseCsvAmount(cellOf(r, c.balance), m.decimal) : null
   return {
     row: {
       line,
       date,
-      // The row as the bank wrote it (the type of operation, the other side, the description): its identity across
-      // imports (`rowIdentity`, T461) – never another for the same row of a later file.
-      description: [operation, who, what].filter(Boolean).join(' '),
+      // The row as the bank wrote it – all its cells (T461): its identity across imports, whatever the roles.
+      description: rowText(r),
       operation,
       // The other side: its column, else the description (a card payment's shop) – without the bank's additions.
       counterparty: cleanBankName(who || what, { town: true }),
       title: who ? what : '',
-      accountNo: cellOf(r, c.accountNo).replace(/[\s']/g, ''),
+      accountNo,
       category: '',
       amount,
       pending: false,
@@ -231,7 +270,39 @@ export function completeMapping(d: CsvDraft): { mapping: CsvMapping } | { missin
   if (c.description == null && c.counterparty == null) return { missing: 'Wskaż kolumnę z opisem albo z kontrahentem – bez nich operacji nie da się rozpoznać.' }
   const used = Object.values(c).filter((x): x is number => x != null)
   if (new Set(used).size !== used.length) return { missing: 'Jedna kolumna wskazana dwa razy – każda rola potrzebuje własnej kolumny.' }
-  return { mapping: { ...d, columns: { ...c, date: c.date } } }
+  // What fi.json keeps of a mapping (`csvMappingSchema`, przegląd R1 5): one beyond it is never saved to be dropped.
+  if (used.some((x) => x >= MAX_COLUMNS)) return { missing: `Kolumna dalej niż ${MAX_COLUMNS}. – FI czyta najwyżej ${MAX_COLUMNS} kolumn pliku.` }
+  if (d.headers.length > MAX_COLUMNS || d.headers.some((h) => h.length > 200)) return { missing: 'Nagłówek nie wygląda na nazwy kolumn (bardzo długi) – sprawdź separator i wiersz nagłówka.' }
+  const kept = csvMappingSchema.safeParse({ ...d, columns: { ...c, date: c.date } })
+  if (!kept.success) return { missing: 'Tego układu pliku nie da się zapamiętać – sprawdź separator, kodowanie i wiersz nagłówka.' }
+  return { mapping: kept.data }
+}
+
+/** At most this many columns a mapping names (`csvMappingSchema` – a column's number below it). */
+export const MAX_COLUMNS = 200
+
+/** A file's columns without the header (the number of cells of its widest first rows after the skipped ones). */
+export const widthOf = (rows: Rows, d: Pick<CsvDraft, 'skipRows'>): number => Math.max(0, ...rows.slice(d.skipRows, d.skipRows + 20).map((r) => r.length))
+
+/**
+ * The roles of a draft for the rows of another separator or encoding (przegląd R1 11): by the header's names when the
+ * header names a date, else the ones still within the file's columns – never a role on a column the file has not.
+ */
+export function columnsFor(d: CsvDraft, rows: Rows): CsvDraft['columns'] {
+  const head = d.header ? rows[d.skipRows] : undefined
+  const byName = head ? columnsByName(head) : null
+  if (byName && byName.date != null) return byName
+  const width = widthOf(rows, d)
+  const out = { ...d.columns }
+  for (const role of Object.keys(out) as CsvRole[]) if (out[role] != null && out[role]! >= width) out[role] = null
+  return out
+}
+
+/** A mapping of an account as this version reads it (`csvMappingSchema`) – a value it cannot read is none (przegląd R1 9). */
+export function accountMapping(a: { csvMapping?: unknown }): CsvMapping | null {
+  if (a.csvMapping == null) return null
+  const r = csvMappingSchema.safeParse(a.csvMapping)
+  return r.success ? r.data : null
 }
 
 /** The draft of a saved mapping (the wizard opened again – „Zmień kolumny”): its columns this version knows. */
@@ -261,6 +332,20 @@ const named = (cell: string): CsvRole | null => {
   const k = headerKey(cell)
   for (const [role, re] of NAMES) if (re.test(k)) return role
   return null
+}
+
+/** The roles of a header's columns by their names – the first column of a role; the booking's date only – the date. */
+function columnsByName(head: readonly string[]): CsvDraft['columns'] {
+  const columns: CsvDraft['columns'] = { ...NO_COLUMNS }
+  head.forEach((cell, i) => {
+    const role = named(cell)
+    if (role && columns[role] == null) columns[role] = i
+  })
+  // A file with the booking's date only: it is the operations' date (the budget's date – spec).
+  if (columns.date == null && columns.booked != null) [columns.date, columns.booked] = [columns.booked, null]
+  // A signed amount wins over the two columns only when both are not there.
+  if (columns.amount != null && columns.credit != null && columns.debit != null) columns.amount = null
+  return columns
 }
 
 /** The separator the file's first lines are split by most alike (the most rows of the same count of cells, 2 and more). */
@@ -316,21 +401,14 @@ export function guessCsv(bytes: Uint8Array): CsvGuess | null {
   const separator = separatorGuess(text)
   const rows = parseCsv(text, separator).slice(0, 60)
   if (rows.filter((r) => r.length >= 2).length < 1) return null
-  const columns: CsvDraft['columns'] = { ...NO_COLUMNS }
+  let columns: CsvDraft['columns'] = { ...NO_COLUMNS }
   const header = rows.findIndex((r) => {
     const roles = new Set(r.map(named))
     return (roles.has('date') || roles.has('booked')) && (roles.has('amount') || roles.has('credit') || roles.has('debit'))
   })
   let skipRows = Math.max(0, header)
-  if (header >= 0) {
-    rows[header]!.forEach((cell, i) => {
-      const role = named(cell)
-      // The first column of a role, never one taken twice.
-      if (role && columns[role] == null) columns[role] = i
-    })
-    // A file with the booking's date only: it is the operations' date (the budget's date – spec).
-    if (columns.date == null && columns.booked != null) [columns.date, columns.booked] = [columns.booked, null]
-  } else {
+  if (header >= 0) columns = columnsByName(rows[header]!)
+  else {
     // No header: the first row with a date and an amount in it – its date's and amount's columns.
     const at = rows.findIndex((r) => r.some((c) => CSV_DATE_FORMATS.some((f) => parseCsvDate(c, f))) && r.some((c) => /\d[.,]\d{2}\s*$/.test(c.trim())))
     skipRows = Math.max(0, at)
@@ -340,8 +418,6 @@ export function guessCsv(bytes: Uint8Array): CsvGuess | null {
     columns.date = columns.date >= 0 ? columns.date : null
     columns.amount = amount >= 0 ? amount : null
   }
-  // A signed amount wins over the two columns only when both are not there.
-  if (columns.amount != null && columns.credit != null && columns.debit != null) columns.amount = null
   const data = rows.slice(skipRows + (header >= 0 ? 1 : 0)).filter((r) => r.some((c) => c.trim())).slice(0, 30)
   const dates = data.map((r) => (columns.date == null ? '' : (r[columns.date] ?? '')))
   const amounts = data.flatMap((r) => [columns.amount, columns.credit, columns.debit, columns.balance].flatMap((c) => (c == null ? [] : [r[c] ?? ''])))

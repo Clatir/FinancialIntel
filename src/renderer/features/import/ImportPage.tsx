@@ -98,7 +98,7 @@ const STATUS_LABEL: Record<ThemeStatus, string> = { todo: 'Do decyzji', check: '
 const FORMAT_TEXT = { lista: 'lista operacji', historia: 'historia rachunku', csv: 'CSV innego banku' } as const
 
 /** Where a row found by the B5 measure came from – the other format of the file than this plan's. */
-const otherFormatText = (format: keyof typeof FORMAT_TEXT): string => (format === 'historia' ? 'z listy operacji' : format === 'lista' ? 'z historii rachunku' : 'z pliku w innym formacie')
+const otherFormatText = (format: keyof typeof FORMAT_TEXT): string => (format === 'historia' ? 'z listy operacji' : format === 'lista' ? 'z historii rachunku' : 'z innego pliku – po kwocie, dacie i nazwie')
 
 /** How far the open file is read (AP-35): the phase and its share of the bar – reading the rows, recognizing them. */
 function LoadingBar() {

@@ -160,6 +160,15 @@ export function formatsOf(txs: readonly Transaction[]): (t: Transaction) => Mban
   return (t) => of(t.bank)
 }
 
+/**
+ * The bank's operations a file's rows are matched to by the B5 measure (the same row in other words – the amount, ±3
+ * days, a similar name) when no key finds them: of mBank's other format; of another bank's CSV any – its own too (T461,
+ * przegląd R1 1): a bank that rewrote a row's cells (a pending one booked – its balance, its state) gives it another
+ * key, the measure finds it still – never a second operation. Not the deleted ones of the CSV's own format: their row is
+ * found by its key – by the measure a new purchase like it (the same shop and amount a day later) would stay out with them.
+ */
+export const byMeasure = (operation: MbankFile['format'], file: MbankFile['format']): boolean => operation !== file || file === 'csv'
+
 /** The days a file covers: its period, else its rows' first and last day. */
 export function coverageOf(file: Pick<MbankFile, 'period' | 'rows'>): (date: string) => boolean {
   let from = file.period?.from ?? ''
@@ -597,7 +606,7 @@ export function planImport(
   const other = new Map<string, Transaction[]>()
   for (const [date, list] of budget.booked) {
     if (!covers(date)) continue
-    for (const t of list) if (!used.has(t.id) && formatOf(t) !== file.format) push(other, `${t.date}|${t.amount}`, t)
+    for (const t of list) if (!used.has(t.id) && byMeasure(formatOf(t), file.format)) push(other, `${t.date}|${t.amount}`, t)
   }
   const openHere = (i: number) => {
     const p = plans[i]
@@ -621,7 +630,7 @@ export function planImport(
     const there = new Map<string, Transaction[]>()
     for (const [date, list] of budget.described) {
       if (!covers(date)) continue
-      for (const t of list) if (sameNumber.has(t.accountId) && !used.has(t.id) && !t.bank!.pending && formatAll(t) !== file.format) push(there, `${t.date}|${t.amount}`, t)
+      for (const t of list) if (sameNumber.has(t.accountId) && !used.has(t.id) && !t.bank!.pending && byMeasure(formatAll(t), file.format)) push(there, `${t.date}|${t.amount}`, t)
     }
     if (there.size)
       for (const c of formatPairs(there, (i) => !plans[i])) {

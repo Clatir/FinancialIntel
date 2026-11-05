@@ -103,6 +103,21 @@ test('AP-43: CSV innego banku – kreator kolumn, nowe konto, import jak z mBank
     await page.getByTestId('import-run').click()
     await importDone(page, userData)
     await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(6)
+
+    // A file of another layout (przegląd R1 3): the wizard offers a new account; Bank B chosen – its columns replaced
+    // only after the question.
+    const other = join(dir, 'inny_uklad.csv')
+    writeFileSync(other, ['Data;Opis;Kwota', `${addDays(today, -1)};KAWIARNIA RYNEK;-9,50`, ''].join('\r\n'))
+    await pick(app, page, other)
+    await expect(wizard).toBeVisible()
+    await expect(page.getByTestId('import-csv-account')).toHaveValue('')
+    await expect(page.getByTestId('import-csv-no-operation')).toBeVisible()
+    await page.getByTestId('import-csv-account').selectOption(String(bankB.id))
+    await page.getByTestId('import-csv-save').click()
+    await expect(page.getByTestId('import-csv-save-ask')).toContainText('Konto „Bank B” ma już kolumny innego pliku')
+    await page.getByTestId('import-csv-save-confirm').click()
+    await expect(page.getByTestId('import-file')).toContainText('inny_uklad.csv', MASS)
+    await expect.poll(async () => ((await json(join(dataDir, 'fi.json'))).settings.accounts as Array<{ id: string; csvMapping?: { headers: string[] } }>).find((a) => a.id === bankB.id)?.csvMapping?.headers).toEqual(['Data', 'Opis', 'Kwota'])
     expect(errors).toEqual([])
   } finally {
     await app.close()

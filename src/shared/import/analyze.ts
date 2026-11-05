@@ -10,8 +10,8 @@ import { plainError } from '../plainError'
 import { cashAccountOf, type Account, type Category, type Container, type CsvMapping, type HouseholdMember, type ImportRule, type Loan, type Transaction } from '../schema'
 import type { BrandAliases } from './aliases'
 import type { ClassifyContext } from './classify'
-import { decodeAs, mappingFits, parseMappedCsv } from './csv'
-import { accountForNumber, accountNumberOf, MbankFormatError, parseMbank, type MbankFile } from './mbank'
+import { accountMapping, decodeAs, mappingFits, parseMappedCsv } from './csv'
+import { accountForNumber, accountNumberOf, MbankFormatError, parseMbank, type MbankFile, type MbankRow } from './mbank'
 import { planImport, txOfRef, txRef, type DeletedRow, type ImportPlan, type RowCopy, type RowPlan, type TxRef } from './reconcile'
 import { decodeText } from './text'
 
@@ -69,10 +69,14 @@ export function importAccountOf(file: MbankFile, chosen: string, source: Pick<Pl
 
 /**
  * The accounts whose mapping a file of another bank fits (`mappingFits`), the one chosen before first – the file is read
- * by the first of them (AP-43, T460).
+ * by the first of them (AP-43, T460). Only an account with an import (CSV, or mBank's with a mapping added): one set to
+ * „bez importu” reads no files (przegląd R1 7); a mapping this version cannot read is none (`accountMapping`).
  */
 export function csvAccountsFor(bytes: Uint8Array, accounts: readonly Account[], chosen: string): Array<{ accountId: string; mapping: CsvMapping }> {
-  const out = accounts.flatMap((a) => (!a.archived && a.csvMapping && mappingFits(bytes, a.csvMapping) ? [{ accountId: a.id, mapping: a.csvMapping }] : []))
+  const out = accounts.flatMap((a) => {
+    const mapping = !a.archived && (a.importFormat === 'csv' || a.importFormat === 'mbank') ? accountMapping(a) : null
+    return mapping && mappingFits(bytes, mapping) ? [{ accountId: a.id, mapping }] : []
+  })
   return out.sort((a, b) => Number(b.accountId === chosen) - Number(a.accountId === chosen))
 }
 
@@ -118,6 +122,21 @@ export function analyzeImport(input: AnalyzeInput, progress?: AnalyzeProgress): 
   return { kind: 'csv' }
 }
 
+/**
+ * A plan again of a file read already (przegląd R1 15): what changed meanwhile – an operation saved, a rule, a change from
+ * another computer – planned in the Worker too, the window answering meanwhile.
+ */
+export interface ReplanInput {
+  file: MbankFile
+  accountId: string
+  source: PlanSource
+  deletedKeys: ReadonlySet<string>
+  deletedRows: readonly DeletedRow[]
+}
+
+export const planFor = (input: ReplanInput): ImportPlan =>
+  planImport(input.file, input.accountId, input.source.transactions, contextFor(input.source, input.file), input.deletedKeys, input.deletedRows)
+
 // ------------------------------------------------------------------ across the Worker's messages (T464)
 
 /** A plan's row with its operations as references (`txRef`). */
@@ -125,53 +144,68 @@ type WireRow = Record<string, unknown> & { tx?: TxRef; copy?: Record<string, unk
 export type WirePlan = Omit<ImportPlan, 'rows' | 'vanished'> & { rows: WireRow[]; vanished: TxRef[] }
 export type WireAnalysis = Exclude<Analysis, { kind: 'plan' }> | (Omit<Extract<Analysis, { kind: 'plan' }>, 'plan'> & { plan: WirePlan })
 
-/** A plan as a message carries it: its operations as references – the window takes them back from its own store. */
-export function planToWire(plan: ImportPlan): WirePlan {
+/**
+ * A plan as a message carries it: its operations as references – the window takes them back from its own store;
+ * `withRows` false – without the file's rows (a plan again: the window has them – `planFromWire`'s `rows`).
+ */
+export function planToWire(plan: ImportPlan, withRows = true): WirePlan {
   const rows = plan.rows.map((p): WireRow => {
-    if (!('tx' in p)) return p as unknown as WireRow
+    const { row: _row, ...rest } = p
+    const own = (withRows ? p : rest) as unknown as Record<string, unknown>
+    if (!('tx' in p)) return own as WireRow
     const copy = p.status === 'known' && p.copy ? { copy: { ...p.copy, tx: txRef(p.copy.tx) } } : {}
-    return { ...(p as unknown as Record<string, unknown>), tx: txRef(p.tx), ...copy }
+    return { ...own, tx: txRef(p.tx), ...copy }
   })
   return { ...plan, rows, vanished: plan.vanished.map(txRef) }
 }
 
 /**
  * The plan of a message with the budget's own operations (`transactions` – the list it was made of): each the same object
- * the plan made here would hold, its views of other sides too (`isSideView`, `realOf`). Throws when one is not there.
+ * the plan made here would hold, its views of other sides too (`isSideView`, `realOf`); `rows` – the window's own rows of
+ * the file (a plan again – one per row, in the file's order). Throws when one is not there.
  */
-export function planFromWire(wire: WirePlan, transactions: readonly Transaction[]): ImportPlan {
+export function planFromWire(wire: WirePlan, transactions: readonly Transaction[], rows?: readonly MbankRow[]): ImportPlan {
+  if (rows && rows.length !== wire.rows.length) throw new Error('plan nie z tego pliku')
   const byId = new Map(transactions.map((t) => [t.id, t]))
   const tx = (ref: TxRef): Transaction => {
     const t = txOfRef(ref, byId)
     if (!t) throw new Error(`plan bez operacji ${ref.id}`)
     return t
   }
-  const rows = wire.rows.map((p): RowPlan => {
-    if (!p.tx) return p as unknown as RowPlan
-    const copy = p.copy ? { copy: { ...(p.copy as unknown as RowCopy), tx: tx(p.copy.tx) } } : {}
-    return { ...p, tx: tx(p.tx), ...copy } as unknown as RowPlan
+  const planned = wire.rows.map((w, i): RowPlan => {
+    const p = rows ? { ...w, row: rows[i] } : w
+    if (!w.tx) return p as unknown as RowPlan
+    const copy = w.copy ? { copy: { ...(w.copy as unknown as RowCopy), tx: tx(w.copy.tx) } } : {}
+    return { ...p, tx: tx(w.tx), ...copy } as unknown as RowPlan
   })
-  return { ...wire, rows, vanished: wire.vanished.map(tx) }
+  return { ...wire, rows: planned, vanished: wire.vanished.map(tx) }
 }
 
 export const analysisToWire = (a: Analysis): WireAnalysis => (a.kind === 'plan' ? { ...a, plan: planToWire(a.plan) } : a)
 export const analysisFromWire = (a: WireAnalysis, transactions: readonly Transaction[]): Analysis => (a.kind === 'plan' ? { ...a, plan: planFromWire(a.plan, transactions) } : a)
 
-export interface AnalyzeRequest {
-  id: number
-  input: AnalyzeInput
-}
+/** A file to analyze, or a file read already to plan again. */
+export type AnalyzeRequest = { id: number; input: AnalyzeInput } | { id: number; replan: ReplanInput }
 
 export type AnalyzeMessage =
   | { id: number; type: 'progress'; phase: AnalyzePhase; done: number; total: number }
   | { id: number; type: 'done'; analysis: WireAnalysis }
+  | { id: number; type: 'planned'; plan: WirePlan }
   | { id: number; type: 'fail'; message: string }
 
 /** How often the Worker says how far it is (ms): the bar moves, the window is not flooded with messages. */
 export const PROGRESS_MS = 60
 
-/** The Worker's answer to a request (`worker.ts`): its progress, then the analysis – or why it failed. */
+/** The Worker's answer to a request (`worker.ts`): its progress, then the analysis (the plan) – or why it failed. */
 export function answer(req: AnalyzeRequest, post: (m: AnalyzeMessage) => void, now: () => number = Date.now): void {
+  if ('replan' in req) {
+    try {
+      post({ id: req.id, type: 'planned', plan: planToWire(planFor(req.replan), false) })
+    } catch (e) {
+      post({ id: req.id, type: 'fail', message: e instanceof Error ? e.message : String(e) })
+    }
+    return
+  }
   let last = -Infinity
   const progress: AnalyzeProgress = (phase, done, total) => {
     const t = now()

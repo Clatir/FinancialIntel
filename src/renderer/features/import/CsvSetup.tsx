@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { CSV_DATE_FORMATS } from '@shared/schema'
 import { completeMapping, previewMapped, type CsvDraft, type CsvRole } from '@shared/import/csv'
-import { useFolderLocked } from '../../store/data'
+import { useData, useFolderLocked } from '../../store/data'
+import { ConfirmButton } from '../../components/ConfirmButton'
 import { signedPln } from '../../components/fields'
 import { NumberField, Panel, TextField, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
-import { cancelCsvSetup, saveCsvSetup, setCsvAccount, setCsvColumn, setCsvDraft, setCsvNewName, useImport, type CsvSetup } from './state'
+import { cancelCsvSetup, csvReplaces, saveCsvSetup, setCsvAccount, setCsvColumn, setCsvDraft, setCsvNewName, useImport, type CsvSetup } from './state'
 
 /** The roles of the columns as the wizard names them (AP-43): the required ones first. */
 const ROLES: Array<{ role: CsvRole; label: string; hint?: string }> = [
@@ -38,6 +39,16 @@ const DECIMALS: Array<[string, string]> = [
   [',', '1 234,56'],
   ['.', '1,234.56']
 ]
+
+/** What the import reads a row as when the file names no type of operation (`operationOf`, T462). */
+function kindOf(operation: string): string {
+  if (/^(WYPŁATA|WYPLATA).*(BANKOMA|GOTÓWK|GOTOWK)|^BLIK WYP/.test(operation)) return 'bankomat'
+  if (/^(POS )?ZWROT/.test(operation)) return 'zwrot'
+  if (/^(PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK)/.test(operation)) return 'opłata banku'
+  if (/^(PRZELEW|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|BLIK P2P)/.test(operation)) return 'przelew'
+  if (/^(ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA|BLIK)/.test(operation)) return 'karta'
+  return ''
+}
 
 /** Options of a select with a value of a newer version kept (`openEnum`). */
 function Options({ list, value }: { list: ReadonlyArray<readonly [string, string]>; value: string }) {
@@ -101,9 +112,12 @@ function Result({ setup }: { setup: CsvSetup }) {
       <span className="label">Tak FI odczyta pierwsze operacje</span>
       {preview.rows.length === 0 && <span className="text-[11.5px] text-accent">Żaden wiersz nie dał operacji – sprawdź kolumny, format daty i liczb.</span>}
       {preview.rows.map((r) => (
-        <div key={r.line} className="grid grid-cols-[80px_100px_minmax(0,1fr)] gap-2 text-[11.5px]" data-testid="import-csv-preview-row">
+        <div key={r.line} className="grid grid-cols-[80px_100px_70px_minmax(0,1fr)] gap-2 text-[11.5px]" data-testid="import-csv-preview-row">
           <span className="num text-muted">{plDate(r.date)}</span>
           <span className={cx('num text-right', r.amount < 0 ? 'text-down' : 'text-up')}>{signedPln(r.amount)} zł</span>
+          <span className="truncate text-dim" data-testid="import-csv-preview-kind">
+            {kindOf(r.operation)}
+          </span>
           <span className="truncate" title={r.description}>
             {r.counterparty || r.description || '—'}
             {r.title && <span className="text-dim"> · {r.title}</span>}
@@ -149,6 +163,9 @@ function Setup({ setup }: { setup: CsvSetup }) {
   const done = completeMapping(draft)
   const missing = 'missing' in done ? done.missing : null
   const why = locked ? 'Folder tylko do odczytu – mapowania nie da się zapisać.' : missing
+  // Another account's own columns replaced only when asked (przegląd R1 3); `accounts` – read again when they change.
+  const accounts = useData((s) => s.fi?.settings.accounts)
+  const replaces = useMemo(() => (accounts ? csvReplaces(setup) : null), [accounts, setup])
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-2 text-[12px]" data-testid="import-csv">
       <p className="text-[11.5px] text-muted">
@@ -207,11 +224,30 @@ function Setup({ setup }: { setup: CsvSetup }) {
           <ColumnSelect key={r.role} {...r} draft={draft} names={names} />
         ))}
       </div>
+      {draft.columns.operation == null && (
+        <p className="text-[11.5px] text-dim" data-testid="import-csv-no-operation">
+          Bez kolumny „Rodzaj operacji” FI rozpoznaje przelewy, płatności kartą, wypłaty z bankomatu, zwroty i opłaty banku po słowach opisu, kierunku
+          kwoty i numerze rachunku – sprawdź rodzaj w podglądzie. Przelew własny, wpłatę domownika i spłatę pożyczki rozpozna po nazwie, gdy jest przelewem.
+        </p>
+      )}
       <Result setup={setup} />
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn btn-accent" disabled={!!why || busy} onClick={() => void saveCsvSetup()} data-testid="import-csv-save">
-          Zapisz kolumny i wczytaj plik
-        </button>
+        {replaces ? (
+          <ConfirmButton
+            className="btn btn-accent"
+            disabled={!!why || busy}
+            confirmLabel="Zastąp kolumny"
+            message={`Konto „${replaces.name}” ma już kolumny innego pliku – zastąpić je tymi? Jego następne pliki będą czytane tymi kolumnami.`}
+            onConfirm={() => void saveCsvSetup({ replace: true })}
+            testId="import-csv-save"
+          >
+            Zapisz kolumny i wczytaj plik
+          </ConfirmButton>
+        ) : (
+          <button className="btn btn-accent" disabled={!!why || busy} onClick={() => void saveCsvSetup()} data-testid="import-csv-save">
+            Zapisz kolumny i wczytaj plik
+          </button>
+        )}
         <button className="btn" onClick={cancelCsvSetup} data-testid="import-csv-cancel">
           Anuluj
         </button>

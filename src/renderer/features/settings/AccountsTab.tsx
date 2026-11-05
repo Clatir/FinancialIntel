@@ -3,6 +3,7 @@ import { lastConfirmation, openingOf } from '@shared/calc/balances'
 import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
 import { ACCOUNT_KINDS, type Account, type AccountKind, type Balance } from '@shared/schema'
+import { accountMapping } from '@shared/import/csv'
 import { updateSettings, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useDraft } from '../../store/drafts'
@@ -87,7 +88,7 @@ function ImportFormatSelect({ account: a }: { account: Account }) {
       </select>
       {a.importFormat === 'csv' && (
         <span className="text-dim" data-testid="account-csv-mapping">
-          {a.csvMapping ? 'kolumny ustawione' : 'kolumny wskażesz przy pierwszym pliku (Import)'}
+          {accountMapping(a) ? 'kolumny ustawione' : a.csvMapping != null ? 'kolumny zapisane przez nowszą wersję aplikacji' : 'kolumny wskażesz przy pierwszym pliku (Import)'}
         </span>
       )}
     </label>

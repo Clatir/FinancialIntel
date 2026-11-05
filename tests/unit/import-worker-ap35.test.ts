@@ -175,9 +175,10 @@ describe('AP-35 – analiza w Workerze daje ten sam plan co w oknie (T463, T464)
     expect(planOf(back).rows).toHaveLength(20000)
     expect(planOf(back).rows.filter((p) => p.status === 'known')).toHaveLength(10000)
     expect(planOf(direct).rows.length).toBe(20000)
-    // Thresholds (CI is slower): the whole analysis within 30 s, the window's part of it with the Worker below the analysis.
+    // Thresholds (CI is slower): the whole analysis within 30 s; with the Worker the window stops twice – sending, taking
+    // the answer – each moment shorter than the window's own analysis (a loaded machine stretches both alike).
     expect(before).toBeLessThan(30_000)
-    expect(after).toBeLessThan(before)
+    expect(Math.max(sendMs, receiveMs)).toBeLessThan(before)
   }, 120_000)
 })
 

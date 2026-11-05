@@ -62,8 +62,8 @@ describe('AP-43 – CSV innego banku: kreator i odczyt', () => {
     // Booked the next day: the balances follow the booking (`statementOf`).
     expect(f.rows.find((r) => r.counterparty === 'NETFLIX.COM')).toMatchObject({ date: '2026-10-07', booked: '2026-10-08', amount: -6000 })
     expect(f.rows.find((r) => r.counterparty === 'APTEKA POD LIPĄ')!.booked).toBeUndefined()
-    // The row as the bank wrote it – its identity across imports.
-    expect(czynsz!.description).toBe('PRZELEW WYCHODZĄCY SPÓŁDZIELNIA MIESZKANIOWA TESTOWO Czynsz za październik')
+    // The row as the bank wrote it – all its cells: its identity across imports, whatever the roles (T461).
+    expect(czynsz!.description).toBe('14.10.2026 | 14.10.2026 | PRZELEW WYCHODZĄCY | SPÓŁDZIELNIA MIESZKANIOWA TESTOWO | Czynsz za październik | 44 4444 4444 4444 4444 4444 4444 |  | 650,00 | 9 597,48 | PLN')
   })
 
   it('kwoty i daty w formatach banków; wiersze bez daty, kwoty albo w innej walucie – pominięte z powodem', () => {
@@ -108,14 +108,17 @@ describe('AP-43 – CSV innego banku: kreator i odczyt', () => {
 })
 
 describe('AP-43 – tożsamość wiersza (T461) i ten sam przebieg importu', () => {
-  it('klucz wiersza CSV: konto, data, kwota, opis i kolejność wśród takich samych wierszy dnia; inny niż klucz mBanku', () => {
+  it('klucz wiersza CSV: konto, komórki wiersza i kolejność wśród takich samych wierszy dnia; inny niż klucz mBanku', () => {
     const f = file()
     const keys = rowKeys(f.rows, BANK_B, 'csv')
     expect(keys.every((k) => k.startsWith('csv:') && keyKindOf(k) === 'csv')).toBe(true)
     expect(new Set(keys).size).toBe(16)
-    // Two purchases alike the same day (ŻABKA 12,99 twice): two operations, the occurrence tells them apart.
+    // Two purchases alike the same day (ŻABKA 12,99 twice): their balances differ – two rows of their own.
     const zabka = f.rows.flatMap((r, i) => (r.counterparty.startsWith('ŻABKA') ? [keys[i]!] : []))
-    expect(zabka.map((k) => k.slice(-2))).toEqual([':0', ':1'])
+    expect(new Set(zabka).size).toBe(2)
+    // A file without balances: the same cells twice the same day – the occurrence tells them apart.
+    const same = parseMappedCsv(['Data;Opis;Kwota', '2026-10-04;ŻABKA;-12,99', '2026-10-04;ŻABKA;-12,99', ''].join('\n'), csvMappingSchema.parse({ headers: ['Data', 'Opis', 'Kwota'], columns: { date: 0, description: 1, amount: 2 } }))
+    expect(rowKeys(same.rows, BANK_B, 'csv').map((k) => k.slice(-2))).toEqual([':0', ':1'])
     // The same file read again – the same keys; another account – other keys; mBank's key of the same row – another.
     expect(rowKeys(file().rows, BANK_B, 'csv')).toEqual(keys)
     expect(rowKeys(f.rows, MBANK_ACCOUNT_ID, 'csv')).not.toEqual(keys)

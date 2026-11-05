@@ -3886,18 +3886,32 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   albo z kwoty – inna niż PLN pominięta z powodem (jak w mBanku); godzina przy dacie nie jest czytana (import bez
   godzin); kontrahent z kolumny bez dopisków banku (`cleanBankName`), bez kolumny – z opisu. Ustawienia → Konta: wybór
   „bez importu / CSV z mBanku / CSV innego banku” zamiast pola „import CSV z mBanku”. Plik, który nie jest tabelą –
-  błąd obok otwartego pliku (N12).
-- **T461** Tożsamość wiersza CSV innego banku (1.16.0, R1 – AP-43): `bank.key` = `csv:<odcisk(konto|data|OPIS|kwota)>:<n>`;
-  OPIS – rodzaj operacji, kontrahent i opis jak w pliku (to samo pole `bank.description`, więc B35 – ten sam wiersz na
-  innym koncie – liczy go jak dla mBanku); `n` – numer wiersza w obrębie dnia wśród wierszy o tej samej dacie, opisie
-  i kwocie (dwa „ŻABKA 12,99” jednego dnia to dwie operacje), nie pozycja w dniu – pozycja zmienia się, gdy plik
-  zaczyna się później albo bank dopisze operację w środku dnia. Ponowny import pliku – wszystko „już zaimportowane”,
+  błąd obok otwartego pliku (N12). Przegląd R1: kreator pliku, do którego nie pasuje żadne mapowanie, proponuje zawsze
+  nowe konto (3); wybór istniejącego konta z innymi kolumnami pyta „Zastąp kolumny” (`csvReplaces`, bez odpowiedzi –
+  odmowa ze słowem), „Zmień kolumny” zmienia mapowanie konta, którym plik był czytany (`mappingAccountId` – nie konta
+  wybranego potem; 10). Mapowanie konta „bez importu” nie czyta plików, mapowanie nieczytelne dla tej wersji jest
+  pomijane (`accountMapping` – `safeParse`; 7). Mapowanie, którego `fi.json` nie zachowa (kolumna od 200, nagłówek ponad
+  200 komórek albo komórka ponad 200 znaków), nie jest zapisywane – kreator mówi dlaczego; nazwa nowego konta skracana
+  przed numerem do 40 znaków („… 2”), zmieniona – ze słowem (5). Inny separator albo kodowanie: role po nazwach nowego
+  nagłówka, inaczej tylko te w kolumnach pliku (`columnsFor`; 11). Kwota z drugim znakiem dziesiętnym poza tysiącami
+  („12.50” przy „,”) – nieczytelna, wiersz pominięty z powodem (14).
+- **T461** Tożsamość wiersza CSV innego banku (1.16.0, R1 – AP-43; przegląd R1 1): `bank.key` =
+  `csv:<odcisk(konto|data|WIERSZ|kwota)>:<n>`; WIERSZ – wszystkie komórki wiersza w ich kolejności (bez pustych na
+  końcu), jak w pliku, niezależnie od ról kolumn – zmiana mapowania nie zmienia kluczy (`rowText`; to samo pole
+  `bank.description`, więc B35 – ten sam wiersz na innym koncie – liczy go jak dla mBanku); `n` – numer wiersza w obrębie
+  dnia wśród wierszy o tej samej dacie, treści i kwocie (dwa takie same wiersze jednego dnia to dwie operacje), nie
+  pozycja w dniu – pozycja zmienia się, gdy plik zaczyna się później albo bank dopisze operację w środku dnia. Bank,
+  który zmienia komórki wiersza (operacja w toku zaksięgowana – saldo, stan, data zakończenia), daje mu inny klucz: miara
+  B5 (kwota, ±3 dni, podobna nazwa, dzień w okresie pliku) obejmuje dla CSV także operacje tego samego formatu
+  (`byMeasure`) – tylko te, których klucz pliku nie znalazł; nowy klucz dopisany do `altKeys`. Usunięte operacje CSV
+  wracają do miary tylko z innego formatu (inaczej nowy zakup taki sam dzień później zostałby poza importem). Klucze
+  `csv:` sprzed przeglądu nie były wydane (R1 bez wydania) – bez migracji. Ponowny import pliku – wszystko „już zaimportowane”,
   plik zachodzącego okresu – wspólne dni znane, reszta nowa. Format wiersza mówi przedrostek klucza (`keyKindOf`,
   `formatOfBanks` → 'csv'), bo klucz zachowuje każda wersja: `bank.format` zostaje 'mbank' (w 1.15.9 zamknięty enum –
   inna wartość zrobiłaby operację nieczytelną), `bank.source` nie jest zapisywane (1.15.9 by je zgubiło przy zapisie).
   B5 (ten sam wiersz w innym formacie: kwota, ±3 dni, podobna nazwa) działa między CSV a plikami mBanku na tym samym
-  koncie jak między listą a historią rachunku. Zmiana ról opisu, kontrahenta albo rodzaju operacji w mapowaniu zmienia
-  klucze – ponowny import dni już wczytanych dałby kopie (panel duplikatów je pokaże).
+  koncie jak między listą a historią rachunku. Opis z banku operacji CSV to cały wiersz pliku („Opis z banku” w edytorze
+  operacji, słowa reguł tytułu).
 - **T462** CSV innego banku – ten sam przebieg co mBank (1.16.0, R1 – AP-43): plik czytany do `MbankFile` w formacie 'csv'
   (bez właściciela rachunku, numeru rachunku i okresu – okres z dat wierszy), dalej `planImport` → `buildImport`:
   reguły i nauka, przelew własny po nazwiskach z ustawień, domownicy, pożyczki, bankomat, łączenie z wpisami ręcznymi,
@@ -3905,7 +3919,14 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   jak historia rachunku (kolejność sald po dacie księgowania; notatka „Saldo z pliku banku (CSV)”). CSV nie ma operacji
   nierozliczonych – bez propozycji usunięcia zniknionych (tylko lista operacji mBanku). Nie zmienia się: pliki innych
   banków nie są szukane w Pobranych (F14 – tylko mBank), przypomnienia o zaległym imporcie i misja liczą konta z importem
-  mBanku.
+  mBanku. Przegląd R1 4: rozpoznanie (domownik, spłata pożyczki, przelew własny, bankomat, zwrot towaru, opłata banku)
+  czyta rodzaj operacji słowami mBanku – CSV dostaje go przy odczycie (`operationOf`): rodzaj z pliku, gdy zaczyna się
+  słowem, które import zna („Płatność kartą”, „Przelew przychodzący”, „Wypłata z bankomatu”), inaczej ze słów rodzaju,
+  kontrahenta i opisu (także angielskich: CARD_PAYMENT, TRANSFER, TOPUP, ATM, FEE, REFUND): bankomat, zwrot (wpływ),
+  opłata banku (wydatek: prowizja, odsetki, „opłata za kartę / prowadzenie”), przelew, płatność kartą; bez słowa – każdy
+  wpływ i wydatek z numerem rachunku kontrahenta to przelew (wpłata domownika, spłata, przelew własny – po nazwie),
+  wydatek bez słowa zostaje bez rodzaju (zakup – po nazwie). Kreator bez kolumny rodzaju mówi o tym i pokazuje rodzaj
+  w podglądzie.
 - **T463** Import w Web Workerze (1.16.0, R1 – AP-35, AF-30, IM.55): otwarcie pliku – dekodowanie, odczyt wierszy, wybór
   konta, mapowanie konta i plan – w Workerze (`renderer/features/import/worker.ts`, klient `analysis.ts`); jedna czysta
   funkcja `shared/import/analyze.ts` (`analyzeImport`) w Workerze i w oknie, dane budżetu jako `PlanSource` (zwykłe dane
@@ -3914,8 +3935,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Wczytywanie…” (Node w testach, WebKit bez Workera, skrypt Workera nie wstał – `error`: od tej chwili okno; błąd
   w Workerze – okno próbuje samo). Jedna analiza naraz: nowy plik, „Zamknij plik” i inny folder przerywają ją
   (`terminate`); zmiany danych w trakcie – plan od nowa zaraz po niej (`replanIfChanged`); „Importuj” w trakcie
-  wczytywania innego pliku – odmowa z komunikatem. Ponowne plany otwartego pliku (inne konto, słowo kluczowe, scalenie
-  nazw, przed zapisem) zostają w oknie – są synchroniczne z decyzjami; plik jest już odczytany (większa część pracy).
+  wczytywania innego pliku – odmowa z komunikatem. Przegląd R1 15 (zmienia): ponowny plan po zmianie danych (zapis,
+  zmiana z drugiego komputera, słowo kluczowe, scalenie nazw – `replanIfChanged`) idzie do Workera, gdy jest
+  (`replanInWorker`: plik bez odczytu, odpowiedź bez wierszy pliku – wracają wiersze okna), a decyzje przenosi na nowy
+  plan po jego przyjściu – także podjęte w międzyczasie (`replanImport(plan)`); jeden naraz, zmiana w trakcie – plan
+  jeszcze raz po nim; inny plik, konto albo folder albo zapis importu w międzyczasie – plan odrzucony. W oknie zostają:
+  zmiana konta pliku, „Cofnij” innego pliku i plan przed zapisem (`runImport` – synchroniczny z podpisem planu).
   Worker jako moduł ES (`worker.format: 'es'` – electron-vite i telefon; telefon nie importuje plików, build go ma).
 - **T464** Plan przez wiadomość Workera (1.16.0, R1 – AP-35): operacje planu jadą jako odnośniki (`txRef`: id i widok –
   druga strona przelewu w jednej operacji `sideOf`, strona przelewu sprzed 1.7.0 `legacySideOf`) i wracają z listy
@@ -3925,14 +3950,15 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   planowi okna na liście, historii i CSV z wpisami ręcznymi, przelewami obu rodzajów i nierozliczoną zniknioną; zapis
   `buildImport` z obu – ten sam (`tests/unit/import-worker-ap35.test.ts`).
 - **T465** Wydajność importu – próg i pomiar (1.16.0, R1 – AP-35): test 20 000 wierszy przy 20 000 operacji w budżecie –
-  cała analiza poniżej 30 s, część okna przy Workerze (kopia prośby i kopia odpowiedzi liczone w całości) krótsza niż
-  analiza w oknie; tu (komputer deweloperski, sam test) analiza w oknie ok. 630 ms, okno przy Workerze ok. 280 ms
+  cała analiza poniżej 30 s, każdy z dwóch przestojów okna przy Workerze (kopia prośby, kopia odpowiedzi – liczone
+  w całości) krótszy niż analiza w oknie (przegląd R1: suma obu pod obciążeniem pełnego zestawu bywała bliska progu); tu (komputer deweloperski, sam test) analiza w oknie ok. 630 ms, okno przy Workerze ok. 280 ms
   (w pełnym zestawie testów 890 / 450 ms). E2E (aplikacja zbudowana, 20 000 wierszy): okno bez Workera ok. 650 ms,
   najdłużej nie odpowiada ok. 590 ms; z Workerem ok. 900 ms (pierwszy raz ok. 1,3 s – start Workera), najdłużej nie
   odpowiada ok. 200 ms (odbiór planu i rysowanie), pasek postępu się przesuwa. Pomiar w maszynie (IM.55) – do zrobienia.
 - **T466** Ekran importu – teksty (1.16.0, R1 – AP-43, AP-35): panel „Plik z banku” (było „Plik z mBanku”) z jednym
   zdaniem o pliku innego banku; plik opisany „CSV innego banku · N operacji”; przy wierszach znalezionych miarą B5
-  w pliku CSV – „z pliku w innym formacie”; okno wyboru pliku „Plik CSV z banku (z mBanku: lista operacji albo historia
+  w pliku CSV – „z innego pliku – po kwocie, dacie i nazwie” (przegląd R1 1: także wiersz tego samego banku o zmienionych
+  komórkach); kreator: pytanie „Zastąp kolumny”, zdanie o rozpoznaniu bez kolumny rodzaju operacji, rodzaj w podglądzie; okno wyboru pliku „Plik CSV z banku (z mBanku: lista operacji albo historia
   rachunku)”; nagłówek ekranu „CSV z mBanku i innych banków”. Pasek postępu z `role="status"`, stan w `data-phase`,
   `data-pct`; otwarty plik – `data-format`, `data-via` ('worker' / 'window').
 - **T467** Reguły importu z warunkami I / LUB (1.16.0, R1 – AP-45): reguła z trybem `conditions` ma listę warunków
