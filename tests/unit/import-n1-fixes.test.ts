@@ -72,7 +72,8 @@ describe('AP-2 (AF-1): usunięta operacja nie wraca z plikiem drugiego formatu',
     const zabka = history.find((t) => t.counterparty === 'ZABKA Z1234')!
     const left = history.filter((t) => t !== zabka)
     const { keys, rows } = deletedBankRows(deletion([zabka], T2), left, new Set())
-    expect(rows).toEqual([{ accountId: MBANK_ACCOUNT_ID, date: '2026-10-25', amount: -zl(31.95), name: 'ZABKA Z1234', deletedAt: T2, format: 'historia' }])
+    // Its row's keys too (drugi przegląd R1, 1): a CSV's own deleted one found by the measure only without its key in the file.
+    expect(rows).toEqual([{ accountId: MBANK_ACCOUNT_ID, date: '2026-10-25', amount: -zl(31.95), name: 'ZABKA Z1234', deletedAt: T2, format: 'historia', keys: [zabka.bank!.key] }])
     const lista = fileOf('lista', WEEK)
     const plan = planImport(lista, MBANK_ACCOUNT_ID, left, ctx(), keys, rows)
     expect(statuses(plan)).toEqual(['known', 'known', 'deleted'])

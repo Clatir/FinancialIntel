@@ -228,6 +228,17 @@ export function isCashExpenseRule(rule: Pick<ImportRule, 'kind' | 'categoryId' |
 /** A bank's fee, interest or tax (no shop, no person – `opKindOf` 'fee'). */
 export const isFeeOperation = (operation: string): boolean => /^(PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK)/.test(operation)
 
+/** A product's return by the type of operation (spec: a negative expense of the purchase's category). */
+export const isReturnOperation = (operation: string): boolean => /^(POS )?ZWROT/.test(operation)
+
+/**
+ * A transfer between people by the type of operation, as the recognition reads it: out – an own transfer; in – also a
+ * household member's money and a loan's repayment (D80, B34). Another bank's CSV gets its type in these words
+ * (`csv.ts` `operationOf`, przegląd R1 2).
+ */
+export const isTransferOperation = (operation: string, direction: Direction): boolean =>
+  (direction === 'in' ? /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/ : /^(PRZELEW|BLIK P2P|ZLECENIE)/).test(operation)
+
 export function ruleTargetOf(o: { counterparty: string; title: string; operation?: string; bankName?: string }, aliases: BrandAliases = NO_ALIASES): { target: RuleTarget; brand: BrandMatch } {
   // Once per name, title and type of operation with these merged names (W20): a history repeats them thousands of
   // times. Read only – shared by the rows.
@@ -488,7 +499,7 @@ export { memberOf } from '../calc/household'
 
 /** Does the bank say an own transfer (its kind, or a transfer to / from one of the holder's names)? */
 export const isOwnTransferRow = (row: Pick<MbankRow, 'operation' | 'counterparty'>, ownNames: readonly string[]): boolean =>
-  /^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(row.operation) || (/^(PRZELEW|BLIK P2P|ZLECENIE)/.test(row.operation) && isOwnName(row.counterparty, ownNames))
+  /^PRZELEW WŁASNY|^PRZELEW WLASNY/.test(row.operation) || (isTransferOperation(row.operation, 'out') && isOwnName(row.counterparty, ownNames))
 
 const decision = (kind: TxKind, reason: string, over: Partial<ImportDecision> = {}): ImportDecision => ({
   kind,
@@ -571,7 +582,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   const op = row.operation
   const out = (d: ImportDecision): Classified => ({ key, brand, target, direction, hint, decision: d })
   // A household member's money (D80): by their names in the bank.
-  const transferIn = direction === 'in' && /^(PRZELEW|BLIK P2P|WPŁATA|WPLATA|UZNANIE|ZLECENIE)/.test(op)
+  const transferIn = direction === 'in' && isTransferOperation(op, 'in')
   const member = transferIn ? memberOf(row.counterparty, ctx.members) : null
   // Money back from the person a loan of the Radar was given to (B34): its repayment – only from the day it was given,
   // with a rule or without (`loanFor`, as the rules' audit): the person's money before it is no repayment of it.
@@ -647,11 +658,15 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (lent) return out(decision('loan', `zwrot pożyczki: ${lent.name}`, { loanId: lent.id }))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
   if (own) {
-    const descDigits = row.description.replace(/\D/g, '')
-    const counterAccountId =
-      ctx.accountNumbers && descDigits.length >= 10
-        ? (Object.entries(ctx.accountNumbers).find(([, n]) => n && n.length >= 10 && descDigits.includes(n))?.[0] ?? null)
+    // The other account by its number – the other side's first, then the description's – never the file's own account
+    // (drugi przegląd R1, 6: a CSV's description is its whole row, the account's own number in it).
+    const numbered = (text: string) => {
+      const digits = text.replace(/\D/g, '')
+      return ctx.accountNumbers && digits.length >= 10
+        ? (Object.entries(ctx.accountNumbers).find(([id, n]) => id !== ctx.accountId && n && n.length >= 10 && digits.includes(n))?.[0] ?? null)
         : null
+    }
+    const counterAccountId = numbered(row.accountNo) ?? numbered(row.description)
     return out(decision('transfer', 'przelew własny', counterAccountId ? { counterAccountId } : {}))
   }
   // A member's money: asked once what the rest beyond their debt is (D80 b).
@@ -671,7 +686,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   if (cash) return out(decision('transfer', `wypłata z bankomatu – przelew własny → ${cash.name}`, { counterAccountId: cash.id }))
   if (ATM.test(op))
     return out(decision('expense', 'wypłata z bankomatu → Gotówka', { categoryId: usable(CASH_CATEGORY_ID, ctx.categories) }))
-  if (/^(POS )?ZWROT/.test(op) && direction === 'in') {
+  if (isReturnOperation(op) && direction === 'in') {
     // A product return: a negative expense of the purchase's category (spec) – the purchases' rule says which, else the
     // chain's category.
     const bought = findRule(ctx.rules, target, 'out', row.amount, ctx.accountId)

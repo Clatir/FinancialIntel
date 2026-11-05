@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FolderStatus, Snapshot } from '@shared/api'
 import { createDefaultSettings } from '@shared/defaults'
-import { answer, type AnalyzeMessage, type AnalyzeRequest } from '@shared/import/analyze'
+import { answerer, type AnalyzeMessage, type AnalyzeRequest } from '@shared/import/analyze'
 import { accountMapping, completeMapping, guessCsv } from '@shared/import/csv'
 import { COLLECTIONS } from '@shared/paths'
 import { SCHEMA_VERSION, transactionSchema, type Account, type CsvMapping, type SettingsFile } from '@shared/schema'
@@ -20,12 +20,15 @@ const api = {
 }
 
 /**
- * The window's Web Worker as a test has it: every message copied as `postMessage` copies it, the shared `answer` on its
- * own turn of the event loop (T463). `during` – what happens while it works (a save, a change from another computer).
+ * The window's Web Worker as a test has it: every message copied as `postMessage` copies it, its own answers (`answerer`
+ * – what it keeps is its own) on its own turn of the event loop (T463). `during` – what happens while it works (a save,
+ * a change from another computer); `tamper` – its answer changed (one that does not fit the window's data).
  */
 class FakeWorker {
   static requests: AnalyzeRequest[] = []
   static during: ((req: AnalyzeRequest) => void) | null = null
+  static tamper: ((m: AnalyzeMessage) => AnalyzeMessage) | null = null
+  private readonly answer = answerer()
   private dead = false
   private readonly listeners = new Map<string, Set<(e: unknown) => void>>()
   addEventListener(type: string, fn: (e: unknown) => void): void {
@@ -44,8 +47,8 @@ class FakeWorker {
     setTimeout(() => {
       if (this.dead) return
       FakeWorker.during?.(req)
-      answer(req, (m: AnalyzeMessage) => {
-        const data = structuredClone(m)
+      this.answer(req, (m: AnalyzeMessage) => {
+        const data = structuredClone(FakeWorker.tamper && m.type !== 'progress' ? FakeWorker.tamper(m) : m)
         setTimeout(() => !this.dead && this.listeners.get('message')?.forEach((fn) => fn({ data })))
       })
     })
@@ -89,6 +92,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   FakeWorker.requests = []
   FakeWorker.during = null
+  FakeWorker.tamper = null
 })
 
 describe('przegląd R1 – ekran importu CSV innego banku', () => {
@@ -177,5 +181,58 @@ describe('przegląd R1 – ekran importu CSV innego banku', () => {
     expect(s().plan!.rows.every((p, i) => p.row === first.rows[i])).toBe(true)
     expect(s().choices.skip[s().plan!.rows[0]!.key]).toBe(true)
     expect(s().planInputs!.transactions).toBe(data.useData.getState().records.transactions)
+  })
+})
+
+describe('drugi przegląd R1 – Worker i kreator', () => {
+  const kioskTyped = () =>
+    transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: '01K9KQSK00000000000000000Q', createdAt: '2026-10-21T10:00:00.000Z', updatedAt: '2026-10-21T10:00:00.000Z', date: '2026-10-21', accountId: BANK_B, amount: -720, counterparty: 'KIOSK RUCH' })
+
+  it('5: odpowiedź Workera niepasująca do danych okna – plik analizuje okno, nie błąd importu; ponowny plan – okno', async () => {
+    open([account(BANK_B, 'Bank B', mappingOf(CSV))])
+    FakeWorker.tamper = (m) => (m.type === 'done' && m.analysis.kind === 'plan' ? { ...m, analysis: { ...m.analysis, plan: { ...m.analysis.plan, vanished: [{ id: '01K9NIEMA0000000000000000Q' }] } } } : m)
+    await state.loadImportFile('bank_b.csv', CSV)
+    expect(s()).toMatchObject({ error: null, via: 'window', file: { format: 'csv' } })
+    expect(s().plan!.rows).toHaveLength(3)
+    // A plan again whose answer is not of this file: the window plans it – the change is in the plan, no error.
+    FakeWorker.tamper = null
+    await state.loadImportFile('bank_b.csv', CSV)
+    expect(s().via).toBe('worker')
+    FakeWorker.tamper = (m) => (m.type === 'planned' ? { ...m, plan: { ...m.plan, rows: m.plan.rows.slice(1) } } : m)
+    ui.useUi.setState({ toasts: [] })
+    data.addRecord('transactions', kioskTyped())
+    state.replanIfChanged(state.planInputsNow())
+    await vi.waitFor(() => expect(s().plan!.rows.find((p) => p.row.counterparty === 'KIOSK RUCH')!.status).toBe('merge'))
+    expect(ui.useUi.getState().toasts.filter((t) => t.kind === 'error').map((t) => t.text)).toEqual([])
+  })
+
+  it('10: ponowny plan wysyła do Workera tylko zmienione operacje (bez pliku) – plik i operacje Worker trzyma z analizy', async () => {
+    const others = Array.from({ length: 5 }, (_, i) =>
+      transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: `01K9ZZZZ0000000000000000${i}Q`, createdAt: '2026-10-01T10:00:00.000Z', updatedAt: '2026-10-01T10:00:00.000Z', date: '2026-10-01', accountId: BANK_C, amount: -100 - i, counterparty: `SKLEP ${i}` })
+    )
+    open([account(BANK_B, 'Bank B', mappingOf(CSV)), account(BANK_C, 'Bank C', undefined, null)])
+    data.addRecords('transactions', others)
+    await state.loadImportFile('bank_b.csv', CSV)
+    expect(s().via).toBe('worker')
+    data.addRecord('transactions', kioskTyped())
+    state.replanIfChanged(state.planInputsNow())
+    await vi.waitFor(() => expect(s().plan!.rows.find((p) => p.row.counterparty === 'KIOSK RUCH')!.status).toBe('merge'))
+    const replans = FakeWorker.requests.flatMap((r) => ('replan' in r ? [r.replan] : []))
+    expect(replans).toHaveLength(1)
+    expect(replans[0]).not.toHaveProperty('file')
+    expect(replans[0]!.source).not.toHaveProperty('transactions')
+    expect(replans[0]!.operations.changed.map((t) => t.id)).toEqual(['01K9KQSK00000000000000000Q'])
+    expect(replans[0]!.operations.ids).toHaveLength(6)
+  })
+
+  it('4: zmiana kodowania nie rusza ról ustawionych ręcznie', async () => {
+    open()
+    await state.loadImportFile('bank_b.csv', CSV)
+    const g = s().csvSetup!.draft.columns
+    state.setCsvColumn('description', g.counterparty)
+    const manual = s().csvSetup!.draft.columns
+    expect(manual.counterparty).toBeNull()
+    state.setCsvDraft({ encoding: 'windows-1250' })
+    expect(s().csvSetup!.draft.columns).toEqual(manual)
   })
 })

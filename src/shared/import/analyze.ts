@@ -122,11 +122,8 @@ export function analyzeImport(input: AnalyzeInput, progress?: AnalyzeProgress): 
   return { kind: 'csv' }
 }
 
-/**
- * A plan again of a file read already (przegląd R1 15): what changed meanwhile – an operation saved, a rule, a change from
- * another computer – planned in the Worker too, the window answering meanwhile.
- */
-export interface ReplanInput {
+/** A plan of a file read already (przegląd R1 15) – in the Worker of its kept file and operations, in the window of its own. */
+export interface PlanInput {
   file: MbankFile
   accountId: string
   source: PlanSource
@@ -134,8 +131,38 @@ export interface ReplanInput {
   deletedRows: readonly DeletedRow[]
 }
 
-export const planFor = (input: ReplanInput): ImportPlan =>
+export const planFor = (input: PlanInput): ImportPlan =>
   planImport(input.file, input.accountId, input.source.transactions, contextFor(input.source, input.file), input.deletedKeys, input.deletedRows)
+
+/**
+ * The budget's operations as the Worker gets them again (drugi przegląd R1, 10): their order and only the ones changed
+ * since the last message (a record of the store is never changed in place – a changed one is another object).
+ */
+export interface OperationsDelta {
+  ids: string[]
+  changed: Transaction[]
+}
+
+/**
+ * A plan again of the open file in the Worker (przegląd R1 15, drugi przegląd R1 10): the file stays there from its
+ * analysis (`session` – that request's id) and its operations from the last message – only what changed comes.
+ */
+export interface ReplanInput {
+  session: number
+  accountId: string
+  source: Omit<PlanSource, 'transactions'>
+  operations: OperationsDelta
+  deletedKeys: ReadonlySet<string>
+  deletedRows: readonly DeletedRow[]
+}
+
+/** The operations the window sends the Worker now: their order and the ones not as `sent` (by object) – `sent` updated. */
+export function operationsDelta(transactions: readonly Transaction[], sent: Map<string, Transaction>): OperationsDelta {
+  const changed = transactions.filter((t) => sent.get(t.id) !== t)
+  sent.clear()
+  for (const t of transactions) sent.set(t.id, t)
+  return { ids: transactions.map((t) => t.id), changed }
+}
 
 // ------------------------------------------------------------------ across the Worker's messages (T464)
 
@@ -184,7 +211,7 @@ export function planFromWire(wire: WirePlan, transactions: readonly Transaction[
 export const analysisToWire = (a: Analysis): WireAnalysis => (a.kind === 'plan' ? { ...a, plan: planToWire(a.plan) } : a)
 export const analysisFromWire = (a: WireAnalysis, transactions: readonly Transaction[]): Analysis => (a.kind === 'plan' ? { ...a, plan: planFromWire(a.plan, transactions) } : a)
 
-/** A file to analyze, or a file read already to plan again. */
+/** A file to analyze, or the open file (kept in the Worker) to plan again. */
 export type AnalyzeRequest = { id: number; input: AnalyzeInput } | { id: number; replan: ReplanInput }
 
 export type AnalyzeMessage =
@@ -196,26 +223,53 @@ export type AnalyzeMessage =
 /** How often the Worker says how far it is (ms): the bar moves, the window is not flooded with messages. */
 export const PROGRESS_MS = 60
 
-/** The Worker's answer to a request (`worker.ts`): its progress, then the analysis (the plan) – or why it failed. */
-export function answer(req: AnalyzeRequest, post: (m: AnalyzeMessage) => void, now: () => number = Date.now): void {
-  if ('replan' in req) {
-    try {
-      post({ id: req.id, type: 'planned', plan: planToWire(planFor(req.replan), false) })
-    } catch (e) {
-      post({ id: req.id, type: 'fail', message: e instanceof Error ? e.message : String(e) })
+export type Answer = (req: AnalyzeRequest, post: (m: AnalyzeMessage) => void, now?: () => number) => void
+
+/**
+ * A Worker's answers (`worker.ts`): of a file – its progress, then the analysis; of a plan again – the plan of the file and
+ * the operations it keeps (the last file analyzed, by its request's id), or why it failed (another session – the window
+ * plans it). One per Worker: what it keeps is its own.
+ */
+export function answerer(): Answer {
+  let kept: { session: number; file: MbankFile; operations: Map<string, Transaction> } | null = null
+  return (req, post, now = Date.now) => {
+    const fail = (e: unknown) => post({ id: req.id, type: 'fail', message: e instanceof Error ? e.message : String(e) })
+    if ('replan' in req) {
+      try {
+        const r = req.replan
+        if (!kept || kept.session !== r.session) throw new Error('Worker nie ma tego pliku')
+        for (const t of r.operations.changed) kept.operations.set(t.id, t)
+        const transactions: Transaction[] = []
+        for (const id of r.operations.ids) {
+          const t = kept.operations.get(id)
+          if (!t) throw new Error(`Worker nie ma operacji ${id}`)
+          transactions.push(t)
+        }
+        // The ones gone from the budget forgotten too.
+        kept.operations = new Map(transactions.map((t) => [t.id, t]))
+        const plan = planFor({ file: kept.file, accountId: r.accountId, source: { ...r.source, transactions }, deletedKeys: r.deletedKeys, deletedRows: r.deletedRows })
+        post({ id: req.id, type: 'planned', plan: planToWire(plan, false) })
+      } catch (e) {
+        fail(e)
+      }
+      return
     }
-    return
-  }
-  let last = -Infinity
-  const progress: AnalyzeProgress = (phase, done, total) => {
-    const t = now()
-    if (t - last < PROGRESS_MS) return
-    last = t
-    post({ id: req.id, type: 'progress', phase, done, total })
-  }
-  try {
-    post({ id: req.id, type: 'done', analysis: analysisToWire(analyzeImport(req.input, progress)) })
-  } catch (e) {
-    post({ id: req.id, type: 'fail', message: e instanceof Error ? e.message : String(e) })
+    let last = -Infinity
+    const progress: AnalyzeProgress = (phase, done, total) => {
+      const t = now()
+      if (t - last < PROGRESS_MS) return
+      last = t
+      post({ id: req.id, type: 'progress', phase, done, total })
+    }
+    try {
+      const analysis = analyzeImport(req.input, progress)
+      kept = analysis.kind === 'plan' ? { session: req.id, file: analysis.file, operations: new Map(req.input.source.transactions.map((t) => [t.id, t])) } : kept
+      post({ id: req.id, type: 'done', analysis: analysisToWire(analysis) })
+    } catch (e) {
+      fail(e)
+    }
   }
 }
+
+/** The answers of one Worker (`worker.ts`; the tests make their own – `answerer`). */
+export const answer: Answer = answerer()

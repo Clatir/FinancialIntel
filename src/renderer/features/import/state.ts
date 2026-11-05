@@ -449,8 +449,9 @@ export function setCsvDraft(patch: Partial<Omit<CsvDraft, 'columns'>>): void {
   let draft: CsvDraft = { ...setup.draft, ...patch }
   const reread = patch.separator !== undefined || patch.encoding !== undefined
   const rows = reread ? previewRows(setup.bytes, draft) : setup.rows
-  // Another layout of the cells (przegląd R1 11): the roles by the header's names, else only those within its columns.
-  if (reread) draft = { ...draft, columns: columnsFor(draft, rows) }
+  // Another separator – other columns (przegląd R1 11): the roles beyond them go, the user's within them stay; another
+  // encoding moves no column – the roles stay (drugi przegląd R1, 4).
+  if (patch.separator !== undefined) draft = { ...draft, columns: columnsFor(draft, rows) }
   if (reread || patch.skipRows !== undefined || patch.header !== undefined) draft = withHeaders(draft, rows)
   useImport.setState({ csvSetup: { ...setup, draft, rows } })
 }
