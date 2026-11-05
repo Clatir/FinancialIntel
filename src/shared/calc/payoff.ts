@@ -251,3 +251,49 @@ export function payoff(input: PayoffInput): Payoff {
   for (const d of input.debts) principal[d.id] = principalOf(d, input.month)
   return { none: plan(input, principal, 'none'), avalanche: plan(input, principal, 'avalanche'), snowball: plan(input, principal, 'snowball'), principal }
 }
+
+/**
+ * Implied annual nominal interest rate (in %, rounded to 0,01 %) from a loan's principal `amount` and its monthly
+ * installment schedule (or `total` across `installments` months, T509). Returns `null` when the schedule does not
+ * exceed `amount`, has no installments, or implies a rate outside `(0, 100]`.
+ */
+export function impliedLoanRate(loan: {
+  amount: number
+  schedule?: ReadonlyArray<{ amount: number }>
+  total?: number
+  installments?: number
+}): number | null {
+  const amount = loan.amount
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  let amounts: number[]
+  if (loan.schedule && loan.schedule.length > 0) {
+    amounts = loan.schedule.map((s) => s.amount)
+  } else if ((loan.installments ?? 0) > 0 && (loan.total ?? 0) > 0) {
+    const n = Math.round(loan.installments!)
+    if (n <= 0) return null
+    const base = Math.floor(loan.total! / n)
+    const last = loan.total! - base * (n - 1)
+    amounts = Array.from({ length: n }, (_, k) => (k === n - 1 ? last : base))
+  } else {
+    return null
+  }
+  if (!amounts.length || amounts.some((a) => !Number.isFinite(a) || a <= 0)) return null
+  const total = sum(amounts)
+  if (total <= amount) return null
+  const pv = (annualPct: number): number => {
+    const m = annualPct / 1200
+    let acc = 0
+    for (let k = 0; k < amounts.length; k++) acc += amounts[k]! / Math.pow(1 + m, k + 1)
+    return acc
+  }
+  if (pv(100) > amount) return null
+  let lo = 0
+  let hi = 100
+  for (let iter = 0; iter < 60; iter++) {
+    const mid = (lo + hi) / 2
+    if (pv(mid) > amount) lo = mid
+    else hi = mid
+  }
+  const rate = Math.round(((lo + hi) / 2) * 100) / 100
+  return rate > 0 && rate <= 100 ? rate : null
+}

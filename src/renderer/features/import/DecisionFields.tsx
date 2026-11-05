@@ -461,7 +461,7 @@ export function DecisionFields({
         ) : (
           <>
             {/* A rule does not keep other members' parts (AP-15): said, not offered and lost – its loan part it keeps (T358). */}
-            {noShares && choice.household && members.length > 1 && (
+            {noShares && choice.household && (!choice.inflowKind || choice.inflowKind === 'repay') && members.some((m) => m.id !== (choice.memberId ?? HOUSE_MEMBER_ID)) && (
               <span className="text-[11px] text-muted" data-testid={`${testId}-no-shares`}>
                 „w tym za” – reguła tego nie zapamiętuje, ustawisz przy imporcie
               </span>

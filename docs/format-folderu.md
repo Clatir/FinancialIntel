@@ -187,10 +187,10 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.import.lastImport` | mapa: ULID → chwila ISO 8601 (UTC) | domyślnie pusty obiekt | Ostatni import konta: identyfikator konta → chwila. |
 | `settings.import.coveredTo` | mapa: ULID → data RRRR-MM-DD | domyślnie pusty obiekt | Ostatni dzień, który pokrywają zaimportowane pliki konta. |
 | `settings.import.log` | mapa: chwila ISO 8601 (UTC) → ULID | domyślnie pusty obiekt | Importy (ostatnie 100): chwila → konto. |
-| `settings.import.accountNumbers` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Numer rachunku w banku z plików konta: identyfikator konta → numer (tekst). |
-| `settings.import.notDuplicates` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Grupy operacji, o których powiedziano „to nie duplikaty”: klucz → chwila (tekst). |
-| `settings.import.aliases` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Nazwy połączone w jedną: klucz marki → obiekt z polami `to` (klucz, z którym jest jednym), `label`, `toLabel`, `at`. |
-| `settings.import.notSimilar` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Pary nazw, o których powiedziano „to nie to samo”: klucz pary → chwila (tekst). |
+| `settings.import.accountNumbers` | mapa: tekst → tekst | domyślnie pusty obiekt | Numer rachunku w banku z plików konta: identyfikator konta → numer (tekst). |
+| `settings.import.notDuplicates` | mapa: tekst → tekst | domyślnie pusty obiekt | Grupy operacji, o których powiedziano „to nie duplikaty”: klucz → chwila (tekst). |
+| `settings.import.aliases` | mapa: tekst → obiekt | domyślnie pusty obiekt | Nazwy połączone w jedną: klucz marki → obiekt z polami `to` (klucz, z którym jest jednym), `label`, `toLabel`, `at`. |
+| `settings.import.notSimilar` | mapa: tekst → tekst | domyślnie pusty obiekt | Pary nazw, o których powiedziano „to nie to samo”: klucz pary → chwila (tekst). |
 | `settings.household` | obiekt | domyślnie pusty obiekt | Domownicy i rozliczenia z nimi. |
 | `settings.household.members` | lista: obiekt | domyślnie zestaw startowy | Domownicy (domyślnie „Dom”). |
 | `settings.household.members[].id` | ULID | wymagane | Identyfikator domownika – `memberId` w operacjach. |
@@ -228,8 +228,8 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.anomalies` | obiekt | domyślnie pusty obiekt | Czujniki. |
 | `settings.anomalies.ok` | lista: tekst | domyślnie pusta lista | Anomalie, o których powiedziano „w porządku”. |
 | `settings.intel` | obiekt | domyślnie pusty obiekt | Wywiad. |
-| `settings.intel.tagGoals` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Cel tagu na Mapie gwiezdnej: klucz tagu → identyfikator celu. |
-| `settings.intel.cpi` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Inflacja CPI z GUS wpisana ręcznie: miesiąc RRRR-MM → zmiana rok do roku w procentach (liczba). |
+| `settings.intel.tagGoals` | mapa: tekst → ULID | domyślnie pusty obiekt | Cel tagu na Mapie gwiezdnej: klucz tagu → identyfikator celu. |
+| `settings.intel.cpi` | mapa: tekst → liczba | domyślnie pusty obiekt | Inflacja CPI z GUS wpisana ręcznie: miesiąc RRRR-MM → zmiana rok do roku w procentach (liczba). |
 | `settings.intel.forecast` | obiekt | opcjonalne | Założenia prognozy wieloletniej (Wywiad) – brak scenariusza: jego założenia domyślne. Prognoza nie czyta wyników tradingu z ICTTJ. |
 | `settings.intel.forecast.cautious` | obiekt albo dowolna wartość | opcjonalne | Scenariusz ostrożny: cztery założenia (inne pola zostają). Zapis nieczytelny zostaje w pliku – prognoza liczy go z założeniami domyślnymi i mówi o tym. |
 | `settings.intel.forecast.cautious.wages` | liczba | wymagane | Wzrost wpływów z pracy w procentach rocznie (od drugiego roku prognozy). |

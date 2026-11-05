@@ -8,10 +8,10 @@
  * (it is narrower – as a brand up to an amount before the brand), the more conditions the earlier; one condition or
  * „którykolwiek” after them (it is as broad as one match, or broader); within each – the order of the list.
  */
-import { keywordMatcher, normalizeKeyword } from './brands'
-import { counterpartyKey } from './names'
-import { combineOf, conditionsOf, MAX_RULE_CONDITIONS, type ImportRule, type RuleCondition } from '../schema/budget'
-import { TX_KINDS } from '../schema/records'
+import { fold } from '../fold'
+import { keywordMatcher, normalizeKeyword, words } from './brands'
+import { cleanBankName, counterpartyKey } from './names'
+import { combineOf, conditionsOf, MAX_RULE_CONDITIONS, readableRuleFields, type ImportRule, type RuleCondition } from '../schema/budget'
 
 /** What a rule's condition is tried on – a row of the bank, an operation, an entry typed by hand. */
 export interface RuleSubject {
@@ -42,15 +42,67 @@ export interface CompiledRule {
   titleTests: readonly Test[]
 }
 
+function parseRegexValue(value: string | undefined): RegExp | null {
+  if (!value) return null
+  const m = /^\/(.+)\/([gimsuy]*)$/.exec(value.trim())
+  if (!m?.[1]) return null
+  try {
+    const flags = m[2]?.includes('i') ? m[2] : `${m[2] ?? ''}i`
+    return new RegExp(m[1], flags)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Build a regex pattern `/.../i` from a row's title or counterparty (T508): folded words with numbers generalized to
+ * `\d+` so a monthly invoice/transfer („Faktura 11/2026 Netia” → `/faktura\s+\d+\s+\d+\s+netia/i`) matches every month.
+ */
+export function regexFromRow(text: string): string {
+  const tokens = fold(cleanBankName(text, { town: false }))
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+  if (!tokens.length) return ''
+  const parts = tokens.map((t) => (/^\d+$/.test(t) ? '\\d+' : t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  return `/${parts.join('\\s+')}/i`
+}
+
+/** Initial conditions prefilled when opening `ConditionsEditor` from an import row (T508). */
+export function conditionsFromRow(
+  row: { counterparty?: string; title?: string; amount?: number; accountId?: string | null },
+  opts: { regex?: boolean } = {}
+): RuleCondition[] {
+  const out: RuleCondition[] = []
+  const cp = (row.counterparty ?? '').trim()
+  const title = (row.title ?? '').trim()
+  if (cp) {
+    const val = opts.regex ? regexFromRow(cp) : cleanBankName(cp, { town: false }).trim() || cp
+    if (val) out.push({ field: 'counterparty', value: val.slice(0, 200) })
+  }
+  if (title) {
+    const val = opts.regex ? regexFromRow(title) : words(title).slice(0, 4).join(' ')
+    if (val) out.push({ field: 'title', value: val.slice(0, 200) })
+  }
+  if (!out.length && row.amount != null && row.amount !== 0) {
+    const a = Math.abs(row.amount)
+    out.push({ field: 'amount', min: a, max: a })
+  }
+  return out.length ? out : [{ field: 'counterparty', value: '' }]
+}
+
 /** The test of one condition, null = a condition this version cannot read (a newer one's, a broken one). */
 function testOf(c: RuleCondition): { test: Test; title: boolean } | null {
   switch (c.field) {
     case 'counterparty': {
+      const rx = parseRegexValue(c.value)
+      if (rx) return { test: (s) => rx.test(s.key) || rx.test(s.brand) || rx.test(s.raw), title: false }
       // As a rule „contains”: letters and digits of the name, without the marks and the legal forms.
       const k = counterpartyKey(c.value ?? '')
       return k ? { test: (s) => s.key.includes(k) || s.brand.includes(k) || s.raw.includes(k), title: false } : null
     }
     case 'title': {
+      const rx = parseRegexValue(c.value)
+      if (rx) return { test: (s) => rx.test(s.title.join(' ')), title: true }
       // As a keyword: whole folded words, the last one may go on („czynsz” = „czynszu”).
       const w = normalizeKeyword(c.value ?? '')
       if (!w.replace(/[^a-z0-9?]/g, '')) return null
@@ -111,10 +163,10 @@ export function compiledOf(rule: ImportRule): CompiledRule | null {
 }
 
 /**
- * A rule of conditions with anything this version cannot read (przegląd R1 2.3): its conditions or a condition of a newer
- * version, its way of joining, its kind, its direction. Kept in the file as it is, never applied – and never written by
- * this version (the editor, a change of its decision, „Zmień na spłatę”, „też ręczne” refuse): only deleted.
+ * A rule with anything this version cannot read (przegląd R1 2.3, T504): its conditions or a condition of a newer
+ * version, its way of joining, its mode, its kind, its direction, or any decision/match field written by a newer
+ * version (`readableRuleFields`). Kept in the file as it is, never applied – and never written by this version (the
+ * editor, a change of its decision, „Zmień na spłatę”, „też ręczne” refuse): only deleted.
  */
 export const unreadableRule = (rule: ImportRule): boolean =>
-  rule.mode === 'conditions' &&
-  (!compiledOf(rule) || !(TX_KINDS as readonly string[]).includes(rule.kind) || (rule.direction != null && rule.direction !== 'in' && rule.direction !== 'out'))
+  (rule.mode === 'conditions' && !compiledOf(rule)) || !readableRuleFields(rule)

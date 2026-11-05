@@ -8,8 +8,32 @@ import { fold } from '../fold'
 import { isCityWord, isGenericWord, isKeywordWord, keywordMatcher, sameWord, tokens, withoutProcessor, words } from './brands'
 import { withoutLegalForms } from './names'
 import { afterKeywords, findRule, isFeeOperation } from './classify'
+import { unreadableRule } from './conditions'
 import { choiceOf, opKindOf, sameChoice, type Choice, type ImportChoices, type ImportGroup } from './reconcile'
 import type { ImportRule } from '../schema/budget'
+
+export { unreadableRule }
+
+/**
+ * Move a conditional rule (`mode === 'conditions'`) up (`delta = -1`) or down (`delta = 1`) relative to the other
+ * conditional rules in `rules` (T508). Returns the original array if nothing changed.
+ */
+export function reorderConditionalRule(rules: readonly ImportRule[], id: string, delta: -1 | 1): ImportRule[] {
+  const condIndices: number[] = []
+  rules.forEach((r, idx) => {
+    if (r.mode === 'conditions') condIndices.push(idx)
+  })
+  const pos = condIndices.findIndex((idx) => rules[idx]?.id === id)
+  const targetPos = pos + delta
+  if (pos < 0 || targetPos < 0 || targetPos >= condIndices.length) return [...rules]
+  const fromIdx = condIndices[pos]!
+  const toIdx = condIndices[targetPos]!
+  const next = [...rules]
+  const tmp = next[fromIdx]!
+  next[fromIdx] = next[toIdx]!
+  next[toIdx] = tmp
+  return next
+}
 
 export interface KeywordProposal {
   /** As a rule keeps it: one folded word. */

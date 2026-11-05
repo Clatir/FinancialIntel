@@ -10,7 +10,9 @@ import type { AccountAhead } from '@shared/calc/ahead'
 import { dm } from '@shared/calc/briefing'
 import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates'
 import { HOUSE_DAYS, loanPayers, type LoanState } from '@shared/calc/loans'
+import { impliedLoanRate } from '@shared/calc/payoff'
 import { pit38Deadline, type RadarItem } from '@shared/calc/radar'
+import { percentText } from '@shared/format'
 import { onTheWay } from '@shared/calc/returns'
 import { MBANK_ACCOUNT_ID } from '@shared/schema'
 import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/data'
@@ -526,7 +528,7 @@ function NewLoanPanel({ today }: { today: string }) {
         )}
         {taken && (
           <Field label="Oprocentowanie" labelWidth={130} hint="Roczne z umowy, w procentach – tylko dla planu spłaty; puste = nieznane.">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <NumberField
                 className="h-[24px] w-[70px]"
                 value={o.rate ?? null}
@@ -541,6 +543,19 @@ function NewLoanPanel({ today }: { today: string }) {
                 data-testid="loan-rate"
               />
               <span className="text-muted">% rocznie</span>
+              {(() => {
+                const hinted = impliedLoanRate({ amount: o.amount, total: o.total, installments: o.installments })
+                return hinted != null && o.rate !== hinted ? (
+                  <button
+                    type="button"
+                    className="text-[11px] text-accent hover:underline"
+                    onClick={() => set({ rate: hinted })}
+                    data-testid="loan-rate-hint"
+                  >
+                    Z harmonogramu: ~{percentText(hinted, 2)}
+                  </button>
+                ) : null
+              })()}
             </div>
           </Field>
         )}
