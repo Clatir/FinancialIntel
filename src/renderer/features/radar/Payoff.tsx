@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react'
 import { monthsBetween } from '@shared/calc/dates'
 import type { FleetState } from '@shared/calc/fleet'
 import type { LoanState } from '@shared/calc/loans'
-import { payoff, payoffDebtsOf, rateOf, type PayoffMonth, type PayoffPlan, type PayoffVariant } from '@shared/calc/payoff'
+import { impliedLoanRate, payoff, payoffDebtsOf, rateOf, type PayoffMonth, type PayoffPlan, type PayoffVariant } from '@shared/calc/payoff'
 import { percentText } from '@shared/format'
 import { AmountField, plnText } from '../../components/fields'
 import { NumberField, Panel, Segmented, ShowMore } from '../../components/ui'
@@ -191,19 +191,34 @@ function PayoffLoanRow({ s, principal, readOnly: folderLocked }: { s: LoanState;
             {rate == null ? '—' : percentText(rate, 2)}
           </span>
         ) : (
-          <NumberField
-            className="ml-auto h-[22px] w-[58px]"
-            value={rate}
-            decimals={2}
-            step={0.25}
-            range={[0, 100]}
-            isValid={(v) => v == null || (v >= 0 && v <= 100)}
-            commitOnBlur
-            onChange={(v) => setLoanRate(s.loan, typedLoanRate(v))}
-            placeholder="—"
-            aria-label={`Oprocentowanie roczne: ${s.loan.name}`}
-            data-testid="radar-payoff-rate"
-          />
+          <div className="flex flex-col items-end gap-0.5">
+            <NumberField
+              className="ml-auto h-[22px] w-[58px]"
+              value={rate}
+              decimals={2}
+              step={0.25}
+              range={[0, 100]}
+              isValid={(v) => v == null || (v >= 0 && v <= 100)}
+              commitOnBlur
+              onChange={(v) => setLoanRate(s.loan, typedLoanRate(v))}
+              placeholder="—"
+              aria-label={`Oprocentowanie roczne: ${s.loan.name}`}
+              data-testid="radar-payoff-rate"
+            />
+            {(() => {
+              const hinted = impliedLoanRate(s.loan)
+              return hinted != null && rate !== hinted ? (
+                <button
+                  type="button"
+                  className="text-[10.5px] text-accent hover:underline"
+                  onClick={() => setLoanRate(s.loan, hinted)}
+                  data-testid="loan-rate-hint"
+                >
+                  Z harmonogramu: ~{percentText(hinted, 2)}
+                </button>
+              ) : null
+            })()}
+          </div>
         )}
       </td>
     </tr>

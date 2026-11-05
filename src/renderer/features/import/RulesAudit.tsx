@@ -21,7 +21,7 @@ import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, conditionsText, directionText, editRule, keepAdvanceRule, LOCKED_RULE_TEXT, removeRule, repayingRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, conditionsText, directionText, editRule, keepAdvanceRule, LOCKED_RULE_TEXT, moveConditionalRule, removeRule, repayingRule, ruleDecisionText } from './rules'
 import { restNotOfRule } from './options'
 import { ConditionsEditor } from './ConditionsEditor'
 import { unreadableRule } from '@shared/import/conditions'
@@ -145,8 +145,21 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
   const borrower = audit.borrower.get(rule.id) ?? []
   const loans = [...new Set(borrower.map((b) => b.loan.name))]
   const review = audit.review.some((r) => r.id === rule.id)
+  const closedLoan = audit.closedLoan?.get(rule.id)
   return (
     <div className="flex flex-col gap-1 border-l-2 border-line-strong py-1 pl-2 text-[11.5px]" data-testid="import-rule-details">
+      {closedLoan && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="import-rule-closed-loan-note">
+          <span className="text-accent">
+            {closedLoan.status === 'closed'
+              ? `Pożyczka „${closedLoan.loan?.name ?? rule.label}” jest już zamknięta – reguła nie ma już czego spłacać.`
+              : 'Pożyczka, do której prowadzi ta reguła, została usunięta.'}
+          </span>
+          <button type="button" className="btn h-[24px] hover:text-down" disabled={readOnly} onClick={() => removeRule(rule.id)} data-testid="import-rule-closed-loan-remove">
+            Usuń regułę
+          </button>
+        </div>
+      )}
       {review && (
         <>
           {/* AP-4 (AF-8): „reszta jako zaliczka” of 1.15.3–1.15.5 learned such rules – the debt never went down. */}
@@ -212,7 +225,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
           ))}
         </>
       )}
-      {!differ.length && !other.length && !borrower.length && !review && <span className="text-dim">Wszystkie operacje tej reguły są zgodne z nią.</span>}
+      {!differ.length && !other.length && !borrower.length && !review && !closedLoan && <span className="text-dim">Wszystkie operacje tej reguły są zgodne z nią.</span>}
     </div>
   )
 }
@@ -233,16 +246,21 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
   const hitsOf = (r: ImportRule) => audit?.hits.get(r.id)?.length ?? 0
   const differOf = (r: ImportRule) => audit?.differ.get(r.id)?.length ?? 0
   const accounts = useAccounts()
-  const decision = (r: ImportRule) => ruleDecisionText(r, cats.label, members)
+  const decision = (r: ImportRule) => (unreadable(r) ? LOCKED_RULE_TEXT : ruleDecisionText(r, cats.label, members))
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? 'konto spoza listy'
+  const condIds = useMemo(() => rules.filter((r) => r.mode === 'conditions').map((r) => r.id), [rules])
   const listed = useMemo(() => {
     const q = fold(query.trim())
+    const idxOf = new Map(rules.map((r, i) => [r.id, i]))
     return rules
       .filter((r) => r.mode !== 'keyword')
       .filter((r) => !q || fold(`${r.label} ${r.match} ${decision(r)} ${r.mode === 'conditions' ? conditionsText(r, accountName) : ''}`).includes(q))
       // „Bez trafień” = its count (AF-64: never a rule of a loan, PIT-38 or XTB – a proposal only).
       .filter((r) => inAuditView(r, audit, show))
-      .sort((a, b) => hitsOf(b) - hitsOf(a) || (a.label || a.match).localeCompare(b.label || b.match))
+      .sort((a, b) => {
+        if (a.mode === 'conditions' && b.mode === 'conditions') return (idxOf.get(a.id) ?? 0) - (idxOf.get(b.id) ?? 0)
+        return hitsOf(b) - hitsOf(a) || (a.label || a.match).localeCompare(b.label || b.match)
+      })
   }, [rules, query, show, audit, cats, members, accounts])
   // Thousands of rules after years of imports (W35): a page at a time, the first again for another search.
   const [limit, setLimit] = useState(RULES_PAGE)
@@ -250,6 +268,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
   const differCount = audit ? inconsistentCount(audit) : 0
   const borrowerOf = (r: ImportRule) => audit?.borrower.get(r.id)?.length ?? 0
   const reviewOf = (r: ImportRule) => !!audit?.review.some((x) => x.id === r.id)
+  const closedLoanOf = (r: ImportRule) => audit?.closedLoan?.get(r.id)
   return (
     <Panel title="Reguły importu">
       <p className="mb-2 text-[11.5px] text-muted">
@@ -291,8 +310,8 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                 title={r.mode === 'conditions' ? `${conditionsText(r, accountName)}${r.manual ? ' · także dla wpisów ręcznych' : ''}` : `klucz: ${r.match}${r.mode === 'contains' ? ' (zawiera)' : ''} · nauczona na ${r.hits} operacjach${r.manual ? ' · także dla wpisów ręcznych' : ''}`}
               >
                 {r.label || r.match}
-                {r.mode === 'amount' && r.maxAmount ? <span className="ml-1 text-[11px] text-accent">do {plnText(r.maxAmount)} zł</span> : null}
-                {r.manual ? (
+                {r.mode === 'amount' && typeof r.maxAmount === 'number' && r.maxAmount > 0 ? <span className="ml-1 text-[11px] text-accent">do {plnText(r.maxAmount)} zł</span> : null}
+                {r.manual === true ? (
                   <span className="ml-1 text-[11px] text-muted" data-testid="import-rule-manual-mark">
                     · też ręczne
                   </span>
@@ -301,12 +320,47 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
               <span className="text-muted">{directionText(r.direction)}</span>
               <span className="truncate text-muted">
                 {decision(r)}
-                {r.tags?.length ? <span className="ml-1 text-fg" data-testid="import-rule-tag-list">{r.tags.map((x) => `#${x}`).join(' ')}</span> : null}
+                {Array.isArray(r.tags) && r.tags.length > 0 ? <span className="ml-1 text-fg" data-testid="import-rule-tag-list">{r.tags.filter((x): x is string => typeof x === 'string').map((x) => `#${x}`).join(' ')}</span> : null}
               </span>
               <span className={cx('num text-right', audit && !hitsOf(r) ? 'text-dim' : 'text-fg')} data-testid="import-rule-hits">
                 {audit ? `${hitsOf(r)} op.` : '…'}
               </span>
               <span className="flex items-center gap-1">
+                {r.mode === 'conditions' && condIds.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-ghost h-[22px] px-1 text-[11px]"
+                      disabled={readOnly || condIds[0] === r.id}
+                      title="Przesuń regułę wyżej"
+                      onClick={() => moveConditionalRule(r.id, -1)}
+                      data-testid="rule-move-up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost h-[22px] px-1 text-[11px]"
+                      disabled={readOnly || condIds.at(-1) === r.id}
+                      title="Przesuń regułę niżej"
+                      onClick={() => moveConditionalRule(r.id, 1)}
+                      data-testid="rule-move-down"
+                    >
+                      ↓
+                    </button>
+                  </>
+                )}
+                {closedLoanOf(r) && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost h-[22px] px-1.5 text-[11px] text-accent"
+                    onClick={() => setOpen(open === r.id ? null : r.id)}
+                    title={closedLoanOf(r)!.status === 'closed' ? `Pożyczka „${closedLoanOf(r)!.loan?.name ?? r.label}” jest już zamknięta` : 'Pożyczka została usunięta'}
+                    data-testid="import-rule-closed-loan"
+                  >
+                    {closedLoanOf(r)!.status === 'closed' ? 'pożyczka zamknięta' : 'pożyczka usunięta'}
+                  </button>
+                )}
                 {reviewOf(r) && (
                   <button
                     type="button"

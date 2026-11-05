@@ -52,6 +52,10 @@ interface Unwrapped {
 function unwrap(s: unknown): Unwrapped {
   const out: Unwrapped = { inner: s, optional: false, nullable: false, hasDefault: false }
   for (;;) {
+    if (out.inner && typeof out.inner === 'object' && '_keptInner' in out.inner) {
+      out.inner = (out.inner as { _keptInner: unknown })._keptInner
+      continue
+    }
     const d = defOf(out.inner)
     if (!d) return out
     if (d.type === 'pipe') {
@@ -108,8 +112,10 @@ function typeName(s: unknown): string {
       return (d.options as unknown[]).map(typeName).join(' albo ')
     case 'array':
       return `lista: ${typeName(d.element)}`
-    case 'record':
-      return `mapa: ${typeName(d.keyType)} → ${typeName(d.valueType)}`
+    case 'record': {
+      const v = (u.inner as { _lenientValue?: unknown })._lenientValue ?? (s as { _lenientValue?: unknown })._lenientValue ?? d.valueType
+      return `mapa: ${typeName(d.keyType)} → ${typeName(v)}`
+    }
     case 'object':
       return 'obiekt'
     case 'unknown':

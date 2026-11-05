@@ -1,5 +1,16 @@
 # Financial Intel – zmiany
 
+## 1.18.0
+
+Reguły z warunkami, audyt importu i plan spłaty:
+
+- **Ochrona rozszerzonych pól reguł i zgodność w przód:** pola reguł nie są już bezpowrotnie czyszczone przy wczytywaniu starszą wersją aplikacji (`keptField`), zachowując dane nowszych struktur; audyt reguł weryfikuje czytelność wszystkich pól.
+- **Audyt reguł – zamknięte i usunięte pożyczki:** automatyczne wykrywanie reguł importu powiązanych z pożyczką, która została zamknięta lub usunięta z Radaru, wraz z oznaczeniem w widoku reguł niespójnych.
+- **Podpowiedź oprocentowania z harmonogramu:** funkcja szacowania efektywnego oprocentowania rocznego pożyczki na podstawie jej rat i kwoty głównej (`impliedLoanRate`) ułatwia uzupełnienie danych w Planie spłaty pożyczek.
+- **Automatyczne rozpoznawanie PIT-38:** podatek od zysków kapitałowych jest poprawnie klasyfikowany na podstawie kontrahenta, tytułu przelewu lub opisu operacji.
+- **Wzorce regex i kolejność reguł z warunkami:** możliwość definiowania reguł z wyrażeniami regularnymi na bazie wiersza bankowego (z automatycznym uogólnianiem numerów faktur do `\d+`) oraz ręcznego zmieniania kolejności reguł warunkowych w Ustawieniach.
+
+
 ## 1.17.1
 
 Poprawki silnika i ochrony danych:

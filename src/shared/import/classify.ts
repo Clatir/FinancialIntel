@@ -16,7 +16,7 @@ import { TX_KINDS, type TxKind } from '../schema/records'
 import type { CategoryIndex } from '../calc/operations'
 import { memberOf, nameIn } from '../calc/household'
 import type { MbankRow } from './mbank'
-import { byTitleOf, compiledOf, goesFirst, holds, type CompiledRule, type RuleFacts } from './conditions'
+import { byTitleOf, compiledOf, goesFirst, holds, unreadableRule, type CompiledRule, type RuleFacts } from './conditions'
 
 export { counterpartyKey }
 
@@ -45,7 +45,7 @@ export function upsertRules(rules: readonly ImportRule[], items: ReadonlyArray<{
   const at = new Map<string, number>()
   out.forEach((x, i) => {
     const k = `${x.direction}|${x.match}`
-    if (x.mode === 'exact' && !at.has(k)) at.set(k, i)
+    if (x.mode === 'exact' && !unreadableRule(x) && !at.has(k)) at.set(k, i)
   })
   for (const { rule: r, hits } of items) {
     const k = `${r.direction}|${r.match}`
@@ -178,7 +178,7 @@ function ruleIndexOf(rules: readonly ImportRule[], direction: Direction): RuleIn
   if (out) return out
   out = { exact: new Map(), amount: [], contains: [], keyword: [], first: [], last: [] }
   for (const r of rules) {
-    if (!(r.direction == null || r.direction === direction) || !(TX_KINDS as readonly string[]).includes(r.kind)) continue
+    if (unreadableRule(r) || !(r.direction == null || r.direction === direction) || !(TX_KINDS as readonly string[]).includes(r.kind)) continue
     if (r.mode === 'exact') {
       if (!r.match) continue
       const list = out.exact.get(r.match)
@@ -473,8 +473,13 @@ export function ruleGivesWay(rule: Pick<ImportRule, 'kind' | 'memberId'> & Parti
 }
 
 const XTB = /\bxtb\b|x-trade brokers/i
+const PIT38 = /\bpit[-\s]?38\b/i
 /** A payment operator alone as the counterparty (its shop in the title). */
 const PROCESSOR_ONLY = /^(payu|paypro|paypal|przelewy24|p24|dotpay|tpay|blue ?media|sumup|stripe)\b/i
+
+/** A PIT-38 tax payment recognized by its title, description or counterparty (T507). */
+export const isPit38Row = (row: Pick<MbankRow, 'title' | 'description' | 'counterparty'>): boolean =>
+  PIT38.test(`${row.title} ${row.description} ${row.counterparty}`)
 
 /**
  * XTB (T37, B106): by the counterparty – a processor's prefix aside („PAYU*XTB”); by the description only without a
@@ -656,6 +661,7 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
   }
   // No rule, or a rule that gave way to what was recognized: the loan's repayment (B34) – from its day only.
   if (lent) return out(decision('loan', `zwrot pożyczki: ${lent.name}`, { loanId: lent.id }))
+  if (direction === 'out' && isPit38Row(row)) return out(decision('tax', 'Podatek PIT-38'))
   // An own transfer and a member's money before XTB (B106): their title may name it („na portfel XTB”).
   if (own) {
     // The other account by its number – the other side's first, then the description's – never the file's own account
