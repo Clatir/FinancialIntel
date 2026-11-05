@@ -389,6 +389,7 @@ Pożyczka udzielona (należność) albo wzięta (dług) z harmonogramem; spłaty
 | `schedule[].date` | data RRRR-MM-DD | wymagane | Termin. |
 | `schedule[].amount` | grosze (liczba całkowita) | wymagane | Kwota. |
 | `closedAt` | chwila ISO 8601 (UTC) | domyślnie `null`, może być `null` | Kiedy zamknięta; `null` – otwarta. |
+| `rate` | liczba | opcjonalne, może być `null` | Oprocentowanie nominalne w procentach rocznie (np. `7.5`), informacyjnie – czyta je tylko plan spłaty pożyczek wziętych, nie budżet; brak albo `null` – nieznane. |
 | `note` | tekst | domyślnie `""` | Notatka. |
 
 ### Salda kont – `balances/RRRR/RRRR-MM-DD_ULID.json`

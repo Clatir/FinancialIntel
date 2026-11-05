@@ -503,6 +503,11 @@ export const loanSchema = z.looseObject({
   accountId: ulidSchema.nullable().default(null),
   schedule: z.array(z.looseObject({ id: ulidSchema, date: isoDate, amount: grosze.min(0) })).default([]),
   closedAt: isoDateTime.nullable().default(null),
+  /**
+   * Its yearly nominal interest in percent (1.17.0, AP-41 – T481): informational – only the payoff plan of the taken
+   * loans reads it (`calc/payoff.ts`), never the engine. Absent or null = not known; a value out of 0–100 – not known.
+   */
+  rate: z.number().min(0).max(100).nullable().optional().catch(undefined),
   note: text
 })
 export type Loan = z.infer<typeof loanSchema>

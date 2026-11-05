@@ -31,6 +31,25 @@ export interface NewLoan {
   withOperation: boolean
   /** A taken loan's installments added as a container in the cargo hold (default true; false = repaid from shields, N-PC-17). */
   withContainer?: boolean
+  /** A taken loan's yearly interest in percent (AP-41, T483 – informational, the payoff plan reads it); null = not known. */
+  rate?: number | null
+}
+
+/** A yearly percent as the loan keeps it (T483): to 0,01 %, 0–100; anything else – not known (null). */
+export function loanRateOf(rate: number | null | undefined): number | null {
+  if (rate == null || !Number.isFinite(rate) || rate < 0 || rate > 100) return null
+  return Math.round(rate * 100) / 100
+}
+
+/**
+ * A taken loan's yearly interest (AP-41, T483): an informational field of its record – only the payoff plan reads it,
+ * the engine never does; null = not known. False – nothing changed (a read-only folder or file).
+ */
+export function setLoanRate(loan: Loan, rate: number | null): boolean {
+  if (!canWrite()) return false
+  const next = loanRateOf(rate)
+  if ((loan.rate ?? null) === next) return true
+  return updateRecord('loans', loan.id, (l) => ({ ...l, rate: next }))
 }
 
 const stamp = () => {
@@ -39,6 +58,8 @@ const stamp = () => {
 }
 
 export function addLoan(o: NewLoan): Loan {
+  // A taken loan's interest only when typed (AP-41): a file without it stays as an older version writes it.
+  const rate = o.direction === 'taken' ? loanRateOf(o.rate) : null
   const loan = loanSchema.parse({
     ...stamp(),
     id: newId(),
@@ -48,7 +69,8 @@ export function addLoan(o: NewLoan): Loan {
     amount: o.amount,
     date: o.date,
     accountId: o.accountId,
-    schedule: monthlySchedule(o.direction === 'taken' ? o.total : o.amount, o.installments, o.firstDue, newId)
+    schedule: monthlySchedule(o.direction === 'taken' ? o.total : o.amount, o.installments, o.firstDue, newId),
+    ...(rate != null ? { rate } : {})
   })
   addRecord('loans', loan)
   if (o.withOperation)

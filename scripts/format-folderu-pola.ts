@@ -342,6 +342,7 @@ export const FIELD_WORDS: Record<string, string> = {
   'loans:schedule[].date': 'Termin.',
   'loans:schedule[].amount': 'Kwota.',
   'loans:closedAt': 'Kiedy zamknięta; `null` – otwarta.',
+  'loans:rate': 'Oprocentowanie nominalne w procentach rocznie (np. `7.5`), informacyjnie – czyta je tylko plan spłaty pożyczek wziętych, nie budżet; brak albo `null` – nieznane.',
   'loans:note': 'Notatka.',
 
   // ------------------------------------------------------------------ balances

@@ -16,6 +16,7 @@ paths:
   - "tests/unit/goals.test.ts"
   - "tests/unit/loans.test.ts"
   - "tests/unit/loans-n2-*.test.ts"
+  - "tests/unit/payoff.test.ts"
   - "tests/unit/numbers-agree.test.ts"
 ---
 
@@ -117,6 +118,9 @@ paths:
   na dług (reszta – odsetki, przychód T70) – tylko `loanBacksOf` (silnik i statystyki, po kolei całej historii, także
   w saldzie otwarcia konta). **Pułapka:** linia ma `memberId: null` – kod, który bierze takie części za „mój przychód”
   (tagi), musi pominąć `loanId`.
+- Plan spłaty pożyczek wziętych (AP-41, T480–T482): `calc/payoff.ts` – propozycja z `LoanState` (`open`, `left`) i pola
+  `rate` pożyczki; nic nie zapisuje, silnik `rate` nigdy nie czyta. Raty harmonogramu zawierają odsetki – kapitał to ich
+  wartość obecna (`principalOf`), ostatnia rata płaci resztę; bez nadpłaty strategie = harmonogram.
 
 - Miesiąc w toku liczony do dziś (AP-36, T421): debriefing, przegląd roczny, bilans paliwa i „Wydatki w czasie” czytają
   operacje do dnia budżetu (`upToDay`), późniejsze – osobno `planned` („Zaplanowane”); nowe zestawienie miesiąca w toku
@@ -133,9 +137,10 @@ paths:
 ## Mapa `calc/`
 `fleet.ts` (warstwy, dokowanie, pensja, koperty, przydział, odkładki, zasięg, klasa), `plan.ts` / `start.ts` (plan
 miesiąca, debriefing, łupy, kreator), `briefing.ts` (odprawa, Daily Bias), `dock.ts` (dostawy z ICTTJ), `goals.ts`
-(cele, ETA, tempo), `loans.ts` (pożyczki), `household.ts` (rozliczenia z domownikami), `repayments.ts` (zwroty
-przypisane do zakupów), `share.ts` (wspólne finansowanie), `income.ts` (przychody), `history.ts` (zakres historii do
-średnich), `balances.ts` (salda otwarcia, potwierdzenia), `operations.ts` (części operacji, koszt, przelewy dwustronne),
+(cele, ETA, tempo), `loans.ts` (pożyczki), `payoff.ts` (plan spłaty pożyczek), `household.ts` (rozliczenia
+z domownikami), `repayments.ts` (zwroty przypisane do zakupów), `share.ts` (wspólne finansowanie), `income.ts`
+(przychody), `history.ts` (zakres historii do średnich), `balances.ts` (salda otwarcia, potwierdzenia), `operations.ts`
+(części operacji, koszt, przelewy dwustronne),
 `transfers.ts`, `kinds.ts`, `radar.ts` (radar 90 dni), `scheduled.ts` (boje), `ahead.ts` (salda kont naprzód),
 `course.ts` (kurs i manewry), `cushion.ts` (osłony + kadłub i zasięg na koniec miesięcy), `yearPlan.ts` (plan
 roczny), `cargoStatus.ts` / `cargoWatch.ts` (opłaty, ceny, ciche kontenery), `anomalies.ts`, `returns.ts` (zwroty

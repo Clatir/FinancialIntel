@@ -3909,3 +3909,47 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zdanie o zasadzie „tylko do odczytu, nie zapisuj, gdy aplikacja działa” i „Opis formatu folderu i przykładowy skrypt ›”,
   otwiera w przeglądarce `FOLDER_FORMAT_PAGE` (plik w publicznym repozytorium – D61; `shared/update.ts`). Opisu nie ma
   w aplikacji (bez sieci link się nie otworzy) – w Ustawieniach, nie w F1, bo dotyczy folderu.
+- **T480** Plan spłaty pożyczek (1.17.0, R2 – AP-41, D101 (2) – bez kart kredytowych i rat 0 %): tylko pożyczki wzięte,
+  otwarte (bez `closedAt`, do spłaty > 0), najstarsza pierwsza; udzielone to należności – poza planem. Panel „Plan spłaty
+  pożyczek” na Radarze pod „Pożyczki”, gdy jest choć jedna taka pożyczka. Propozycja: liczy czysta funkcja
+  `calc/payoff.ts` z `LoanState` silnika (do spłaty, raty niepokryte – to samo pokrycie rat spłatami co wiersz Radaru), nic
+  nie jest zapisywane, silnik, warstwy, dług w zasięgu i kontenery rat w Ładowni bez zmian. Bez „Zastosuj”: boja nadpłaty
+  po „Wykonaj teraz” byłaby wydatkiem z energii, nie spłatą pożyczki – nadpłatę zapisuje się jak dotąd w wierszu pożyczki
+  („zapłać ratę”, przy racie w Ładowni „z osłon (nadpłata)”). Wejście: „Nadpłata co miesiąc” i „jednorazowo teraz” (szkic
+  okna – zostaje przy przejściu do innego ekranu, do zmiany folderu albo restartu), przy „wolnym do decyzji” > 0 – „Osłony ·
+  wolne do decyzji … – wstaw jako jednorazową” (tylko propozycja). Wynik: przy pożyczce do spłaty, następna rata i
+  oprocentowanie; porównanie „bez nadpłat / lawina / kula śnieżna” – spłata wszystkich (mm.rrrr, „nigdy”), odsetki, mniej
+  odsetek, krócej o, nadpłata najpierw, spłata każdej pożyczki; miesiąc po miesiącu wybranego wariantu (wpłata, w tym
+  nadpłata, zostaje, „spłacona”; po 100). Bez kwoty nadpłat – tylko harmonogram i zdanie, co wpisać. Ukryte kwoty – maska.
+  Telefon: ten sam panel (Radar to ekran komputera – mieści się w szerokości iPhone'a, oprocentowanie idzie na OneDrive).
+- **T481** Odsetki i zaokrąglenia planu spłaty (1.17.0, R2 – AP-41): oprocentowanie nominalne roczne w procentach – pole
+  `rate` pożyczki (T484), brak = nieznane. Raty harmonogramu zawierają odsetki, więc kapitał na start planu (bieżący miesiąc)
+  to wartość obecna rat niepokrytych przy tym oprocentowaniu – wstecz od ostatniego miesiąca, do grosza w każdym:
+  (zostaje po miesiącu + raty miesiąca) × 120 000 ÷ (120 000 + punkty bazowe, 1 % = 100); bez oprocentowania (albo 0 %)
+  i bez harmonogramu – do spłaty. Co miesiąc najpierw odsetki od tego, co zostało: saldo × punkty bazowe ÷ 120 000
+  (oprocentowanie ÷ 12), do grosza, połówki w górę – także pełny pierwszy miesiąc; potem raty miesiąca (rata z miesiąca
+  przed planem – zaległa – w pierwszym); ostatnia rata harmonogramu płaci całą resztę (różnica zaokrągleń – reszta w
+  ostatniej części: 2 × 100,23 zł przy 12 % to 100,23 + 100,24 zł), potem nadpłata (T482). Wariant bez nadpłat to więc
+  harmonogram; odsetki tylko z pożyczek z oprocentowaniem („—”, gdy żadna go nie ma). Uproszczenie: miesiąc = 1/12 roku,
+  nie dni jak w banku – liczby banku mogą różnić się o grosze.
+- **T482** Strategie planu spłaty (1.17.0, R2 – AP-41): lawina – najpierw najwyższe oprocentowanie (nieznane = 0 %), przy
+  równym mniejsze do spłaty; kula śnieżna – najpierw najmniejsze do spłaty (kwota z Radaru, z odsetkami harmonogramu), przy
+  równym wyższe oprocentowanie; dalej starsza pożyczka, id; kolejność stała przez cały plan. Ponad raty każdego miesiąca
+  idzie nadpłata co miesiąc, w pierwszym także jednorazowa, i raty, które harmonogram ma jeszcze dla pożyczek spłaconych
+  wcześniej (oraz część raty niepotrzebna pożyczce, którą miesiąc kończy) – kula się toczy; po kolei, każdej najwyżej to,
+  co zostało. Plan nigdy nie chce w miesiącu więcej niż harmonogram + nadpłata (+ jednorazowa w pierwszym): pożyczka
+  spłacona zgodnie z harmonogramem nie zostawia raty na następne (jej kontener wychodzi z Ładowni, pieniądze wracają do
+  budżetu) – do potwierdzenia (klasyczna kula trzyma całą miesięczną sumę rat do spłaty wszystkich). Bez nadpłaty i
+  jednorazowej strategie to harmonogram (nic, także grosz reszty, nie przechodzi na inną pożyczkę). „Nigdy”: pożyczka bez
+  harmonogramu bez nadpłat albo odsetki nie mniejsze niż pieniądze ponad raty – plan kończy się na tym miesiącu (najwyżej
+  600 miesięcy).
+- **T483** Oprocentowanie w oknie (1.17.0, R2 – AP-41): pole „% rocznie” przy pożyczce w planie (zapis po wyjściu z pola
+  albo Enter, Esc cofa; folder tylko do odczytu albo wpis nowszej wersji – sam tekst) i „Oprocentowanie” w „Nowa pożyczka”
+  przy „Biorę pożyczkę” (puste = nieznane, przy udzielonej nie ma pola). Zapis w rekordzie pożyczki (`setLoanRate`) do
+  0,01 %, poza 0–100 – odmowa z komunikatem przy polu; poprzednia wartość w historii wpisu (zwykła zmiana pola, bez toastu
+  „Cofnij”). Plan liczy się z `useFleet` (`fleet.loans`, `fleet.month`) – razem z silnikiem, bez osobnego klucza.
+- **T484** Pole `rate` pożyczki (1.17.0, R2 – AP-41): `loans/ULID.json` – opcjonalna liczba 0–100 albo `null`, addytywnie,
+  bez podbijania `SCHEMA_VERSION`; plik bez niego zostaje bez zmian, starsza wersja go zachowuje (`z.looseObject`) i nie
+  czyta; wartość błędna – nieznane (`catch`). Nie jest kwotą (poza `AMOUNT_FIELDS`); w historii i konfliktach
+  „Oprocentowanie (% rocznie)”; w `docs/format-folderu.md`. Silnik (`computeFleet`) i wyrocznia go nie czytają – test:
+  ten sam stan silnika z polem i bez niego.
