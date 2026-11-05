@@ -83,13 +83,30 @@ export const accountSchema = z.looseObject({
   /** The bank export the import reads for this account (E2): mBank's, or another bank's CSV by `csvMapping` (AP-43). */
   importFormat: openEnum(['mbank', 'csv'] as const).nullable().default(null),
   /**
-   * The columns of the account's CSV of another bank (AP-43, T460). One this version cannot read is left out of the
-   * account, never the account itself (the settings stay readable).
+   * The columns of the account's CSV of another bank (AP-43, T460). One this version cannot read (a newer version's, a
+   * broken one) stays in the file as it is – never erased by a write of fi.json (przegląd R1 9) – and the account with
+   * it: the value may then be raw, so it is read only through `readCsvMapping` (null – the import asks for the columns).
    */
-  csvMapping: csvMappingSchema.optional().catch(undefined),
+  csvMapping: csvMappingSchema.optional().catch((ctx) => ctx.input as CsvMapping),
   archived: z.boolean().default(false)
 })
 export type Account = z.infer<typeof accountSchema>
+
+const mappingMemo = new WeakMap<object, CsvMapping | null>()
+/**
+ * An account's CSV mapping as this version reads it (przegląd R1 9): null – none, or one it cannot read (kept in the file
+ * as it is, `accountSchema.csvMapping`) – the import asks for the columns again.
+ */
+export function readCsvMapping(a: Pick<Account, 'csvMapping'>): CsvMapping | null {
+  const v: unknown = a.csvMapping
+  if (v == null || typeof v !== 'object') return null
+  let out = mappingMemo.get(v)
+  if (out === undefined) {
+    const parsed = csvMappingSchema.safeParse(v)
+    mappingMemo.set(v, (out = parsed.success ? parsed.data : null))
+  }
+  return out
+}
 
 export const MBANK_ACCOUNT_ID = fixedId('ACC', 1)
 export const XTB_WALLET_ACCOUNT_ID = fixedId('ACC', 2)
@@ -252,14 +269,26 @@ export type RuleConditionField = (typeof RULE_CONDITION_FIELDS)[number]
  */
 export const ruleConditionSchema = z.looseObject({
   field: openEnum(RULE_CONDITION_FIELDS),
-  value: z.string().max(200).optional().catch(undefined),
-  min: grosze.min(0).nullable().optional().catch(undefined),
-  max: grosze.min(0).nullable().optional().catch(undefined)
+  value: z.string().max(200).optional(),
+  min: grosze.min(0).nullable().optional(),
+  max: grosze.min(0).nullable().optional()
 })
 export type RuleCondition = z.infer<typeof ruleConditionSchema>
 
 /** At most this many conditions of one rule. */
 export const MAX_RULE_CONDITIONS = 10
+
+/** A rule's conditions as this version reads them (`conditionsOf`): at most `MAX_RULE_CONDITIONS`, each whole. */
+export const ruleConditionsSchema = z.array(ruleConditionSchema).max(MAX_RULE_CONDITIONS)
+/** How a rule's conditions join (`combineOf`). */
+export const ruleCombineSchema = openEnum(['all', 'any'] as const)
+
+/**
+ * A field a newer version may write so that this one cannot read it (przegląd R1 9): kept as it is in the file – main
+ * parses fi.json before every write, a value made `undefined` would be erased – and typed `unknown`: read only through
+ * its schema (`conditionsOf`, `combineOf`); one it cannot read is „unknown” (the rule is not applied).
+ */
+const kept = <T extends z.ZodType>(schema: T) => z.union([schema, z.unknown()]).optional()
 
 /**
  * A rule of the import (E2): an operation of this counterparty becomes … Learned from the user's decisions (the
@@ -285,8 +314,8 @@ export const importRuleSchema = z.looseObject({
    * then only the rule's text for the search. The mode is the field of compatibility: a version before 1.16.0 does not
    * know it and applies no such rule (reading `match` alone, a rule of more conditions would catch too much).
    */
-  conditions: z.array(ruleConditionSchema).max(MAX_RULE_CONDITIONS).optional().catch(undefined),
-  combine: openEnum(['all', 'any'] as const).optional().catch(undefined),
+  conditions: kept(ruleConditionsSchema),
+  combine: kept(ruleCombineSchema),
   /**
    * Also for the entries typed by hand (1.16.0, AP-45, T470): the quick entry and the operation's editor propose the
    * rule's decision (category, who pays) once the name or the title fits it – to accept, never saved by itself. Absent =
@@ -330,6 +359,28 @@ export const importRuleSchema = z.looseObject({
   updatedAt: isoDateTime
 })
 export type ImportRule = z.infer<typeof importRuleSchema>
+
+const conditionsMemo = new WeakMap<object, RuleCondition[] | null>()
+/**
+ * A rule's conditions as this version reads them (AP-45, przegląd R1 9): null – none, or ones it cannot read (more than
+ * `MAX_RULE_CONDITIONS`, a newer version's, broken – kept in the file as they are): such a rule is not applied.
+ */
+export function conditionsOf(rule: Pick<ImportRule, 'conditions'>): RuleCondition[] | null {
+  const v: unknown = rule.conditions
+  if (!Array.isArray(v)) return null
+  let out = conditionsMemo.get(v)
+  if (out === undefined) {
+    const parsed = ruleConditionsSchema.safeParse(v)
+    conditionsMemo.set(v, (out = parsed.success ? parsed.data : null))
+  }
+  return out
+}
+
+/** How a rule's conditions join: absent – „wszystkie”; a value this version cannot read – null (the rule not applied). */
+export function combineOf(rule: Pick<ImportRule, 'combine'>): 'all' | 'any' | null {
+  const v: unknown = rule.combine
+  return v === undefined ? 'all' : v === 'all' || v === 'any' ? v : null
+}
 
 /** Names the user said are one counterparty (1.2.2, D78): this brand key is grouped and ruled as `to`. */
 export const brandAliasSchema = z.looseObject({

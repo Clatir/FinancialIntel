@@ -3960,6 +3960,17 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   (`compileRule` null, na liście „Warunek nowszej wersji aplikacji – ta wersja tej reguły nie stosuje”); zepsuta lista
   warunków – reguła bez warunków, nieaktywna, pozostałe reguły czytane. Kwoty warunku (`conditions.min`, `.max`) są
   kwotami historii i konfliktów (`AMOUNT_FIELDS`), pola mają polskie nazwy (`Warunki`, `Łączenie warunków`).
+  Przegląd R1 (pkt 6, 9): warunki i sposób łączenia, których ta wersja nie umie przeczytać (więcej niż 10 warunków,
+  wartość nowszej wersji, zepsute), zostają w `fi.json` bez zmian – proces główny parsuje plik przed każdym zapisem, więc
+  `.catch(undefined)` je kasował. Pola `conditions` i `combine` mają typ `unknown` (unia schematu z dowolną wartością)
+  i są czytane tylko przez `conditionsOf` / `combineOf` (null – „nieznane”: reguła nie działa); schemat warunku bez
+  `.catch` – nieczytelna lista w całości zostaje surowa, nigdy „do połowy”. Reguły z nieczytelnymi warunkami nie da się
+  zmienić w edytorze (zapisałby je od nowa) – lista mówi dlaczego, można ją usunąć. Tak samo mapowanie CSV konta
+  (`accountSchema.csvMapping`, T460): nieczytelne zostaje w pliku surowe, czytane tylko przez `readCsvMapping` (null –
+  import pyta o kolumny); typ pola bez zmian, więc kod importu CSV musi czytać przez `readCsvMapping` / `safeParse`.
+  Każde szukanie reguły z operacji podaje jej kwotę i konto – także `ruleFor` („Zapamiętaj” w edytorze operacji) i oficer
+  (`officerHint`; 0 zł – kwota niewpisana, warunek kwoty nie jest spełniony); pilnuje tego test w kodzie
+  (`rules-r1-review`: każde wywołanie `findRule` ma pięć argumentów, poza `matchRule` – sam klucz).
 - **T468** Edytor reguły z warunkami (1.16.0, R1 – AP-45): Ustawienia → Import z banku → „Reguły importu” → „+ Nowa
   reguła z warunkami” (nad listą) i „zmień” przy regule z warunkami (`ConditionsEditor`): nazwa (pusta – z pierwszego
   warunku z tekstem, inaczej „Reguła z warunkami”), „Dla” (wydatki / wpływy / oba kierunki), „gdy spełnione” – wszystkie
@@ -3972,6 +3983,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zmieniona wraca, tylko gdy od tego czasu się nie zmieniła (T418). Dotychczasowe reguły edytuje dotychczasowy edytor
   (dopasowanie się nie zmienia – zamiana reguły marki na regułę z warunkami zmieniłaby, co łapie); na liście reguła
   z warunkami ma je opisane słowami („kontrahent zawiera „bolt” i kwota do 10,00 zł”), wyszukiwanie obejmuje ten opis.
+  Przegląd R1 (pkt 13, AP-15): w folderze tylko do odczytu (także gdy zniknie przy otwartym edytorze) wyłączone
+  przyciski mówią obok dlaczego – raz na listę reguł („+ Nowa reguła z warunkami”, „zmień”, „usuń”), przy „Zapisz”
+  edytora i raz na listę słów („też ręczne”); powód folderu (`status.readOnlyReason`) albo „trwa otwieranie innego
+  folderu” (`useLockedReason`).
 - **T469** Import, audyt i „Zastosuj do historii” z regułami z warunkami (1.16.0, R1 – AP-45; rozszerza T169, T325,
   T326, T418): import przekazuje regułom konto pliku i kwotę wiersza (także zwrot towaru szukający reguły zakupu); powód
   „Twoja reguła „…””. Reguła z warunkiem tytułu, który jest spełniony, decyduje „o tytule” (`decidedByTitle`, jak słowo
@@ -3993,6 +4008,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   decyzję – podpowiedzi nie ma (`hintChanges`). Gdy reguła podpowiada, oficer (F8) w szybkim wpisie nie wpisuje swojej
   kategorii sam, a jego przycisk znika – jedna podpowiedź naraz, ta z reguły użytkownika. Paragon podzielony ręcznie –
   bez podpowiedzi. Starsza wersja pole `manual` pomija (reguła działa tam w imporcie jak dotąd).
+  Przegląd R1 (pkt 12): decyzja operacji porównywana z podpowiedzią przez `hintedOf` – zakup domownika zapisany
+  z `memberId` null to zakup pierwszego domownika („Dom”), jak reguła z `memberId` null; ta sama decyzja nie jest zmianą
+  (podpowiedź się nie pokazuje i nie zasłania oficera).
 - **T471** Test „przed i po” dla dotychczasowych reguł (1.16.0, R1 – AP-45): `tests/fixtures/rules/ap45-before.json` –
   wynik importu obu fixture'ów mBanku z regułami każdego dotychczasowego rodzaju (marka, marka do kwoty, „zawiera”,
   słowo, słowo z kontrahentem, oba kierunki, zwrot towaru, domownik, pożyczka z Radaru, XTB, kategoria zarchiwizowana,
@@ -4035,6 +4053,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   przez domowników, tylko pliki o kanonicznej nazwie (kopie konfliktów i pliki tymczasowe pominięte); test na folderze
   zapisanym schematami aplikacji (`seedFolder`) z kopią konfliktu, plikiem tymczasowym i historią – sumy, wiersz
   poleceń i folder bez zmian po odczycie.
+  Przegląd R1 (pkt 8): skrypt liczy części jak silnik (`partsOf`) – część kwoty, której linie paragonu nie pokrywają
+  (`amount` minus suma linii), idzie pod `categoryId` operacji z jej finansowaniem; opis pola mówi to samo zamiast
+  „linie sumują się do `amount`”. Test porównuje sumy skryptu z częściami silnika na tych samych rekordach.
 - **T476** Link do opisu formatu (1.16.0, R1 – AP-47): Ustawienia → Folder i kopie, panel „Bieżący folder danych” –
   zdanie o zasadzie „tylko do odczytu, nie zapisuj, gdy aplikacja działa” i „Opis formatu folderu i przykładowy skrypt ›”,
   otwiera w przeglądarce `FOLDER_FORMAT_PAGE` (plik w publicznym repozytorium – D61; `shared/update.ts`). Opisu nie ma

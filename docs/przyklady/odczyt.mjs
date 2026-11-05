@@ -7,7 +7,7 @@
 //   node odczyt.mjs "C:\Users\Ja\OneDrive\FinancialIntel" 2026-11
 //
 // Miesiąc RRRR-MM jest opcjonalny (domyślnie bieżący). Co liczy: operacje rodzaju „wydatek” (`kind` = `expense`), każdą
-// linię paragonu dzielonego osobno; zwrot towaru (dodatnia kwota wydatku) zmniejsza sumę swojej kategorii. Pomija linie
+// linię paragonu dzielonego osobno (część kwoty bez linii – pod kategorią operacji); zwrot towaru (dodatnia kwota wydatku) zmniejsza sumę swojej kategorii. Pomija linie
 // finansowane przez domowników (`refundable` – to nie mój koszt), kopie konfliktów OneDrive i pliki tymczasowe. To prosty
 // przykład: nie liczy warstw (osłony, energia) – te liczy tylko aplikacja.
 
@@ -52,8 +52,12 @@ export async function sumMonth(folder, month) {
     if (!m || m[1].slice(0, 7) !== month) continue
     const t = JSON.parse(await readFile(join(dir, name), 'utf8'))
     if ((t.kind ?? 'expense') !== 'expense') continue
-    // Paragon dzielony: liczą się linie (sumują się do kwoty operacji).
-    const lines = Array.isArray(t.splits) && t.splits.length ? t.splits : [t]
+    // Paragon dzielony: liczą się linie, a część kwoty, której linie nie pokrywają, idzie pod kategorię operacji (z jej
+    // finansowaniem) – tak liczy aplikacja.
+    const splits = Array.isArray(t.splits) ? t.splits : []
+    const lines = splits.length ? [...splits] : [t]
+    const rest = splits.length ? t.amount - splits.reduce((a, s) => a + s.amount, 0) : 0
+    if (rest !== 0) lines.push({ amount: rest, categoryId: t.categoryId, refundable: t.refundable })
     for (const line of lines) {
       if (line.refundable) continue
       // Wydatek to kwota ujemna – koszt jest dodatni.

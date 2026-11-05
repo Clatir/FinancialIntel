@@ -8,7 +8,7 @@ import { analyzeImport, csvAccountsFor, type PlanSource } from '@shared/import/a
 import { completeMapping, decodeAs, guessCsv, mappingFits, NO_COLUMNS, parseCsvAmount, parseCsvDate, parseMappedCsv, previewMapped, type CsvDraft } from '@shared/import/csv'
 import { keyKindOf, rowKeys, type MbankFile } from '@shared/import/mbank'
 import { buildImport, formatOfBanks, planImport, type ImportChoices } from '@shared/import/reconcile'
-import { MBANK_ACCOUNT_ID, accountSchema, csvMappingSchema, settingsFileSchema, transactionSchema, type Account, type CsvMapping, type Transaction } from '@shared/schema'
+import { MBANK_ACCOUNT_ID, accountSchema, csvMappingSchema, readCsvMapping, settingsFileSchema, transactionSchema, type Account, type CsvMapping, type Transaction } from '@shared/schema'
 
 const FIXTURE = join(__dirname, '..', 'fixtures', 'csv', 'inny_bank.csv')
 const MBANK = join(__dirname, '..', 'fixtures', 'mbank', 'lista_operacji.csv')
@@ -188,8 +188,10 @@ describe('AP-43 – fi.json addytywnie (bez podbijania SCHEMA_VERSION)', () => {
     const m = mapping()
     const account = { id: BANK_B, name: 'Bank B', kind: 'bank', importFormat: 'csv', csvMapping: m, archived: false }
     expect(accountSchema.parse(JSON.parse(JSON.stringify(account)))).toEqual(account)
-    // A mapping this version cannot read: the account stays, without it.
-    expect(accountSchema.parse({ ...account, csvMapping: { columns: { date: 'pierwsza' } } })).toEqual({ ...account, csvMapping: undefined })
+    // A mapping this version cannot read: the account stays, the mapping kept as written (przegląd R1 9) – read as none.
+    const unread = accountSchema.parse({ ...account, csvMapping: { columns: { date: 'pierwsza' } } })
+    expect(unread).toEqual({ ...account, csvMapping: { columns: { date: 'pierwsza' } } })
+    expect(readCsvMapping(unread)).toBeNull()
     // A newer version's separator, date format and a field of its own: kept as written.
     const newer = { ...m, separator: '#', dateFormat: 'RRRRMMDD', quoting: 'none', columns: { ...m.columns, fee: 11 } }
     expect(accountSchema.parse({ ...account, importFormat: 'pdf', csvMapping: newer })).toMatchObject({ importFormat: 'pdf', csvMapping: newer })

@@ -13,7 +13,7 @@ export const KIND_WORDS: Record<FileKind, { title: string; text: string }> = {
   },
   transactions: {
     title: 'Operacje',
-    text: 'Jedna operacja w pliku; folder roku i data w nazwie to data warszawska operacji. `amount` ze znakiem: wydatek < 0, wpływ > 0. Paragon dzielony (`splits`) ma linie z własnymi kategoriami – wtedy liczą się linie, nie `categoryId` operacji; linie sumują się do `amount`.'
+    text: 'Jedna operacja w pliku; folder roku i data w nazwie to data warszawska operacji. `amount` ze znakiem: wydatek < 0, wpływ > 0. Paragon dzielony (`splits`) ma linie z własnymi kategoriami – wtedy liczą się linie; część `amount`, której linie nie pokrywają (`amount` minus suma linii), liczy się pod `categoryId` operacji, z jej finansowaniem (`refundable`, `memberId`).'
   },
   containers: {
     title: 'Kontenery Ładowni',
@@ -86,7 +86,7 @@ export const FIELD_WORDS: Record<string, string> = {
   'fi:settings.accounts[].name': 'Nazwa konta.',
   'fi:settings.accounts[].kind': 'Rodzaj: `bank`, `wallet` (portfel z kartą), `cash` (gotówka), `other`.',
   'fi:settings.accounts[].importFormat': 'Format pliku z banku, który import czyta dla konta: `mbank` (CSV z mBanku) albo `csv` (CSV innego banku według `csvMapping`); `null` – bez importu.',
-  'fi:settings.accounts[].csvMapping': 'CSV innego banku (`importFormat` = `csv`): jak czytać plik – ustawione raz w kreatorze importu. Mapowanie, którego wersja aplikacji nie umie przeczytać, jest pomijane (konto zostaje).',
+  'fi:settings.accounts[].csvMapping': 'CSV innego banku (`importFormat` = `csv`): jak czytać plik – ustawione raz w kreatorze importu. Mapowanie, którego ta wersja aplikacji nie umie przeczytać (nowszej wersji), zostaje w pliku bez zmian – import pyta wtedy o kolumny jak przy nowym pliku.',
   'fi:settings.accounts[].csvMapping.separator': 'Separator kolumn: `;`, `,`, tabulator albo `|`.',
   'fi:settings.accounts[].csvMapping.encoding': 'Kodowanie pliku: `auto` (rozpoznane), `utf-8` albo `windows-1250`.',
   'fi:settings.accounts[].csvMapping.skipRows': 'Ile wierszy pominąć przed nagłówkiem (nazwa banku, dane konta).',
@@ -143,12 +143,12 @@ export const FIELD_WORDS: Record<string, string> = {
   'fi:settings.import.rules[].maxAmount': 'Reguły `amount`: operacja do tej kwoty (grosze, bez znaku).',
   'fi:settings.import.rules[].direction': 'Kierunek: `in` (wpływ), `out` (wydatek); `null` – oba.',
   'fi:settings.import.rules[].counterparty': 'Reguły słów: dodatkowo ten kontrahent.',
-  'fi:settings.import.rules[].conditions': 'Reguły z warunkami (`mode` = `conditions`, 1.16.0): najwyżej 10 warunków łączonych według `combine`. Starsza wersja aplikacji takiej reguły nie stosuje.',
+  'fi:settings.import.rules[].conditions': 'Reguły z warunkami (`mode` = `conditions`, 1.16.0): najwyżej 10 warunków łączonych według `combine`. Starsza wersja aplikacji takiej reguły nie stosuje; warunki, których wersja nie umie przeczytać (więcej niż 10, nowszej wersji), zostają w pliku bez zmian, a reguła nie działa.',
   'fi:settings.import.rules[].conditions[].field': 'Czego dotyczy warunek: `counterparty` (kontrahent zawiera), `title` (tytuł zawiera słowa), `amount` (kwota od–do), `account` (konto).',
   'fi:settings.import.rules[].conditions[].value': 'Warunki `counterparty` i `title`: szukany tekst; `account`: identyfikator konta.',
   'fi:settings.import.rules[].conditions[].min': 'Warunek `amount`: kwota bez znaku od (grosze); brak – bez dolnej granicy.',
   'fi:settings.import.rules[].conditions[].max': 'Warunek `amount`: kwota bez znaku do (grosze); brak – bez górnej granicy.',
-  'fi:settings.import.rules[].combine': 'Jak łączyć warunki: `all` – wszystkie (I), `any` – którykolwiek (LUB).',
+  'fi:settings.import.rules[].combine': 'Jak łączyć warunki: `all` – wszystkie (I), `any` – którykolwiek (LUB); brak – wszystkie. Inna wartość (nowszej wersji) zostaje w pliku, a reguła nie działa.',
   'fi:settings.import.rules[].manual': '`true` – reguła podpowiada też kategorię i to, kto płaci, przy wpisach ręcznych (szybki wpis, edytor operacji).',
   'fi:settings.import.rules[].label': 'Kontrahent, jak pisze go bank (na liście reguł).',
   'fi:settings.import.rules[].kind': 'Rodzaj operacji, który reguła daje (jak `kind` operacji).',
@@ -230,7 +230,7 @@ export const FIELD_WORDS: Record<string, string> = {
   'transactions:covers': 'Wpływ domownika: zakupy (identyfikatory operacji), które spłaca.',
   'transactions:coversOpening': 'Spłaca też dług domownika na start rozliczeń.',
   'transactions:coversOpeningMembers': 'Wpływ kilku domowników: czyje długi na start spłaca; brak – wszystkich.',
-  'transactions:splits': 'Paragon dzielony: linie z własnymi kategoriami albo moja część i część domownika.',
+  'transactions:splits': 'Paragon dzielony: linie z własnymi kategoriami albo moja część i część domownika; reszta kwoty bez linii liczy się pod `categoryId` operacji.',
   'transactions:splits[].id': 'Identyfikator linii.',
   'transactions:splits[].amount': 'Kwota linii ze znakiem jak `amount`.',
   'transactions:splits[].categoryId': 'Kategoria linii.',

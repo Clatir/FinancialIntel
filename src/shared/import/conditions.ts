@@ -10,7 +10,7 @@
  */
 import { keywordMatcher, normalizeKeyword } from './brands'
 import { counterpartyKey } from './names'
-import { MAX_RULE_CONDITIONS, type ImportRule, type RuleCondition } from '../schema/budget'
+import { combineOf, conditionsOf, MAX_RULE_CONDITIONS, type ImportRule, type RuleCondition } from '../schema/budget'
 
 /** What a rule's condition is tried on – a row of the bank, an operation, an entry typed by hand. */
 export interface RuleSubject {
@@ -75,10 +75,12 @@ function testOf(c: RuleCondition): { test: Test; title: boolean } | null {
  */
 export function compileRule(rule: ImportRule): CompiledRule | null {
   if (rule.mode !== 'conditions') return null
-  const list = rule.conditions ?? []
+  // Only what this version reads (przegląd R1 9): conditions or a way of joining it cannot read are kept in the file – the
+  // rule is not applied.
+  const list = conditionsOf(rule) ?? []
   if (!list.length || list.length > MAX_RULE_CONDITIONS) return null
-  const combine = rule.combine ?? 'all'
-  if (combine !== 'all' && combine !== 'any') return null
+  const combine = combineOf(rule)
+  if (!combine) return null
   const tests: Test[] = []
   const titleTests: Test[] = []
   for (const c of list) {

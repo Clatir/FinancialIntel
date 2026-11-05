@@ -60,7 +60,9 @@ paths:
   pole reguły (zawsze I). Każde wywołanie `findRule` z wiersza / operacji podaje kwotę i konto – bez nich warunek kwoty
   i konta nie jest spełniony. „O tytule” – `decidedByTitle`, nigdy `mode === 'keyword'` wprost. **Pułapka:** zmiana
   dopasowania reguł jednego warunku – `rules-ap45-golden` (wynik sprzed 1.16.0) musi przejść bez zapisu od nowa.
-  Wpisy ręczne: tylko reguły `manual`, podpowiedź do kliknięcia (`manualRuleHint`, `hintChanges`).
+  Wpisy ręczne: tylko reguły `manual`, podpowiedź do kliknięcia (`manualRuleHint`, `hintChanges` z `hintedOf`).
+  **Pułapka (przegląd R1 9):** `rule.conditions`, `rule.combine` i `account.csvMapping` mogą być surowe (nowsza wersja)
+  – czytaj tylko przez `conditionsOf`, `combineOf`, `readCsvMapping`; nigdy `.catch(undefined)` na polu nowszej wersji.
 - Decyzja zbiorcza nie zmienia pożyczki, PIT-38, XTB ani pieniędzy domownika decyzją innego rodzaju (`bulkKeeps`, T326);
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
 - „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X
