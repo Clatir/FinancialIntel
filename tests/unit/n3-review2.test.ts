@@ -154,16 +154,17 @@ describe('2: płatność wpisana z wyprzedzeniem płaci termin dopiero w swoim d
     expect(items.map((i) => i.date)).toEqual(['2026-12-10'])
   })
 
-  it('druga płatność okna wpisana z wyprzedzeniem: październik zamknie przesunięta płatność 10.11 – nie jest zaplanowany', () => {
+  it('druga płatność okna wpisana z wyprzedzeniem: zaległy październik zamknie dopiero ona (zaplanowany na jej dzień, T495)', () => {
     const rent = container({ name: 'Czynsz', amount: zl(1200), cycleMonths: 1, dueMonth: '2026-09', dueDay: 10 })
     const second = pay(rent, '2026-11-25')
     const paid = [pay(rent, '2026-09-10'), pay(rent, '2026-11-10'), second]
-    // Before: on the 14th October already paid (the payment of 10.11 moved to it by the one of 25.11). Przegląd 3 N3: the
-    // payment of 25.11 is November's – October holds none written ahead, so it is not planned (no other payment's date).
+    // Before: on the 14th October already paid (the payment of 10.11 moved to it by the one of 25.11). T495: October is
+    // covered by the forward payment of 25.11 (which shifts 10.11 to it on its day), so it is planned on 25.11.
     expect(shown(cargoOf([rent], paid, '2026-11-14', START))).toEqual([
-      ['2026-10-10', 'overdue', true, null],
+      ['2026-10-10', 'overdue', true, '2026-11-25'],
       ['2026-11-10', 'paid', false, null]
     ])
+    expect(cargoOf([rent], paid, '2026-11-14', START)[0]!.planned).toEqual({ id: second.id, date: '2026-11-25', amount: zl(1200) })
     expect(shown(cargoOf([rent], paid, '2026-11-25', START))).toEqual([['2026-11-10', 'paid', false, null]])
   })
 

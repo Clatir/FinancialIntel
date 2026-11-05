@@ -301,9 +301,11 @@ export function courseInputOf(
   // operation): its rest, counted by `restNeeds`, pays it first – the buoys of one envelope share it.
   const cats = categoryIndex(r.settings.categories)
   const planned = new Map(fleet.envelopes.filter((e) => e.kind === 'planned').map((e) => [e.categoryId, Math.max(0, e.left)]))
+  // A yearly buoy is in the 12-month average of the history's costs already (T276, T497): never counted twice.
+  const fullYearAvg = fleet.costs.source === 'history' && fleet.costs.months >= 12
   for (const d of openDays(scheduledWindow(r.scheduled, r.transactions, fleet.today, COURSE_DAYS))) {
     const amount = d.scheduled.amount
-    if (amount == null) continue
+    if (amount == null || (fullYearAvg && d.scheduled.yearly)) continue
     const month = d.date < fleet.today ? fleet.month : monthOf(d.date)
     const main = month === fleet.month && amount < 0 ? cats.mainOf(d.scheduled.categoryId)?.id : undefined
     const rest = main ? (planned.get(main) ?? 0) : 0
@@ -476,7 +478,14 @@ export function course(input: CourseInput, kind: CourseKind): Course {
     shields += short
     const min = salary > 0 ? Math.round(Math.min(input.minShieldSalaries, input.layers.shieldSalaries) * salary) : null
     const range = rangeMonths(shields, hull, costs, debtAt(month))
-    for (const g of goals) if (goalEta[g.id] == null && g.target > 0 && g.amount >= g.target) goalEta[g.id] = month
+    for (const g of goals) {
+      if (goalEta[g.id] == null && g.target > 0 && g.amount >= g.target) goalEta[g.id] = month
+      // A goal with a deadline is spent on its purchase once achieved at or after its deadline (T498).
+      if (g.deadline != null && month >= g.deadline && g.target > 0 && g.amount >= g.target) {
+        g.amount = 0
+        g.target = 0
+      }
+    }
     if (!shieldsFull && targets.shields != null && shields >= targets.shields) shieldsFull = month
     if (!hullFull && hullCountsFull(hull, targets.hull)) hullFull = month
     months.push({

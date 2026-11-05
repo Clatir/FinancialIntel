@@ -499,6 +499,7 @@ export class PhoneHost {
       trayPrefs: call('trayPrefs', () => this.tray()),
       setTrayPrefs: call('setTrayPrefs', () => this.tray()),
       rescan: call('rescan', () => undefined),
+      unlockReadOnlyFiles: call('unlockReadOnlyFiles', () => 0),
       exportZip: pcOnly('exportZip'),
       // A list's export (T311): the file given to iOS's sharing. Nothing saved where the user chose a place (the computer's
       // „Zapisano …: <path>”), so no path – the share sheet is the answer.

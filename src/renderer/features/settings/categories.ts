@@ -4,14 +4,32 @@
  */
 import { categoryUses, type CategoryUse, type CategoryUseKind } from '@shared/calc/categoryUse'
 import { plural } from '@shared/format'
+import { newId } from '@shared/ids'
 import type { Category } from '@shared/schema'
 import { canWrite, listOf, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { dropEnvelope, restoreEnvelope } from '../month/actions'
 import { useImport } from '../import/state'
 
+const undoChanged = () => toast('Nie cofnięto – wpis został w międzyczasie zmieniony.', 'info', 6000)
+
 export function patchCategory(id: string, p: Partial<Category>): void {
   updateSettings((f) => ({ ...f, settings: { ...f.settings, categories: f.settings.categories.map((c) => (c.id === id ? { ...c, ...p } : c)) } }))
+}
+
+export function addCategory(parentId: string | null, name: string): string | null {
+  if (!canWrite()) return null
+  const c: Category = { id: newId(), name, parentId, envelope: parentId ? null : 'planned', system: null, archived: false }
+  const ok = updateSettings((f) => {
+    const list = f.settings.categories
+    const at = parentId ? Math.max(list.findIndex((x) => x.id === parentId), ...list.map((x, i) => (x.parentId === parentId ? i : -1))) + 1 : list.length
+    return { ...f, settings: { ...f.settings, categories: [...list.slice(0, at), c, ...list.slice(at)] } }
+  })
+  return ok ? c.id : null
+}
+
+export function addSubcategory(parentId: string, name: string): string | null {
+  return addCategory(parentId, name)
 }
 
 /**
@@ -26,6 +44,8 @@ export function archiveMain(c: Category): void {
     toast(`Zarchiwizowano „${c.name}” – jej koperta zniknęła z planu tego miesiąca i kolejnych.`, 'info', 8000, {
       label: 'Cofnij',
       run: () => {
+        const cur = useData.getState().fi?.settings.categories.find((x) => x.id === c.id)
+        if (!cur || cur.name !== c.name || cur.parentId !== c.parentId || !cur.archived) return undoChanged()
         patchCategory(c.id, { archived: false })
         restoreEnvelope(c.id, taken)
       }
@@ -88,13 +108,17 @@ export function deleteCategory(id: string): boolean {
   const subs = gone.length - 1
   toast(`Usunięto: ${what.toLowerCase()} „${c.name}”${subs ? ` z ${subs} ${plural(subs, 'podkategorią', 'podkategoriami', 'podkategoriami')}` : ''}.`, 'success', 8000, {
     label: 'Cofnij',
-    run: () =>
+    run: () => {
+      const curList = useData.getState().fi?.settings.categories ?? []
+      const conflict = gone.some((g) => curList.some((x) => x.id === g.category.id || (x.parentId === g.category.parentId && x.name.toLowerCase() === g.category.name.toLowerCase())))
+      if (conflict) return undoChanged()
       updateSettings((f) => {
         const list = [...f.settings.categories]
         // Added back meanwhile (another computer – the same ids): kept as it is.
         for (const g of gone) if (!list.some((x) => x.id === g.category.id)) list.splice(Math.min(g.at, list.length), 0, g.category)
         return { ...f, settings: { ...f.settings, categories: list } }
       })
+    }
   })
   return true
 }

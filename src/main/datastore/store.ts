@@ -52,6 +52,8 @@ interface FileState {
   text: string | null
   /** The file could not be read (OneDrive still bringing it, B42): read again next time, never kept as its content. */
   readError?: boolean
+  /** The file on disk has the OS read-only attribute (`(mode & 0o200) === 0`, T500). */
+  osReadOnly?: boolean
 }
 
 export class ReadOnlyError extends Error {
@@ -144,7 +146,8 @@ export class RemovedOutsideError extends Error {
   }
 }
 
-type FileStat = { mtimeMs: number; size: number }
+type FileStat = { mtimeMs: number; size: number; mode?: number }
+const isOsReadOnly = (st: { mode?: number }): boolean => st.mode != null && (st.mode & 0o200) === 0
 
 /** The versions of a conflict's two files the window showed (their `mtimeMs`). */
 export interface ConflictVersions {
@@ -234,6 +237,8 @@ class FileMap extends Map<string, FileState> {
   readonly dirs = new Map<string, Set<string>>()
   /** Records read in an older format and not rewritten yet. */
   readonly migratedPaths = new Set<string>()
+  /** Files whose OS read-only attribute is set (`(mode & 0o200) === 0`, T500). */
+  readonly osReadOnlyPaths = new Set<string>()
   /** Copies by the path of their original (a change of an original changes its conflict). */
   private readonly canonicals = new Map<string, number>()
   /** Records (`kind:id`) changed since the views were built. */
@@ -314,6 +319,11 @@ class FileMap extends Map<string, FileState> {
       this.metaDirty = true
     }
     if (this.canonicals.has(rel)) this.metaDirty = true
+    if (s.osReadOnly) {
+      if (sign > 0) this.osReadOnlyPaths.add(rel)
+      else this.osReadOnlyPaths.delete(rel)
+      this.metaDirty = true
+    }
   }
 }
 
@@ -340,7 +350,7 @@ function stamp(iso: string): string {
 }
 
 /** A file's stat and content through one open (W24); null = not a file. */
-async function readWithStat(abs: string): Promise<{ st: { mtimeMs: number; size: number }; buf: Buffer } | null> {
+async function readWithStat(abs: string): Promise<{ st: { mtimeMs: number; size: number; mode?: number }; buf: Buffer } | null> {
   const fh = await withRetry(() => fs.open(abs, 'r'))
   try {
     const st = await fh.stat()
@@ -603,6 +613,7 @@ export class DataStore {
       available: this.available,
       readOnly: !!this.folderReadOnlyReason || !!this.writeBlocked || !this.available,
       readOnlyReason: !this.available ? FOLDER_UNAVAILABLE_MESSAGE : (this.folderReadOnlyReason ?? this.writeBlocked),
+      readOnlyFiles: this.files.osReadOnlyPaths.size,
       folderSchemaVersion: this.folderSchemaVersion,
       appSchemaVersion: SCHEMA_VERSION,
       otherMachines: this.otherMachines,
@@ -765,7 +776,7 @@ export class DataStore {
   private async loadFile(rel: string): Promise<FileState | null> {
     const abs = join(this.root, ...rel.split('/'))
     const prev = this.files.get(rel)
-    let st: { mtimeMs: number; size: number }
+    let st: { mtimeMs: number; size: number; mode?: number }
     let buf: Buffer
     if (prev && !prev.readError) {
       // Known: read again only when its stat says it changed.
@@ -776,13 +787,14 @@ export class DataStore {
         return null
       }
       if (!now.isFile()) return null
-      if (prev.mtimeMs === now.mtimeMs && prev.size === now.size) return prev
+      const ro = isOsReadOnly(now)
+      if (prev.mtimeMs === now.mtimeMs && prev.size === now.size) return Boolean(prev.osReadOnly) === ro ? prev : { ...prev, osReadOnly: ro }
       st = now
       try {
         buf = await withRetry(() => fs.readFile(abs))
       } catch (e) {
         // A record read before stays as it was (read again next time – its stamps differ); else a problem read again later.
-        if (prev.status === 'record') return prev
+        if (prev.status === 'record') return Boolean(prev.osReadOnly) === ro ? prev : { ...prev, osReadOnly: ro }
         return this.unreadableState(rel, st, e)
       }
     } else {
@@ -798,7 +810,8 @@ export class DataStore {
       }
     }
     const hash = sha1(buf)
-    if (prev && prev.hash === hash) return { ...prev, mtimeMs: st.mtimeMs, size: st.size }
+    const osReadOnly = isOsReadOnly(st)
+    if (prev && prev.hash === hash) return { ...prev, mtimeMs: st.mtimeMs, size: st.size, osReadOnly }
     const text = buf.toString('utf8')
 
     const canonical = classifyCanonical(rel)
@@ -815,14 +828,14 @@ export class DataStore {
   }
 
   /** A file that could not be read (B42): a problem read again next time. */
-  private unreadableState(rel: string, st: { mtimeMs: number; size: number }, e: unknown): FileState {
+  private unreadableState(rel: string, st: { mtimeMs: number; size: number; mode?: number }, e: unknown): FileState {
     this.unreadable.add(rel)
     return { ...this.problemState(rel, st, '', 'corrupt', `Nie można odczytać pliku (OneDrive może go jeszcze pobierać): ${plainError((e as Error).message)}`), readError: true }
   }
 
   private problemState(
     rel: string,
-    st: { mtimeMs: number; size: number },
+    st: { mtimeMs: number; size: number; mode?: number },
     hash: string,
     kind: ProblemKind,
     message: string
@@ -836,6 +849,7 @@ export class DataStore {
       status: 'problem',
       record: null,
       readOnly: true,
+      osReadOnly: isOsReadOnly(st),
       error: message,
       problemKind: kind,
       conflict: null,
@@ -845,7 +859,7 @@ export class DataStore {
     }
   }
 
-  private parseState(rel: string, kind: FileKind, text: string, hash: string, st: { mtimeMs: number; size: number }): FileState {
+  private parseState(rel: string, kind: FileKind, text: string, hash: string, st: { mtimeMs: number; size: number; mode?: number }): FileState {
     const outcome = parseRecordText(kind, text, idFromPath(rel))
     const base = {
       relPath: rel,
@@ -853,6 +867,7 @@ export class DataStore {
       mtimeMs: st.mtimeMs,
       size: st.size,
       hash,
+      osReadOnly: isOsReadOnly(st),
       conflict: null,
       // The text only of what a migration rewrites (its original kept first – `backupOriginals`); else half the
       // store's memory for nothing (W26).
@@ -964,7 +979,15 @@ export class DataStore {
 
   private async writeState(rel: string, kind: FileKind, record: AnyRecord | SettingsFile, text: string): Promise<FileState> {
     const abs = this.abs(rel)
-    await writeFileAtomic(abs, text, this.root)
+    try {
+      await writeFileAtomic(abs, text, this.root)
+    } catch (e) {
+      if (atomicFailure(e)?.readOnlyTarget) {
+        const prev = this.files.get(rel)
+        if (prev && !prev.osReadOnly) this.files.set(rel, { ...prev, osReadOnly: true })
+      }
+      throw e
+    }
     const st = await fs.stat(abs)
     const state: FileState = {
       relPath: rel,
@@ -975,6 +998,7 @@ export class DataStore {
       status: 'record',
       record,
       readOnly: false,
+      osReadOnly: isOsReadOnly(st),
       error: null,
       problemKind: null,
       conflict: null,
@@ -1210,6 +1234,32 @@ export class DataStore {
       .then((listing) => this.mutex.run(() => this.refreshInQueue(undefined, listing ?? undefined)))
   }
 
+  rescan(paths?: string[]): Promise<ChangeSet | null> {
+    return this.refresh(paths)
+  }
+
+  /**
+   * Clear the OS read-only attribute (`chmod 0o666`) on `.json` files in the budget folder (T500).
+   */
+  unlockReadOnlyFiles(): Promise<{ unlocked: number; change: ChangeSet | null }> {
+    return this.mutex.run(async () => {
+      if (!(await this.rootPresent())) throw this.lost()
+      const rels = await this.listDataFiles()
+      let unlocked = 0
+      for (const rel of rels) {
+        const abs = join(this.root, ...rel.split('/'))
+        const st = await fs.stat(abs).catch(() => null)
+        if (!st || !st.isFile() || !isOsReadOnly(st)) continue
+        await fs.chmod(abs, (st.mode & 0o777) | 0o666)
+        unlocked++
+        const known = this.files.get(rel)
+        if (known) this.files.set(rel, { ...known, osReadOnly: false })
+      }
+      if (this.writeBlocked) this.writeBlocked = this.folderReadOnlyReason ? null : await this.writeProbe(PROBE_ATTEMPTS)
+      return { unlocked, change: this.diff(this.buildViews(), false) }
+    })
+  }
+
   /**
    * Files changed by the phone's sync (T306) in this store's turn: `write` changes them while no save of this store
    * runs (never between a save's check of a file and its write), then they are read as a change from outside.
@@ -1257,7 +1307,7 @@ export class DataStore {
     const rels = await this.listDataFiles()
     const stats = await mapLimit(rels, READ_CONCURRENCY, (rel) =>
       fs.stat(join(this.root, ...rel.split('/'))).then(
-        (st) => (st.isFile() ? { mtimeMs: st.mtimeMs, size: st.size } : null),
+        (st) => (st.isFile() ? { mtimeMs: st.mtimeMs, size: st.size, mode: st.mode } : null),
         () => null
       )
     )
@@ -1274,7 +1324,7 @@ export class DataStore {
     const check: string[] = []
     for (const [rel, st] of seen) {
       const known = this.files.get(rel)
-      if (!known || known.readError || !st || known.mtimeMs !== st.mtimeMs || known.size !== st.size) check.push(rel)
+      if (!known || known.readError || !st || known.mtimeMs !== st.mtimeMs || known.size !== st.size || Boolean(known.osReadOnly) !== isOsReadOnly(st)) check.push(rel)
     }
     for (const rel of this.files.keys()) if (!seen.has(rel)) check.push(rel)
     const states = await mapLimit(check, READ_CONCURRENCY, (rel) => this.loadFile(rel))
