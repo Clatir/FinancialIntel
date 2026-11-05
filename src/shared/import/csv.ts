@@ -7,7 +7,7 @@
 import { fold } from '../fold'
 import { CSV_DATE_FORMATS, CSV_SEPARATORS, type CsvMapping } from '../schema/budget'
 import { cleanBankName } from './names'
-import type { MbankFile, MbankRow } from './mbank'
+import { PROGRESS_EVERY, type MbankFile, type MbankRow, type Progress } from './mbank'
 import { decodeText, parseCsv, type Rows } from './text'
 
 /** The file's text in the mapping's encoding ('auto' – as mBank's: BOM, UTF-8, else Windows-1250). */
@@ -184,15 +184,16 @@ function readRow(r: readonly string[], m: CsvMapping, line: number): { row?: Mba
 
 /**
  * Read another bank's CSV by a mapping (already decoded – `decodeAs`). The header found among the first rows when the
- * bank added a line above it.
+ * bank added a line above it. `progress` – the rows read of the file's (AP-35).
  */
-export function parseMappedCsv(text: string, m: CsvMapping): MbankFile {
+export function parseMappedCsv(text: string, m: CsvMapping, progress?: Progress): MbankFile {
   const rows = parseCsv(text, separatorOf(m))
   const at = m.header ? headerRowOf(rows, m) : -1
   const start = m.header ? (at >= 0 ? at : m.skipRows) + 1 : m.skipRows
   const out: MbankRow[] = []
   const skipped: MbankFile['skipped'] = []
   for (let i = start; i < rows.length; i++) {
+    if (progress && (i - start) % PROGRESS_EVERY === 0) progress(i - start, rows.length - start)
     const r = rows[i]!
     if (r.every((cell) => !cell.trim())) continue
     const { row, skip } = readRow(r, m, i + 1)

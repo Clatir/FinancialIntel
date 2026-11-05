@@ -179,8 +179,17 @@ function sameName(before: string, part: string): boolean {
 
 const headerName = (cell: string) => cell.trim().replace(/^#/, '').trim().toLowerCase()
 
-/** Read an mBank CSV export (already decoded – `decodeText`). Throws MbankFormatError when it is not one. */
-export function parseMbank(text: string): MbankFile & { format: 'lista' | 'historia' } {
+/** How far reading a file is (AP-35: the import's progress bar): `done` of `total`. */
+export type Progress = (done: number, total: number) => void
+
+/** Every this many rows a long loop says how far it is (AP-35). */
+export const PROGRESS_EVERY = 500
+
+/**
+ * Read an mBank CSV export (already decoded – `decodeText`). Throws MbankFormatError when it is not one. `progress` –
+ * the rows read of the file's (AP-35).
+ */
+export function parseMbank(text: string, progress?: Progress): MbankFile & { format: 'lista' | 'historia' } {
   const rows = parseCsv(text, ';')
   const firstCell = (r: string[] | undefined) => (r?.[0] ?? '').trim()
   const after = (label: RegExp): string[] | null => {
@@ -212,6 +221,7 @@ export function parseMbank(text: string): MbankFile & { format: 'lista' | 'histo
   const skipped: MbankFile['skipped'] = []
   for (let i = headerAt + 1; i < rows.length; i++) {
     const r = rows[i]!
+    if (progress && (i - headerAt) % PROGRESS_EVERY === 0) progress(i - headerAt, rows.length - headerAt - 1)
     if (r.every((cell) => !cell.trim())) continue
     if (firstCell(r).startsWith('#')) break
     const line = i + 1

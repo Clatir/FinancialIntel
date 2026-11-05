@@ -141,6 +141,7 @@ function ColumnSelect({ role, label, hint, draft, names }: { role: CsvRole; labe
 
 function Setup({ setup }: { setup: CsvSetup }) {
   const locked = useFolderLocked()
+  const busy = useImport((s) => !!s.loading)
   const { draft, rows } = setup
   const width = Math.max(1, ...rows.slice(draft.skipRows, draft.skipRows + 20).map((r) => r.length))
   const head = draft.header ? (rows[draft.skipRows] ?? []) : []
@@ -208,7 +209,7 @@ function Setup({ setup }: { setup: CsvSetup }) {
       </div>
       <Result setup={setup} />
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn btn-accent" disabled={!!why} onClick={() => void saveCsvSetup()} data-testid="import-csv-save">
+        <button className="btn btn-accent" disabled={!!why || busy} onClick={() => void saveCsvSetup()} data-testid="import-csv-save">
           Zapisz kolumny i wczytaj plik
         </button>
         <button className="btn" onClick={cancelCsvSetup} data-testid="import-csv-cancel">

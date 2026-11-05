@@ -102,6 +102,10 @@ paths:
   plikiem przyszedł wiersz” to nie „kiedy import zrobił operację” (`createdAt`, T330).
 
 ## Wydajność
+- Otwarcie pliku w Web Workerze (AP-35, T463): `shared/import/analyze.ts` (`analyzeImport` – ta sama w oknie bez Workera),
+  klient `features/import/analysis.ts`. **Pułapka (T464):** operacje planu przez wiadomość tylko jako `txRef` i z powrotem
+  `planFromWire` z listy okna – widok strony przelewu (`sideOf`) poznaje się po obiekcie; nowe pole planu z operacją dopisz
+  do `planToWire` / `planFromWire`.
 - Pamięć `brandOf` / `counterpartyKey` do 50 tys.; plan od nowa tylko przy zmianie treści (`BY_CONTENT` + `deepEqual`);
   listy ekranu po 100 (`ShowMore`), `memo` tematów, marek i wierszy. Wiersz bez linii nie czyta rozkładu pliku przy
   każdej zmianie – tylko przycisk (`rowPartsOf` 'add'); audyt reguł zależy od tekstu `advanceRulesKept`, nie od całej

@@ -25,7 +25,7 @@ import { transactionSchema, type BankRow, type Share, type Split, type Transacti
 import { SCHEMA_VERSION } from '../schema/common'
 import { classifyRow, counterpartyKey, isAtmOperation, isCashExpenseRule, isFeeOperation, isOwnTransferRow, PER_OPERATION_KINDS, upsertRules, type ClassifyContext, type Classified, type DecisionSource, type Direction, type ImportDecision, type LearnedRule, type RuleTarget } from './classify'
 import { conflicting, coversOtherwise, dropsCovers, takeUserData } from './copies'
-import { accountNumberOf, keyKindOf, keyKindOfFile, keyOccurrence, keyOnAccount, otherBankAccount, rowIdentity, rowKeys, type MbankFile, type MbankRow } from './mbank'
+import { accountNumberOf, keyKindOf, keyKindOfFile, keyOccurrence, keyOnAccount, otherBankAccount, PROGRESS_EVERY, rowIdentity, rowKeys, type MbankFile, type MbankRow, type Progress } from './mbank'
 import { brandOf, isCityWord, isGenericWord, isKeywordWord, isKindWord } from './brands'
 
 /** Days around the bank's date a manual entry may be (spec: ±3). */
@@ -67,6 +67,26 @@ function legacySideOf(t: Transaction, accountId: string): Transaction {
 
 /** The operation a plan's row is about (`sideOf` gives back its operation). */
 export const realOf = (t: Transaction): Transaction => realOfView.get(t) ?? t
+
+/**
+ * A plan's operation as it crosses to another thread (AP-35, T464): the record's id and the view of it the plan took –
+ * its other side (`sideOf`) or a one-sided transfer's side (`legacySideOf`, on `account`). A view is known by its object
+ * only (`isSideView`): a copy made by the message would be the other account's side taken for the operation itself.
+ */
+export type TxRef = { id: string; view?: 'side' | 'legacy'; account?: string }
+
+export function txRef(t: Transaction): TxRef {
+  const real = realOfView.get(t)
+  if (!real) return { id: t.id }
+  return sideViews.get(real) === t ? { id: real.id, view: 'side' } : { id: real.id, view: 'legacy', account: t.accountId }
+}
+
+/** The plan's operation of a reference (`txRef`) among the budget's (`byId`): the same object a plan here would take; null – none. */
+export function txOfRef(ref: TxRef, byId: ReadonlyMap<string, Transaction>): Transaction | null {
+  const t = byId.get(ref.id)
+  if (!t) return null
+  return ref.view === 'side' ? sideOf(t) : ref.view === 'legacy' ? legacySideOf(t, ref.account ?? '') : t
+}
 
 /** Is a plan's operation the other side of a transfer in one operation (F10)? */
 export const isSideView = (t: Transaction): boolean => realOfView.has(t)
@@ -478,7 +498,9 @@ export function planImport(
   existing: readonly Transaction[],
   ctx: ClassifyContext,
   deletedKeys: ReadonlySet<string> = new Set(),
-  deletedRows: readonly DeletedRow[] = []
+  deletedRows: readonly DeletedRow[] = [],
+  /** The rows recognized of the file's (AP-35: the import's progress bar). */
+  progress?: Progress
 ): ImportPlan {
   const keys = keysOf(file.rows, accountId, file.format)
   const budget = budgetedOf(existing, accountId)
@@ -733,7 +755,10 @@ export function planImport(
   // The new rows – and the matched hand-typed ones (B36: imported apart, each is decided as the file's row is). The cash
   // is another account than the file's (AP-33): never a transfer onto itself.
   const classifyCtx = ctx.cash && ctx.cash.id === accountId ? { ...ctx, cash: null } : ctx
-  const classified = file.rows.map((row, i) => (plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, classifyCtx)))
+  const classified = file.rows.map((row, i) => {
+    if (progress && i % PROGRESS_EVERY === 0) progress(i, file.rows.length)
+    return plans[i] && plans[i]!.status !== 'merge' ? null : classifyRow(row, classifyCtx)
+  })
   shareMerged(classified, file.rows)
   const plannedOf = (i: number): Planned => {
     const { decision, hint, brand, direction, target } = classified[i]!

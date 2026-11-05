@@ -3906,3 +3906,32 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   nierozliczonych – bez propozycji usunięcia zniknionych (tylko lista operacji mBanku). Nie zmienia się: pliki innych
   banków nie są szukane w Pobranych (F14 – tylko mBank), przypomnienia o zaległym imporcie i misja liczą konta z importem
   mBanku.
+- **T463** Import w Web Workerze (1.16.0, R1 – AP-35, AF-30, IM.55): otwarcie pliku – dekodowanie, odczyt wierszy, wybór
+  konta, mapowanie konta i plan – w Workerze (`renderer/features/import/worker.ts`, klient `analysis.ts`); jedna czysta
+  funkcja `shared/import/analyze.ts` (`analyzeImport`) w Workerze i w oknie, dane budżetu jako `PlanSource` (zwykłe dane
+  – kopia strukturalna wiadomości, bez indeksów i funkcji). Pasek postępu: „Odczyt wierszy” 0–60 %, „Rozpoznawanie
+  operacji” 60–100 % (komunikat Workera najwyżej co 60 ms). Bez Workera – okno jak przed 1.16.0, po klatce na
+  „Wczytywanie…” (Node w testach, WebKit bez Workera, skrypt Workera nie wstał – `error`: od tej chwili okno; błąd
+  w Workerze – okno próbuje samo). Jedna analiza naraz: nowy plik, „Zamknij plik” i inny folder przerywają ją
+  (`terminate`); zmiany danych w trakcie – plan od nowa zaraz po niej (`replanIfChanged`); „Importuj” w trakcie
+  wczytywania innego pliku – odmowa z komunikatem. Ponowne plany otwartego pliku (inne konto, słowo kluczowe, scalenie
+  nazw, przed zapisem) zostają w oknie – są synchroniczne z decyzjami; plik jest już odczytany (większa część pracy).
+  Worker jako moduł ES (`worker.format: 'es'` – electron-vite i telefon; telefon nie importuje plików, build go ma).
+- **T464** Plan przez wiadomość Workera (1.16.0, R1 – AP-35): operacje planu jadą jako odnośniki (`txRef`: id i widok –
+  druga strona przelewu w jednej operacji `sideOf`, strona przelewu sprzed 1.7.0 `legacySideOf`) i wracają z listy
+  okna, z której plan powstał (`txOfRef`, `planFromWire`) – te same obiekty co w planie liczonym w oknie, wiersze planu
+  i pliku wspólne (jedna wiadomość). **Pułapka:** widok strony poznaje się po obiekcie (`isSideView`, `realOf`) – kopia
+  z wiadomości nie byłaby widokiem i zapis wziąłby stronę drugiego konta za samą operację. Test: plan z Workera równy
+  planowi okna na liście, historii i CSV z wpisami ręcznymi, przelewami obu rodzajów i nierozliczoną zniknioną; zapis
+  `buildImport` z obu – ten sam (`tests/unit/import-worker-ap35.test.ts`).
+- **T465** Wydajność importu – próg i pomiar (1.16.0, R1 – AP-35): test 20 000 wierszy przy 20 000 operacji w budżecie –
+  cała analiza poniżej 30 s, część okna przy Workerze (kopia prośby i kopia odpowiedzi liczone w całości) krótsza niż
+  analiza w oknie; tu (komputer deweloperski, sam test) analiza w oknie ok. 630 ms, okno przy Workerze ok. 280 ms
+  (w pełnym zestawie testów 890 / 450 ms). E2E (aplikacja zbudowana, 20 000 wierszy): okno bez Workera ok. 650 ms,
+  najdłużej nie odpowiada ok. 590 ms; z Workerem ok. 900 ms (pierwszy raz ok. 1,3 s – start Workera), najdłużej nie
+  odpowiada ok. 200 ms (odbiór planu i rysowanie), pasek postępu się przesuwa. Pomiar w maszynie (IM.55) – do zrobienia.
+- **T466** Ekran importu – teksty (1.16.0, R1 – AP-43, AP-35): panel „Plik z banku” (było „Plik z mBanku”) z jednym
+  zdaniem o pliku innego banku; plik opisany „CSV innego banku · N operacji”; przy wierszach znalezionych miarą B5
+  w pliku CSV – „z pliku w innym formacie”; okno wyboru pliku „Plik CSV z banku (z mBanku: lista operacji albo historia
+  rachunku)”; nagłówek ekranu „CSV z mBanku i innych banków”. Pasek postępu z `role="status"`, stan w `data-phase`,
+  `data-pct`; otwarty plik – `data-format`, `data-via` ('worker' / 'window').

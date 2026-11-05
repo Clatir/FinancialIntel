@@ -100,6 +100,26 @@ const FORMAT_TEXT = { lista: 'lista operacji', historia: 'historia rachunku', cs
 /** Where a row found by the B5 measure came from – the other format of the file than this plan's. */
 const otherFormatText = (format: keyof typeof FORMAT_TEXT): string => (format === 'historia' ? 'z listy operacji' : format === 'lista' ? 'z historii rachunku' : 'z pliku w innym formacie')
 
+/** How far the open file is read (AP-35): the phase and its share of the bar – reading the rows, recognizing them. */
+function LoadingBar() {
+  const loading = useImport((s) => s.loading)
+  if (!loading) return null
+  const share = loading.total > 0 ? Math.min(1, loading.done / loading.total) : 0
+  // Reading the rows is most of the work (T463): 0–60 %, recognizing them 60–100 %.
+  const pct = Math.round(loading.phase === 'plan' ? 60 + share * 40 : loading.phase === 'read' ? share * 60 : 0)
+  const what = loading.phase === 'plan' ? 'Rozpoznawanie operacji' : loading.phase === 'read' ? 'Odczyt wierszy' : 'Wczytywanie pliku'
+  return (
+    <div className="flex flex-col gap-1" role="status" data-testid="import-progress" data-phase={loading.phase ?? 'start'} data-pct={pct}>
+      <span className="text-[11.5px] text-muted">
+        {what} „{loading.name}”…{loading.phase ? <span className="num"> {pct} %</span> : null}
+      </span>
+      <div className="h-[4px] w-full bg-raised">
+        <div className="h-full bg-accent transition-[width] duration-150" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
 const count = (n: number, one: string, few: string, many: string) => `${n} ${n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many}`
 const operations = (n: number) => count(n, 'operacja', 'operacje', 'operacji')
 
@@ -126,8 +146,8 @@ function AccountWarning({ account, accountId }: { account: string | null; accoun
 }
 
 function FilePanel() {
-  const { fileName, file, error, errorName, accountId, busy } = useImport(
-    useShallow((s) => ({ fileName: s.fileName, file: s.file, error: s.error, errorName: s.errorName, accountId: s.accountId, busy: s.busy }))
+  const { fileName, file, error, errorName, accountId, busy, via } = useImport(
+    useShallow((s) => ({ fileName: s.fileName, file: s.file, error: s.error, errorName: s.errorName, accountId: s.accountId, busy: s.busy, via: s.via }))
   )
   const accounts = useAccounts()
   const [over, setOver] = useState(false)
@@ -167,6 +187,7 @@ function FilePanel() {
           zapamiętane przy koncie. Kolejne importy mogą się nakładać: operacje już wczytane są rozpoznawane i pomijane. Przed zapisem powstaje kopia zapasowa.
         </p>
         <NewBankFiles />
+        <LoadingBar />
         <CsvSetupPanel />
         {error && (
           <div className="border border-down/50 px-2 py-1.5 text-down" data-testid="import-error">
@@ -175,7 +196,7 @@ function FilePanel() {
           </div>
         )}
         {file && (
-          <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="import-file" data-format={file.format}>
+          <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="import-file" data-format={file.format} data-via={via ?? ''}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="num text-fg-strong">{fileName}</span>
               <span className="text-muted">

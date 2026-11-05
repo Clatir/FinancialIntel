@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { newId } from '@shared/ids'
 import type { MbankFile } from '@shared/import/mbank'
-import { analyzeImport, contextFor, ownNamesWith, type PlanSource } from '@shared/import/analyze'
+import { contextFor, ownNamesWith, type AnalyzePhase, type PlanSource } from '@shared/import/analyze'
 import { completeMapping, draftOf, guessCsv, previewRows, withHeaders, type CsvDraft, type CsvRole } from '@shared/import/csv'
 import type { Rows } from '@shared/import/text'
 import {
@@ -50,6 +50,7 @@ import { fleetInputNow, fleetNow } from '../../store/fleet'
 import { bulkKeeps, choiceFor, fits, linesKey, type Option } from './options'
 import { rememberInflows } from '../household/actions'
 import { checkedWithImport, importsMark, readDeletedBank } from './returned'
+import { AnalysisCancelled, analyzeFile, cancelAnalysis, type AnalyzedVia } from './analysis'
 
 export interface ImportDone {
   counts: ImportCounts
@@ -77,6 +78,14 @@ export interface CsvSetup {
   rows: Rows
 }
 
+/** A file being read (AP-35): its name and how far it is – the bar (`phase` null – not started, or in the window). */
+export interface ImportLoading {
+  name: string
+  phase: AnalyzePhase | null
+  done: number
+  total: number
+}
+
 interface ImportSession {
   fileName: string | null
   /** The open file's id in the main process (F14 – found in the downloads or chosen): moved to the Recycle Bin after the import. */
@@ -86,6 +95,10 @@ interface ImportSession {
   bytes: Uint8Array | null
   /** The mapping the open file was read by (AP-43); null – mBank's file. */
   mapping: CsvMapping | null
+  /** Where the open file was analyzed (AP-35): the Worker, or the window. */
+  via: AnalyzedVia | null
+  /** A file being read (AP-35, T463). */
+  loading: ImportLoading | null
   /** The wizard of another bank's CSV (AP-43). */
   csvSetup: CsvSetup | null
   error: string | null
@@ -130,6 +143,8 @@ export const useImport = create<ImportSession>(() => ({
   file: null,
   bytes: null,
   mapping: null,
+  via: null,
+  loading: null,
   csvSetup: null,
   error: null,
   errorName: null,
@@ -294,11 +309,11 @@ function hasDecisions(s: ImportSession): boolean {
 /** The open file and its decisions, as they are (N12: „Cofnij” brings them back). */
 type Snapshot = Pick<
   ImportSession,
-  'fileName' | 'file' | 'bytes' | 'mapping' | 'accountId' | 'deletedKeys' | 'deletedRows' | 'plan' | 'planInputs' | 'choices' | 'query' | 'selected' | 'accepted' | 'lastDecided' | 'noProposal'
+  'fileName' | 'file' | 'bytes' | 'mapping' | 'via' | 'accountId' | 'deletedKeys' | 'deletedRows' | 'plan' | 'planInputs' | 'choices' | 'query' | 'selected' | 'accepted' | 'lastDecided' | 'noProposal'
 >
 function snapshot(s: ImportSession): Snapshot {
-  const { fileName, file, bytes, mapping, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal } = s
-  return { fileName, file, bytes, mapping, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal }
+  const { fileName, file, bytes, mapping, via, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal } = s
+  return { fileName, file, bytes, mapping, via, accountId, deletedKeys, deletedRows, plan, planInputs, choices, query, selected, accepted, lastDecided, noProposal }
 }
 
 /** The session before an action back, re-planned against the data now (it may have changed meanwhile). */
@@ -307,7 +322,7 @@ function restore(snap: Snapshot): void {
   replanImport()
 }
 
-/** The load of a file running: a later one – another file, another folder – wins over it. */
+/** The load of a file running (AP-35): a later one – another file, „Zamknij plik”, another folder – wins over it. */
 let loadSeq = 0
 
 /** A file's error beside the open one (N12: a wrong file never closes the open one). */
@@ -332,18 +347,23 @@ function freeAccountName(base: string): string {
 }
 
 /**
- * Open a bank's file: mBank's, another bank's CSV whose account's mapping fits it (AP-43), or – of neither – the wizard of
- * its columns. `mapping` – read by it onto its account (the wizard's „Zapisz i wczytaj”).
+ * Open a bank's file (AP-35, T463: read and planned in the Worker, the bar shows how far): mBank's, another bank's CSV
+ * whose account's mapping fits it (AP-43), or – of neither – the wizard of its columns. `mapping` – read by it onto its
+ * account (the wizard's „Zapisz i wczytaj”).
  */
 export async function loadImportFile(name: string, bytes: Uint8Array, ref: string | null = null, opts: { mapping?: { accountId: string; mapping: CsvMapping } } = {}): Promise<void> {
   const mine = ++loadSeq
   const chosen = useImport.getState().accountId
+  useImport.setState({ loading: { name, phase: null, done: 0, total: 0 } })
   try {
     const { deletedKeys, deletedRows } = await deletedBankRows()
     const source = mine === loadSeq ? sourceNow() : null
     if (!source) return
     const inputs = planInputsNow()
-    const analysis = analyzeImport({ bytes, chosen, fallback: MBANK_ACCOUNT_ID, mapping: opts.mapping ?? null, source, deletedKeys, deletedRows })
+    const { analysis, via } = await analyzeFile({ bytes, chosen, fallback: MBANK_ACCOUNT_ID, mapping: opts.mapping ?? null, source, deletedKeys, deletedRows }, (phase, done, total) => {
+      if (mine === loadSeq) useImport.setState({ loading: { name, phase, done, total } })
+    })
+    if (mine !== loadSeq) return
     if (analysis.kind === 'error') return fileError(name, analysis.message)
     if (analysis.kind === 'csv') {
       // Another bank's CSV no account reads yet (AP-43): its columns asked – the open file stays as it is (N12).
@@ -365,6 +385,7 @@ export async function loadImportFile(name: string, bytes: Uint8Array, ref: strin
       file,
       bytes: file.format === 'csv' ? bytes : null,
       mapping,
+      via,
       csvSetup: null,
       error: null,
       errorName: null,
@@ -386,8 +407,10 @@ export async function loadImportFile(name: string, bytes: Uint8Array, ref: strin
     // What changed while the file was analyzed (a save here, a change from another computer – B38): planned again.
     replanIfChanged(planInputsNow())
   } catch (e) {
-    if (mine !== loadSeq) return
+    if (e instanceof AnalysisCancelled || mine !== loadSeq) return
     fileError(name, `Nie udało się odczytać pliku: ${errorMessage(e)}`)
+  } finally {
+    if (mine === loadSeq) useImport.setState({ loading: null })
   }
 }
 
@@ -658,14 +681,17 @@ export function closeImport(): void {
   // An import being written (B93): the file stays until it is done.
   if (before.busy) return
   const prev = before.file && hasDecisions(before) ? snapshot(before) : null
-  // A file being read goes too: nothing opens after „Zamknij plik”.
+  // A file being read goes too (AP-35): nothing opens after „Zamknij plik”.
   loadSeq++
+  cancelAnalysis()
   useImport.setState({
     fileName: null,
     fileRef: null,
     file: null,
     bytes: null,
     mapping: null,
+    via: null,
+    loading: null,
     csvSetup: null,
     error: null,
     errorName: null,
@@ -1235,6 +1261,8 @@ function writeBatch(
 export async function runImport(): Promise<void> {
   const st = useImport.getState()
   if (!st.file || st.busy) return
+  // Another file being read (AP-35): its plan would take the session's place under the import.
+  if (st.loading) return void toast(`Trwa wczytywanie pliku „${st.loading.name}” – poczekaj, aż się skończy.`, 'info', 5000)
   useImport.setState({ busy: true })
   try {
     const status = useData.getState().status
@@ -1374,13 +1402,16 @@ export async function runImport(): Promise<void> {
  */
 useData.subscribe((s, prev) => {
   if (!prev.status || !s.status || s.status.dataDir === prev.status.dataDir || useImport.getState().busy) return
-  // A file being read for the old folder: given up.
+  // A file being read for the old folder (AP-35): given up.
   loadSeq++
+  cancelAnalysis()
   useImport.setState({
     fileName: null,
     file: null,
     bytes: null,
     mapping: null,
+    via: null,
+    loading: null,
     csvSetup: null,
     error: null,
     errorName: null,

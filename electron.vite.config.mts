@@ -62,6 +62,8 @@ export default defineConfig({
     resolve: { alias },
     plugins: [react(), tailwindcss(), cspPlugin()],
     define: { __FI_CHANGELOG__: JSON.stringify(recentChangelog()) },
+    // The import's Web Worker (AP-35): an ES module of its own (`new Worker(new URL(…), { type: 'module' })`).
+    worker: { format: 'es' },
     build: { chunkSizeWarningLimit: 2000, minify: 'esbuild' }
   }
 })

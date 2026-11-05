@@ -6,7 +6,8 @@ import { MBANK_ACCOUNT_ID, type SettingsFile } from '@shared/schema'
 import { bankCsv } from '../e2e/bank-csv'
 import { listaCsv } from '../e2e/mbank-csv'
 
-// The renderer's stores talk to the main process through window.fi (preload); here it is a mock writing nothing.
+// The renderer's stores talk to the main process through window.fi (preload); here it is a mock writing nothing. No
+// Worker here (Node): the window analyzes – as in a WebKit without one (T463).
 const api = {
   saveRecord: vi.fn(async (_c: string, record: { id: string }) => ({ record, relPath: `${record.id}.json`, readOnly: false })),
   saveRecords: vi.fn(async (_c: string, records: Array<{ id: string }>) => records.map((record) => ({ id: record.id, entry: { record, relPath: `${record.id}.json`, readOnly: false } }))),
@@ -53,12 +54,13 @@ describe('AP-43 – ekran importu: kreator CSV innego banku', () => {
     expect(s().error).toBeNull()
     const setup = s().csvSetup!
     expect(setup).toMatchObject({ name: 'inny_bank.csv', ref: 'ref-1', accountId: '', newName: 'Drugi bank', draft: { skipRows: 4, header: true, separator: ';' } })
+    expect(s().loading).toBeNull()
 
     state.setCsvNewName('Bank B')
     expect(await state.saveCsvSetup()).toBe(true)
     const bankB = accounts().find((a) => a.name === 'Bank B')!
     expect(bankB).toMatchObject({ kind: 'bank', importFormat: 'csv', csvMapping: { skipRows: 4, columns: { date: 0, credit: 6, debit: 7 } } })
-    expect(s()).toMatchObject({ csvSetup: null, accountId: bankB.id, fileName: 'inny_bank.csv', fileRef: 'ref-1', file: { format: 'csv' }, plan: { format: 'csv', accountId: bankB.id } })
+    expect(s()).toMatchObject({ csvSetup: null, accountId: bankB.id, fileName: 'inny_bank.csv', fileRef: 'ref-1', via: 'window', file: { format: 'csv' }, plan: { format: 'csv', accountId: bankB.id } })
     expect(s().plan!.rows).toHaveLength(5)
     expect(s().bytes).toBe(CSV)
 
@@ -115,4 +117,19 @@ describe('AP-43 – ekran importu: kreator CSV innego banku', () => {
     expect(s()).toMatchObject({ errorName: 'obraz.png', error: expect.stringContaining('To nie jest plik CSV z banku'), file: { format: 'lista' }, csvSetup: null })
   })
 
+  it('dwa pliki naraz: wygrywa późniejszy; „Zamknij plik” w trakcie wczytywania – nic się nie otwiera (AP-35)', async () => {
+    open((st) => ({ ...st, accounts: [...st.accounts] }))
+    const day = new Date().toISOString().slice(0, 10)
+    const lista = (name: string) => new TextEncoder().encode(listaCsv([{ date: day, amount: 10, name }], { from: day, to: day }))
+    const first = state.loadImportFile('a.csv', lista('SKLEP A'))
+    const second = state.loadImportFile('b.csv', lista('SKLEP B'))
+    await Promise.all([first, second])
+    expect(s().fileName).toBe('b.csv')
+    expect(s().loading).toBeNull()
+    const third = state.loadImportFile('c.csv', lista('SKLEP C'))
+    expect(s().loading).toMatchObject({ name: 'c.csv' })
+    state.closeImport()
+    await third
+    expect(s()).toMatchObject({ file: null, fileName: null, loading: null })
+  })
 })
