@@ -183,6 +183,9 @@ test('Telemetria z banku: historia rachunku zgodna – saldo potwierdzone samo; 
     await page.getByTestId('operation-counterparty').press('Enter')
     await page.getByTestId('operation-date').fill('04.09.2026')
     await page.getByTestId('operation-date').press('Enter')
+    if (await page.getByTestId('operation-guard-confirm').isVisible()) {
+      await page.getByTestId('operation-guard-confirm').click()
+    }
     await expect.poll(async () => (await records(dataDir, 'transactions')).length).toBe(4)
     await page.keyboard.press('Control+3')
     await expect(page.getByTestId('bank-telemetry-diff')).toContainText('od 04.09.2026')

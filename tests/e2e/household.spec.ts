@@ -109,7 +109,7 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     await page.getByTestId('operation-counterparty').press('Enter')
     await page.getByTestId('operation-payer').selectOption({ label: 'Tata' })
     await expect(page.getByTestId('operation-member-flow')).toHaveText('spłaca 300,00 zł · przychód 200,00 zł')
-    await page.getByTestId('operation-member-income').getByRole('radio', { name: 'zaliczka' }).click()
+    await page.getByTestId('operation-member-income').getByRole('radio', { name: 'zaliczka', exact: true }).click()
     await expect(page.getByTestId('operation-member-flow')).toHaveText('spłaca 300,00 zł · zaliczka 200,00 zł')
     await expect(page.getByTestId('operation-member-balance')).toHaveText('Tata teraz: zaliczka 200,00 zł')
     await page.screenshot({ path: join('test-results', 'screens', '15-domownik-wplata.png') })
