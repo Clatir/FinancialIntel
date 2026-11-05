@@ -185,3 +185,44 @@ describe('AP-45: „Zastosuj do historii” reguły z warunkami (T469)', () => {
     expect(tx('01K6TX00000000000000000001').categoryId).toBe(FUN)
   })
 })
+
+describe('przegląd R1 6: reguła operacji w edytorze („Zapamiętaj”) – z kwotą i kontem operacji', () => {
+  it('reguła [konto i kontrahent] operacji z banku na tym koncie jest jej regułą – „Zapamiętaj” nie dokłada reguły marki (dawniej: nie znaleziona)', () => {
+    const acc = '01KDEFACC00000000000000001'
+    const t = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: '01K6TX00000000000000000009', createdAt: AT, updatedAt: AT, date: '2026-10-20', accountId: acc, amount: -1500, counterparty: 'ORLEN', categoryId: COFFEE, bank: { key: 'k9', importedAt: AT, source: 'lista', counterparty: 'ORLEN STACJA 12', operation: 'ZAKUP PRZY UŻYCIU KARTY', description: 'ORLEN STACJA 12' } })
+    open({ transactions: [t] })
+    rules.saveConditionsRule(null, draft({ conditions: [{ field: 'counterparty', value: 'orlen' }, { field: 'account', value: acc }] }))
+    const r = ruleList()[0]!
+    expect(rules.ruleFor(t)?.id).toBe(r.id)
+    expect(rules.ruleFor({ ...t, accountId: '01KDEFACC00000000000000002' })).toBeNull()
+  })
+})
+
+describe('przegląd R1 2.3: reguła z warunkami z czymkolwiek nieczytelnym – edycja odmawia ze słowem, reguła bez zmian', () => {
+  const locked = (over: Record<string, unknown>) =>
+    importRuleSchema.parse({ id: '01K6RXXE000000000000000020', match: 'Bolt', mode: 'conditions', conditions: [{ field: 'counterparty', value: 'bolt' }], combine: 'all', direction: 'out', label: 'Bolt', kind: 'expense', categoryId: COFFEE, learned: false, hits: 0, updatedAt: AT, ...over })
+
+  it('„Zapisz” edytora: `combine` nowszej wersji – odmowa, wartość zostaje (dawniej: zamieniona na „all”)', () => {
+    open({ rules: [locked({ combine: 'none' })] })
+    expect(rules.saveConditionsRule(locked({}).id, draft({ conditions: [{ field: 'counterparty', value: 'bolt' }] }))).toBe(rules.LOCKED_RULE_TEXT)
+    expect(ruleList()[0]).toEqual(locked({ combine: 'none' }))
+  })
+
+  it('zmiana decyzji, „Zmień na spłatę”, „też ręczne”: reguła z kierunkiem / rodzajem nowszej wersji zostaje, toast mówi dlaczego', () => {
+    const r = locked({ direction: 'both', kind: 'income', categoryId: null, household: true, inflowKind: 'advance' })
+    open({ rules: [r] })
+    rules.editRule(r.id, { direction: 'out', choice: rules.choiceOfRule(r) })
+    expect(ruleList()[0]).toEqual(r)
+    expect(lastToast().text).toBe(rules.LOCKED_RULE_TEXT)
+    rules.repayingRule(r)
+    rules.setRuleManual(r.id, true)
+    expect(ruleList()[0]).toEqual(r)
+    const k = locked({ kind: 'przyszly' })
+    open({ rules: [k] })
+    rules.editRule(k.id, { direction: 'out', choice: rules.choiceOfRule(k) })
+    expect(ruleList()[0]).toEqual(k)
+    // Deleting it – yes.
+    rules.removeRule(k.id)
+    expect(ruleList()).toEqual([])
+  })
+})

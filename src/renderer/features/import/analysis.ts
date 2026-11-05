@@ -8,14 +8,18 @@
 import {
   analysisFromWire,
   analyzeImport,
+  operationsDelta,
   planFromWire,
   type Analysis,
   type AnalyzeInput,
   type AnalyzeMessage,
   type AnalyzePhase,
   type AnalyzeRequest,
+  type PlanInput,
   type ReplanInput
 } from '@shared/import/analyze'
+import type { MbankFile } from '@shared/import/mbank'
+import type { Transaction } from '@shared/schema'
 import type { ImportPlan } from '@shared/import/reconcile'
 
 /** Where a file was analyzed (the E2E reads it from `data-via`). */
@@ -42,6 +46,11 @@ let seq = 0
 const pending = new Map<number, Pending>()
 /** The window's own analysis running (no Worker): given up by a newer one. */
 let inWindow: { cancelled: boolean } | null = null
+/**
+ * What the Worker keeps of the open file (drugi przegląd R1, 10): the file of its analysis (`id` – that request's), and
+ * the operations sent to it last (`sent`, by object) – a plan again sends only what changed. null – nothing kept.
+ */
+let session: { id: number; file: MbankFile; sent: Map<string, Transaction> } | null = null
 
 /** The E2E's switch (`window.__FI_IMPORT_NO_WORKER__`): the window analyzes – the times before and after the Worker compared. */
 const noWorker = (): boolean => !!(globalThis as { __FI_IMPORT_NO_WORKER__?: boolean }).__FI_IMPORT_NO_WORKER__
@@ -59,6 +68,7 @@ function rejectAll(e: Error): void {
 function dropWorker(): void {
   worker?.terminate()
   worker = null
+  session = null
 }
 
 function workerNow(): Worker | null {
@@ -101,6 +111,7 @@ export function cancelAnalysis(): void {
 }
 
 function ask(w: Worker, req: { input: AnalyzeInput } | { replan: ReplanInput }, onProgress?: Pending['onProgress']): Promise<AnalyzeMessage> {
+  session = 'input' in req ? null : session
   return new Promise<AnalyzeMessage>((resolve, reject) => {
     const id = ++seq
     pending.set(id, { resolve, reject, onProgress })
@@ -114,7 +125,9 @@ const paint = () => new Promise<void>((r) => setTimeout(r, 0))
 
 /**
  * Analyze a file (`analyzeImport`) – in the Worker, else in the window. One at a time: a new one gives up what runs
- * (a plan again too). `onProgress` – only from the Worker (the window's own analysis blocks it until done).
+ * (a plan again too). `onProgress` – only from the Worker (the window's own analysis blocks it until done). Anything
+ * the Worker's way did not give – a failure, an answer that does not fit the window's data – the window does it
+ * (drugi przegląd R1, 5): never an import's error of the Worker's.
  */
 export async function analyzeFile(input: AnalyzeInput, onProgress: (phase: AnalyzePhase, done: number, total: number) => void): Promise<{ analysis: Analysis; via: AnalyzedVia }> {
   cancelAnalysis()
@@ -123,10 +136,12 @@ export async function analyzeFile(input: AnalyzeInput, onProgress: (phase: Analy
     try {
       const m = await ask(w, { input }, onProgress)
       if (m.type !== 'done') throw new WorkerFailed('odpowiedź nie na analizę')
-      return { analysis: analysisFromWire(m.analysis, input.source.transactions), via: 'worker' }
+      const analysis = analysisFromWire(m.analysis, input.source.transactions)
+      session = analysis.kind === 'plan' ? { id: m.id, file: analysis.file, sent: new Map(input.source.transactions.map((t) => [t.id, t])) } : null
+      return { analysis, via: 'worker' }
     } catch (e) {
-      if (!(e instanceof WorkerFailed)) throw e
-      // A failure of the Worker only: the window tries the same – a file it cannot read is said from there.
+      if (e instanceof AnalysisCancelled) throw e
+      session = null
     }
   const me = { cancelled: false }
   inWindow = me
@@ -137,18 +152,24 @@ export async function analyzeFile(input: AnalyzeInput, onProgress: (phase: Analy
 }
 
 /**
- * The open file planned again in the Worker (przegląd R1 15) – its rows the window's own (`planFromWire`). null – no
- * Worker (the window plans it itself, as before); rejects with `AnalysisCancelled` when given up (another file).
+ * The open file planned again in the Worker (przegląd R1 15) – of the file it keeps and only the operations changed since
+ * (drugi przegląd R1, 10); the rows the window's own (`planFromWire`). null – the window plans it itself: no Worker, the
+ * Worker keeps another file (`input.file` – not its analysis's), it failed or its answer does not fit (5). Rejects with
+ * `AnalysisCancelled` when given up (another file).
  */
-export async function replanInWorker(input: ReplanInput): Promise<ImportPlan | null> {
+export async function replanInWorker(input: PlanInput): Promise<ImportPlan | null> {
   const w = workerNow()
-  if (!w) return null
+  const kept = session
+  if (!w || !kept || kept.file !== input.file) return null
   try {
-    const m = await ask(w, { replan: input })
-    if (m.type !== 'planned') return null
-    return planFromWire(m.plan, input.source.transactions, input.file.rows)
+    const { transactions, ...rest } = input.source
+    const req: ReplanInput = { session: kept.id, accountId: input.accountId, source: rest, operations: operationsDelta(transactions, kept.sent), deletedKeys: input.deletedKeys, deletedRows: input.deletedRows }
+    const m = await ask(w, { replan: req })
+    if (m.type !== 'planned') throw new WorkerFailed('odpowiedź nie na plan')
+    return planFromWire(m.plan, transactions, input.file.rows)
   } catch (e) {
-    if (e instanceof WorkerFailed) return null
-    throw e
+    if (e instanceof AnalysisCancelled) throw e
+    if (session === kept) session = null
+    return null
   }
 }

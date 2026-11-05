@@ -48,8 +48,9 @@ paths:
 - CSV innego banku (AP-43, T460–T462): `csv.ts` (`guessCsv`, `parseMappedCsv`, `mappingFits`) – mapowanie przy koncie
   (`csvMapping`, czytane tylko przez `accountMapping`), plik jako `MbankFile` 'csv', dalej ten sam plan. Format wiersza
   mówi przedrostek klucza (`csv:` – `keyKindOf`); **pułapka:** `bank.format` zostaje 'mbank', `bank.source` dla CSV nie
-  zapisuj (1.15.9 by je zgubiło). Tożsamość – cały wiersz pliku (`rowText`), nigdy role kolumn (przegląd R1 1); rodzaj
-  operacji słowami mBanku (`operationOf`) – rozpoznanie w `classify.ts` czyta tylko je.
+  zapisuj (1.15.9 by je zgubiło). Tożsamość – cały wiersz pliku (`rowText`, w limicie 2000 z odciskiem), nigdy role
+  kolumn; rodzaj operacji słowami, które czyta `classify.ts` (`readsOperation`, `operationOf`) – nowe słowo rozpoznania
+  dodaj w `classify.ts` (`isTransferOperation`…), nie listą w `csv.ts`.
 - Kwota w walucie (AP-48, T494): import jej nie pisze – znane pliki mBanku jej nie mają (wiersz w innej walucie pominięty);
   usuwana kopia oddaje ją zostającej operacji (`takeUserData`), jak notatkę.
 
@@ -64,7 +65,9 @@ paths:
   pole reguły (zawsze I). Każde wywołanie `findRule` z wiersza / operacji podaje kwotę i konto – bez nich warunek kwoty
   i konta nie jest spełniony. „O tytule” – `decidedByTitle`, nigdy `mode === 'keyword'` wprost. **Pułapka:** zmiana
   dopasowania reguł jednego warunku – `rules-ap45-golden` (wynik sprzed 1.16.0) musi przejść bez zapisu od nowa.
-  Wpisy ręczne: tylko reguły `manual`, podpowiedź do kliknięcia (`manualRuleHint`, `hintChanges`).
+  Wpisy ręczne: tylko reguły `manual`, podpowiedź do kliknięcia (`manualRuleHint`, `hintChanges` z `hintedOf`).
+  **Pułapka (przegląd R1 9):** `rule.conditions`, `rule.combine` i `account.csvMapping` mogą być surowe (nowsza wersja)
+  – czytaj tylko przez `conditionsOf`, `combineOf`, `readCsvMapping`; nigdy `.catch(undefined)` na polu nowszej wersji.
 - Decyzja zbiorcza nie zmienia pożyczki, PIT-38, XTB ani pieniędzy domownika decyzją innego rodzaju (`bulkKeeps`, T326);
   „+ domownik” tylko przy zwykłym wpływie od obcej osoby (`offersNewMember`).
 - „w tym za X” (D81): części wierszy liczy tylko `rowShares` – grupa / temat rozkłada kwotę po kolei, najwyżej to, co X
@@ -116,7 +119,8 @@ paths:
 - Otwarcie pliku w Web Workerze (AP-35, T463): `shared/import/analyze.ts` (`analyzeImport` – ta sama w oknie bez Workera),
   klient `features/import/analysis.ts`. **Pułapka (T464):** operacje planu przez wiadomość tylko jako `txRef` i z powrotem
   `planFromWire` z listy okna – widok strony przelewu (`sideOf`) poznaje się po obiekcie; nowe pole planu z operacją dopisz
-  do `planToWire` / `planFromWire`. Ponowny plan po zmianie danych też w Workerze (`replanInWorker`, przegląd R1 15).
+  do `planToWire` / `planFromWire`. Ponowny plan po zmianie danych też w Workerze (`replanInWorker`: sesja pliku w Workerze,
+  tylko zmiany operacji); każde niepowodzenie Workera – okno.
 - Pamięć `brandOf` / `counterpartyKey` do 50 tys.; plan od nowa tylko przy zmianie treści (`BY_CONTENT` + `deepEqual`);
   listy ekranu po 100 (`ShowMore`), `memo` tematów, marek i wierszy. Wiersz bez linii nie czyta rozkładu pliku przy
   każdej zmianie – tylko przycisk (`rowPartsOf` 'add'); audyt reguł zależy od tekstu `advanceRulesKept`, nie od całej

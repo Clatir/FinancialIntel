@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { CSV_DATE_FORMATS } from '@shared/schema'
-import { completeMapping, previewMapped, type CsvDraft, type CsvRole } from '@shared/import/csv'
+import { completeMapping, operationKindText, previewMapped, type CsvDraft, type CsvRole } from '@shared/import/csv'
 import { useData, useFolderLocked } from '../../store/data'
 import { ConfirmButton } from '../../components/ConfirmButton'
 import { signedPln } from '../../components/fields'
@@ -39,16 +39,6 @@ const DECIMALS: Array<[string, string]> = [
   [',', '1 234,56'],
   ['.', '1,234.56']
 ]
-
-/** What the import reads a row as when the file names no type of operation (`operationOf`, T462). */
-function kindOf(operation: string): string {
-  if (/^(WYPŁATA|WYPLATA).*(BANKOMA|GOTÓWK|GOTOWK)|^BLIK WYP/.test(operation)) return 'bankomat'
-  if (/^(POS )?ZWROT/.test(operation)) return 'zwrot'
-  if (/^(PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK)/.test(operation)) return 'opłata banku'
-  if (/^(PRZELEW|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|BLIK P2P)/.test(operation)) return 'przelew'
-  if (/^(ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA|BLIK)/.test(operation)) return 'karta'
-  return ''
-}
 
 /** Options of a select with a value of a newer version kept (`openEnum`). */
 function Options({ list, value }: { list: ReadonlyArray<readonly [string, string]>; value: string }) {
@@ -116,7 +106,7 @@ function Result({ setup }: { setup: CsvSetup }) {
           <span className="num text-muted">{plDate(r.date)}</span>
           <span className={cx('num text-right', r.amount < 0 ? 'text-down' : 'text-up')}>{signedPln(r.amount)} zł</span>
           <span className="truncate text-dim" data-testid="import-csv-preview-kind">
-            {kindOf(r.operation)}
+            {operationKindText(r.operation)}
           </span>
           <span className="truncate" title={r.description}>
             {r.counterparty || r.description || '—'}

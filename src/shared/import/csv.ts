@@ -5,9 +5,11 @@
  * Pure; the main process only reads the file's bytes.
  */
 import { fold } from '../fold'
-import { CSV_DATE_FORMATS, CSV_SEPARATORS, csvMappingSchema, type CsvMapping } from '../schema/budget'
+import { CSV_DATE_FORMATS, CSV_SEPARATORS, csvMappingSchema, readCsvMapping, type Account, type CsvMapping } from '../schema/budget'
+import { isAtmOperation, isFeeOperation, isReturnOperation, isTransferOperation } from './classify'
 import { cleanBankName } from './names'
-import { PROGRESS_EVERY, type MbankFile, type MbankRow, type Progress } from './mbank'
+import { fingerprint, PROGRESS_EVERY, type MbankFile, type MbankRow, type Progress } from './mbank'
+import { opKindOf } from './reconcile'
 import { decodeText, parseCsv, type Rows } from './text'
 
 /** The file's text in the mapping's encoding ('auto' – as mBank's: BOM, UTF-8, else Windows-1250). */
@@ -138,29 +140,63 @@ export function mappingFits(bytes: Uint8Array, m: CsvMapping): boolean {
 export const rowText = (r: readonly string[]): string => {
   const cells = r.map((c) => c.replace(/\s+/g, ' ').trim())
   while (cells.length && !cells.at(-1)) cells.pop()
-  return cells.join(' | ')
+  return within(cells.join(' | '), LIMITS.description)
 }
 
-/** Types of operation the import's recognition knows (mBank's words – `classify.ts`): kept as the bank wrote them. */
-const KNOWN_OPERATION =
-  /^(PRZELEW|BLIK|ZLECENIE|POLECENIE|WPŁATA|WPLATA|UZNANIE|OBCIĄŻENIE|OBCIAZENIE|ZAKUP|PŁATNOŚĆ|PLATNOSC|TRANSAKCJA|POS ZWROT|ZWROT|PROWIZJA|OPŁATA|OPLATA|ODSETKI|PODATEK|WYPŁATA|WYPLATA|KAPITALIZACJA|SPŁATA|SPLATA|STORNO|KOREKTA)(?=$|[^\p{L}\p{N}])/u
+/**
+ * The bank's fields of an operation as its record keeps them (`bankRowSchema`, `transactionSchema`): a longer one would
+ * make the record unreadable – the operation lost and its row imported again (drugi przegląd R1, 7).
+ */
+const LIMITS = { description: 2000, counterparty: 300, operation: 200, title: 1000 } as const
 
 /**
- * The type of operation the import's recognition reads (T462, przegląd R1 4): the bank's own when it is one of the words
- * it knows, else told by the row's words, its direction and the other side's account number – an ATM, a product's return,
- * a fee of the bank, a card payment, a transfer (every inflow without a card's word is one: a member's money, a loan's
- * repayment, an own transfer are transfers). '' – nothing tells (an outflow of no word: a card payment by the name).
+ * A text within a field's limit; a longer one cut, with the fingerprint of the whole – the identity of a row
+ * (`rowIdentity` – also of the operation's description, B35) is of all its text, never of its first characters only.
+ */
+function within(text: string, max: number): string {
+  if (text.length <= max) return text
+  const tail = ` …#${fingerprint(text)}`
+  return text.slice(0, max - tail.length) + tail
+}
+
+/**
+ * Does the import's recognition read this type of operation as it is (`classify.ts`, `opKindOf` – one recognition, no
+ * list of its own here)? A card payment, an ATM, a fee, a product's return, a transfer of the words it knows – not a
+ * bare „BLIK” nor „OBCIĄŻENIE” (a transfer it does not read as one – drugi przegląd R1, 2).
+ */
+export function readsOperation(operation: string, amount: number): boolean {
+  const direction = amount < 0 ? 'out' : 'in'
+  return !!operation && (isAtmOperation(operation) || isFeeOperation(operation) || isReturnOperation(operation) || isTransferOperation(operation, direction) || opKindOf(operation) === 'card')
+}
+
+/**
+ * The type of operation the import's recognition reads (T462, przegląd R1 4): the bank's own when the recognition reads
+ * it (`readsOperation`), else told by the row's words, its direction and the other side's account number – an ATM's
+ * withdrawal (out) or deposit (in – never a withdrawal: drugi przegląd R1, 8), a product's return, a fee of the bank, a
+ * transfer, a card payment (every inflow without a card's word is a transfer: a member's money, a loan's repayment, an
+ * own transfer). The bank's own – when nothing tells (an outflow of no word: a card payment by the name).
  */
 export function operationOf(written: string, text: string, amount: number, accountNo: string): string {
-  if (KNOWN_OPERATION.test(written)) return written
+  if (readsOperation(written, amount)) return written.slice(0, LIMITS.operation)
   const t = ` ${fold(`${written} ${text}`).replace(/[^a-z0-9]+/g, ' ')} `
-  if (/ bankomat| wyplata gotowki | atm | cash withdrawal /.test(t)) return 'WYPŁATA Z BANKOMATU'
-  if (amount > 0 && / (refund|zwrot (towaru|zakupu|platnosci|transakcji)) /.test(t)) return 'ZWROT'
-  if (amount < 0 && / (prowizja|odsetki|oplata za (karte|prowadzenie|rachunek|konto)|fee|bank charge) /.test(t)) return 'OPŁATA'
-  if (/ (przelew|transfer|top ?up|zlecenie|polecenie) /.test(t)) return amount > 0 ? 'PRZELEW PRZYCHODZĄCY' : 'PRZELEW WYCHODZĄCY'
-  if (/ (karta|karty|kart|card|blik|zakup|platnosc|payment|purchase) /.test(t)) return 'PŁATNOŚĆ KARTĄ'
-  if (amount > 0 || accountNo) return amount > 0 ? 'PRZELEW PRZYCHODZĄCY' : 'PRZELEW WYCHODZĄCY'
-  return written
+  const out = amount < 0
+  if (/ bankomat| wplatomat| wyplata gotowki | wplata gotowki | atm | cash (withdrawal|deposit) /.test(t)) return out ? 'WYPŁATA Z BANKOMATU' : 'WPŁATA WE WPŁATOMACIE'
+  if (!out && / (refund|zwrot (towaru|zakupu|platnosci|transakcji)) /.test(t)) return 'ZWROT'
+  if (out && / (prowizja|odsetki|oplata za (karte|prowadzenie|rachunek|konto)|fee|bank charge) /.test(t)) return 'OPŁATA'
+  if (/ (przelew|transfer|top ?up|zlecenie|polecenie|p2p) /.test(t)) return out ? 'PRZELEW WYCHODZĄCY' : 'PRZELEW PRZYCHODZĄCY'
+  // In, a card's word only: a card's money back; „BLIK”, „płatność” of an inflow – a person's transfer (BLIK P2P).
+  if (out ? / (karta|karty|kart|card|blik|zakup|platnosc|payment|purchase) /.test(t) : / (karta|karty|kart|card|zakup|purchase) /.test(t)) return 'PŁATNOŚĆ KARTĄ'
+  if (!out || accountNo) return out ? 'PRZELEW WYCHODZĄCY' : 'PRZELEW PRZYCHODZĄCY'
+  return written.slice(0, LIMITS.operation)
+}
+
+/** What the wizard's preview calls a row's type of operation – of the same recognition (`readsOperation`, `opKindOf`). */
+export function operationKindText(operation: string): string {
+  if (isAtmOperation(operation)) return 'bankomat'
+  if (/^WPŁATA WE WPŁATOMACIE/.test(operation)) return 'wpłatomat'
+  if (isReturnOperation(operation)) return 'zwrot'
+  const kind = opKindOf(operation)
+  return kind === 'card' ? 'karta' : kind === 'transfer' ? 'przelew' : kind === 'fee' ? 'opłata banku' : ''
 }
 
 /** One row of the file by the mapping: the operation, or why it is left out. */
@@ -208,8 +244,8 @@ function readRow(r: readonly string[], m: CsvMapping, line: number): { row?: Mba
       description: rowText(r),
       operation,
       // The other side: its column, else the description (a card payment's shop) – without the bank's additions.
-      counterparty: cleanBankName(who || what, { town: true }),
-      title: who ? what : '',
+      counterparty: cleanBankName(who || what, { town: true }).slice(0, LIMITS.counterparty),
+      title: (who ? what : '').slice(0, LIMITS.title),
       accountNo,
       category: '',
       amount,
@@ -285,24 +321,25 @@ export const MAX_COLUMNS = 200
 export const widthOf = (rows: Rows, d: Pick<CsvDraft, 'skipRows'>): number => Math.max(0, ...rows.slice(d.skipRows, d.skipRows + 20).map((r) => r.length))
 
 /**
- * The roles of a draft for the rows of another separator or encoding (przegląd R1 11): by the header's names when the
- * header names a date, else the ones still within the file's columns – never a role on a column the file has not.
+ * The roles of a draft for the rows of another separator (przegląd R1 11, drugi przegląd R1 4): the ones within the
+ * file's columns stay as the user set them – never a role on a column the file has not; none left – by the header's
+ * names. (Another encoding moves no column: the roles stay.)
  */
 export function columnsFor(d: CsvDraft, rows: Rows): CsvDraft['columns'] {
-  const head = d.header ? rows[d.skipRows] : undefined
-  const byName = head ? columnsByName(head) : null
-  if (byName && byName.date != null) return byName
   const width = widthOf(rows, d)
   const out = { ...d.columns }
   for (const role of Object.keys(out) as CsvRole[]) if (out[role] != null && out[role]! >= width) out[role] = null
-  return out
+  if (Object.values(out).some((c) => c != null)) return out
+  const head = d.header ? rows[d.skipRows] : undefined
+  return head ? columnsByName(head) : out
 }
 
-/** A mapping of an account as this version reads it (`csvMappingSchema`) – a value it cannot read is none (przegląd R1 9). */
+/**
+ * A mapping of an account as this version reads it – a value it cannot read is none (przegląd R1 9): the one rule of
+ * `readCsvMapping` (schema), here for the import's callers.
+ */
 export function accountMapping(a: { csvMapping?: unknown }): CsvMapping | null {
-  if (a.csvMapping == null) return null
-  const r = csvMappingSchema.safeParse(a.csvMapping)
-  return r.success ? r.data : null
+  return readCsvMapping(a as Pick<Account, 'csvMapping'>)
 }
 
 /** The draft of a saved mapping (the wizard opened again – „Zmień kolumny”): its columns this version knows. */

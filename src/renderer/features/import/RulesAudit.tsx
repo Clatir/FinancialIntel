@@ -11,7 +11,7 @@ import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
 import type { RecordEntry } from '@shared/api'
 import type { ImportRule, Loan } from '@shared/schema'
-import { listOf, useData, useFolderLocked } from '../../store/data'
+import { listOf, useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { Panel, ShowMore, TextField, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
@@ -21,10 +21,10 @@ import { useMembers } from '../household/actions'
 import { DecisionFields } from './DecisionFields'
 import { TagsField } from '../../components/TagsField'
 import { useKnownTags } from '../tags/state'
-import { addAmountRule, applyRuleToHistory, choiceOfRule, conditionsText, directionText, editRule, keepAdvanceRule, removeRule, repayingRule, ruleDecisionText } from './rules'
+import { addAmountRule, applyRuleToHistory, choiceOfRule, conditionsText, directionText, editRule, keepAdvanceRule, LOCKED_RULE_TEXT, removeRule, repayingRule, ruleDecisionText } from './rules'
 import { restNotOfRule } from './options'
 import { ConditionsEditor } from './ConditionsEditor'
-import { inactiveConditions } from '@shared/import/conditions'
+import { unreadableRule } from '@shared/import/conditions'
 
 const NO_RULES: ImportRule[] = []
 const NO_ALIASES: BrandAliases = {}
@@ -32,6 +32,11 @@ const NO_LOANS: Record<string, RecordEntry<Loan>> = {}
 /** Operations audited per step: a large folder never stops the screen. */
 const STEP = 2000
 const SHOWN = 20
+/**
+ * A rule of conditions with anything this version cannot read (przegląd R1 9, 2.3 – `unreadableRule`): kept in the file,
+ * not applied, not edited here (the editor would write it over) – only deleted.
+ */
+const unreadable = (r: ImportRule): boolean => unreadableRule(r)
 /** The rules list's page (W35). */
 const RULES_PAGE = 100
 
@@ -216,6 +221,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
 export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progress: number }) {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const readOnly = useFolderLocked()
+  const locked = useLockedReason()
   const cats = useCategories()
   const members = useMembers()
   const [query, setQuery] = useState('')
@@ -263,6 +269,12 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
         <button type="button" className="btn h-[22px] px-2 text-[11px]" disabled={readOnly} onClick={() => setAdding(!adding)} data-testid="import-rule-new">
           + Nowa reguła z warunkami
         </button>
+        {/* AP-15: why the rules' buttons are off – once for the list. */}
+        {locked && (
+          <span className="text-[11px] text-dim" data-testid="import-rules-locked">
+            {locked}
+          </span>
+        )}
       </div>
       {adding && (
         <div className="mb-2">
@@ -327,7 +339,14 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                     inny rodzaj
                   </button>
                 )}
-                <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px]" disabled={readOnly} onClick={() => setEditing(editing === r.id ? null : r.id)} data-testid="import-rule-edit">
+                <button
+                  type="button"
+                  className="btn btn-ghost h-[22px] px-1.5 text-[11px]"
+                  disabled={readOnly || unreadable(r)}
+                  title={unreadable(r) ? LOCKED_RULE_TEXT : undefined}
+                  onClick={() => setEditing(editing === r.id ? null : r.id)}
+                  data-testid="import-rule-edit"
+                >
                   zmień
                 </button>
                 <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" disabled={readOnly} onClick={() => removeRule(r.id)} data-testid="import-rule-delete">
@@ -337,7 +356,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
             </div>
             {r.mode === 'conditions' && (
               <span className="truncate pl-2 text-[11px] text-muted" data-testid="import-rule-conditions-text">
-                {inactiveConditions(r) ? 'Warunek nowszej wersji aplikacji – ta wersja tej reguły nie stosuje. ' : ''}
+                {unreadable(r) ? `${LOCKED_RULE_TEXT} ` : ''}
                 {conditionsText(r, accountName)}
               </span>
             )}

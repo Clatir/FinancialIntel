@@ -105,7 +105,7 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.accounts[].name` | tekst | wymagane | Nazwa konta. |
 | `settings.accounts[].kind` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"bank"` | Rodzaj: `bank`, `wallet` (portfel z kartą), `cash` (gotówka), `other`. |
 | `settings.accounts[].importFormat` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `null`, może być `null` | Format pliku z banku, który import czyta dla konta: `mbank` (CSV z mBanku) albo `csv` (CSV innego banku według `csvMapping`); `null` – bez importu. |
-| `settings.accounts[].csvMapping` | obiekt | opcjonalne | CSV innego banku (`importFormat` = `csv`): jak czytać plik – ustawione raz w kreatorze importu. Mapowanie, którego wersja aplikacji nie umie przeczytać, jest pomijane (konto zostaje). |
+| `settings.accounts[].csvMapping` | obiekt | opcjonalne | CSV innego banku (`importFormat` = `csv`): jak czytać plik – ustawione raz w kreatorze importu. Mapowanie, którego ta wersja aplikacji nie umie przeczytać (nowszej wersji), zostaje w pliku bez zmian – import pyta wtedy o kolumny jak przy nowym pliku. |
 | `settings.accounts[].csvMapping.separator` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `";"` | Separator kolumn: `;`, `,`, tabulator albo `\|`. |
 | `settings.accounts[].csvMapping.encoding` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"auto"` | Kodowanie pliku: `auto` (rozpoznane), `utf-8` albo `windows-1250`. |
 | `settings.accounts[].csvMapping.skipRows` | liczba całkowita | domyślnie `0` | Ile wierszy pominąć przed nagłówkiem (nazwa banku, dane konta). |
@@ -159,12 +159,12 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.import.rules[].match` | tekst | wymagane | Czego szuka: klucz marki albo nazwy, jej fragment albo słowa (zależnie od `mode`). |
 | `settings.import.rules[].mode` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `"exact"` | Dopasowanie: `exact` (marka), `contains` (fragment), `keyword` (słowa w nazwie albo tytule), `amount` (marka do kwoty `maxAmount`), `conditions` (warunki `conditions`, 1.16.0). |
 | `settings.import.rules[].maxAmount` | liczba całkowita | opcjonalne, może być `null` | Reguły `amount`: operacja do tej kwoty (grosze, bez znaku). |
-| `settings.import.rules[].conditions` | lista: obiekt | opcjonalne | Reguły z warunkami (`mode` = `conditions`, 1.16.0): najwyżej 10 warunków łączonych według `combine`. Starsza wersja aplikacji takiej reguły nie stosuje. |
+| `settings.import.rules[].conditions` | lista: obiekt albo dowolna wartość | opcjonalne | Reguły z warunkami (`mode` = `conditions`, 1.16.0): najwyżej 10 warunków łączonych według `combine`. Starsza wersja aplikacji takiej reguły nie stosuje; warunki, których wersja nie umie przeczytać (więcej niż 10, nowszej wersji), zostają w pliku bez zmian, a reguła nie działa. |
 | `settings.import.rules[].conditions[].field` | tekst z listy (nowsza wersja może dodać wartość) | wymagane | Czego dotyczy warunek: `counterparty` (kontrahent zawiera), `title` (tytuł zawiera słowa), `amount` (kwota od–do), `account` (konto). |
 | `settings.import.rules[].conditions[].value` | tekst | opcjonalne | Warunki `counterparty` i `title`: szukany tekst; `account`: identyfikator konta. |
 | `settings.import.rules[].conditions[].min` | grosze (liczba całkowita) | opcjonalne, może być `null` | Warunek `amount`: kwota bez znaku od (grosze); brak – bez dolnej granicy. |
 | `settings.import.rules[].conditions[].max` | grosze (liczba całkowita) | opcjonalne, może być `null` | Warunek `amount`: kwota bez znaku do (grosze); brak – bez górnej granicy. |
-| `settings.import.rules[].combine` | tekst z listy (nowsza wersja może dodać wartość) | opcjonalne | Jak łączyć warunki: `all` – wszystkie (I), `any` – którykolwiek (LUB). |
+| `settings.import.rules[].combine` | tekst z listy (nowsza wersja może dodać wartość) albo dowolna wartość | opcjonalne | Jak łączyć warunki: `all` – wszystkie (I), `any` – którykolwiek (LUB); brak – wszystkie. Inna wartość (nowszej wersji) zostaje w pliku, a reguła nie działa. |
 | `settings.import.rules[].manual` | tak / nie (`true` / `false`) | opcjonalne | `true` – reguła podpowiada też kategorię i to, kto płaci, przy wpisach ręcznych (szybki wpis, edytor operacji). |
 | `settings.import.rules[].direction` | tekst z listy (nowsza wersja może dodać wartość) | domyślnie `null`, może być `null` | Kierunek: `in` (wpływ), `out` (wydatek); `null` – oba. |
 | `settings.import.rules[].counterparty` | tekst | opcjonalne | Reguły słów: dodatkowo ten kontrahent. |
@@ -249,7 +249,7 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 
 ### Operacje – `transactions/RRRR/RRRR-MM-DD_ULID.json`
 
-Jedna operacja w pliku; folder roku i data w nazwie to data warszawska operacji. `amount` ze znakiem: wydatek < 0, wpływ > 0. Paragon dzielony (`splits`) ma linie z własnymi kategoriami – wtedy liczą się linie, nie `categoryId` operacji; linie sumują się do `amount`.
+Jedna operacja w pliku; folder roku i data w nazwie to data warszawska operacji. `amount` ze znakiem: wydatek < 0, wpływ > 0. Paragon dzielony (`splits`) ma linie z własnymi kategoriami – wtedy liczą się linie; część `amount`, której linie nie pokrywają (`amount` minus suma linii), liczy się pod `categoryId` operacji, z jej finansowaniem (`refundable`, `memberId`).
 
 | Pole | Typ | Obecność | Co znaczy |
 | --- | --- | --- | --- |
@@ -268,7 +268,7 @@ Jedna operacja w pliku; folder roku i data w nazwie to data warszawska operacji.
 | `covers` | lista: ULID | domyślnie pusta lista | Wpływ domownika: zakupy (identyfikatory operacji), które spłaca. |
 | `coversOpening` | tak / nie (`true` / `false`) | opcjonalne | Spłaca też dług domownika na start rozliczeń. |
 | `coversOpeningMembers` | lista: ULID | opcjonalne | Wpływ kilku domowników: czyje długi na start spłaca; brak – wszystkich. |
-| `splits` | lista: obiekt | domyślnie pusta lista | Paragon dzielony: linie z własnymi kategoriami albo moja część i część domownika. |
+| `splits` | lista: obiekt | domyślnie pusta lista | Paragon dzielony: linie z własnymi kategoriami albo moja część i część domownika; reszta kwoty bez linii liczy się pod `categoryId` operacji. |
 | `splits[].id` | ULID | wymagane | Identyfikator linii. |
 | `splits[].amount` | grosze (liczba całkowita) | wymagane | Kwota linii ze znakiem jak `amount`. |
 | `splits[].categoryId` | ULID | domyślnie `null`, może być `null` | Kategoria linii. |

@@ -618,7 +618,7 @@ export function QuickApp() {
     // F8: by the brand – what was used with it last, the import's rule, the chain's category.
     // The brand is the name without its „#słowo” (F17). A rule for the entries typed by hand fitting it (AP-45) is
     // proposed instead – no guess of the officer filled in beside it.
-    const hint = data ? officerHint({ counterparty: withoutHashTags(counterparty) }, data, { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id) }) : null
+    const hint = data ? officerHint({ counterparty: withoutHashTags(counterparty), amount: d.amount, accountId: d.accountId }, data, { rules: data.rules, aliases: data.aliases, usable: (id) => cats.has(id) }) : null
     setOfficer(hint)
     if (hint && !d.categoryId && !ruleHintOf({ ...d, counterparty })) set({ counterparty, categoryId: hint.categoryId })
   }

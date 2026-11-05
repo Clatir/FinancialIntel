@@ -2,8 +2,7 @@ import { useMemo } from 'react'
 import { lastConfirmation, openingOf } from '@shared/calc/balances'
 import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
-import { ACCOUNT_KINDS, type Account, type AccountKind, type Balance } from '@shared/schema'
-import { accountMapping } from '@shared/import/csv'
+import { ACCOUNT_KINDS, readCsvMapping, type Account, type AccountKind, type Balance } from '@shared/schema'
 import { updateSettings, useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
 import { useDraft } from '../../store/drafts'
@@ -88,7 +87,8 @@ function ImportFormatSelect({ account: a }: { account: Account }) {
       </select>
       {a.importFormat === 'csv' && (
         <span className="text-dim" data-testid="account-csv-mapping">
-          {accountMapping(a) ? 'kolumny ustawione' : a.csvMapping != null ? 'kolumny zapisane przez nowszą wersję aplikacji' : 'kolumny wskażesz przy pierwszym pliku (Import)'}
+          {/* A mapping this version cannot read (przegląd R1 9) stays in the file – here as none. */}
+          {readCsvMapping(a) ? 'kolumny ustawione' : a.csvMapping ? 'kolumny z nowszej wersji aplikacji – wskażesz je przy pierwszym pliku (Import)' : 'kolumny wskażesz przy pierwszym pliku (Import)'}
         </span>
       )}
     </label>

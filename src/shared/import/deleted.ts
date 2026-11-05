@@ -64,7 +64,8 @@ export function deletedBankRows(deleted: readonly DeletedVersion[], existing: re
   // The format of an import before 1.4.2 told by all its rows – the ones still in the budget and the deleted ones.
   const formatOf = formatOfBanks([...existing.flatMap((t) => [t.bank, t.counterBank]), ...sides.map((s) => formatBank(s.bank))])
   const rows = sides.map(({ bank, accountId, date, amount, deletedAt }): DeletedRow => {
-    const row = { accountId, date, amount, name: text(bank.counterparty) || text(bank.description), deletedAt }
+    const keys = [bank.key, ...(Array.isArray(bank.altKeys) ? bank.altKeys : [])].filter((k): k is string => typeof k === 'string' && !!k)
+    const row = { accountId, date, amount, name: text(bank.counterparty) || text(bank.description), deletedAt, keys }
     return bank.pending === true ? row : { ...row, format: formatOf(formatBank(bank)) }
   })
   return { keys, rows }
