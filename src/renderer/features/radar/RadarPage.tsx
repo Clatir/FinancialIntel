@@ -32,10 +32,10 @@ import { HistoryButton } from '../history/HistoryDialog'
 import { useFocusRecord } from '../../components/focus'
 import { BuoysPanel, NewBuoyPanel } from './Buoys'
 import { useFuture } from './future'
+import { RadarCalendar } from './Calendar'
+import { KIND_LABEL } from './labels'
 
 const zl = (g: number) => `${plnText(g)} zł`
-
-const KIND_LABEL: Record<RadarItem['kind'], string> = { salary: 'pensja', asteroid: 'asteroida', fixed: 'opłata', installment: 'rata', repayment: 'spłata', pit38: 'termin', plan: 'boja', end: 'koniec', return: 'zwrot' }
 
 export function RadarPage() {
   const fleet = useFleet()
@@ -53,6 +53,8 @@ export function RadarPage() {
   // once with Ctrl+$.
   const future = useFuture()
   const items = future.items
+  // The list or the month's calendar (AP-42) – kept while another screen is looked at.
+  const [view, setView] = useDraft<'list' | 'calendar'>('radar:view', () => 'list')
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const loans = fleet.loans
   const r = fleet.receivables
@@ -69,8 +71,30 @@ export function RadarPage() {
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="radar" tracks={['minmax(420px,3fr)', 'minmax(340px,2fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
-            <Panel title="Na radarze" hint={glossaryOf('Radar')} testId="radar-items">
-              {!items.length ? <Empty>Nic na radarze w najbliższych 90 dniach.</Empty> : <Timeline items={items} />}
+            <Panel
+              title="Na radarze"
+              hint={glossaryOf('Radar')}
+              testId="radar-items"
+              actions={
+                <Segmented
+                  size="sm"
+                  value={view}
+                  options={[
+                    { value: 'list', label: 'lista' },
+                    { value: 'calendar', label: 'kalendarz' }
+                  ]}
+                  onChange={setView}
+                  aria-label="Widok Radaru"
+                />
+              }
+            >
+              {view === 'calendar' ? (
+                <RadarCalendar fleet={fleet} items={items} />
+              ) : !items.length ? (
+                <Empty>Nic na radarze w najbliższych 90 dniach.</Empty>
+              ) : (
+                <Timeline items={items} />
+              )}
             </Panel>
             <BuoysPanel days={future.days} today={fleet.today} readOnly={readOnly} />
             {!readOnly && <NewBuoyPanel today={fleet.today} />}

@@ -159,4 +159,18 @@ test('Plan miesiąca i Radar – miesiące do przejrzenia, płatność kontenera
   // The container's payment in 3 days on the radar – its name in sight on the narrow screen.
   await expect(page.getByTestId('radar-items')).toContainText('1 240,00')
   await expect(page.getByTestId('radar-item').filter({ hasText: 'OC auta' }).getByText('OC auta', { exact: true })).toBeVisible()
+
+  // The month's calendar (AP-42) on the narrow screen: the week fits, the day tapped says its items under the grid.
+  await page.getByRole('radio', { name: 'kalendarz' }).click()
+  const calendar = page.getByTestId('radar-calendar')
+  await expect(calendar).toHaveAttribute('data-month', month)
+  const grid = (await calendar.getByRole('grid').boundingBox())!
+  expect(grid.x + grid.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  await expect(page.locator(`[data-testid="radar-calendar-cell"][data-date="${today}"]`)).toHaveAttribute('data-state', 'today')
+  const due = addDays(today, 3)
+  if (due.slice(0, 7) !== month) await page.getByTestId('radar-calendar-next').click()
+  await page.locator(`[data-testid="radar-calendar-cell"][data-date="${due}"]`).click()
+  await expect(page.getByTestId('radar-calendar-day')).toHaveAttribute('data-date', due)
+  await expect(page.getByTestId('radar-calendar-day').getByTestId('radar-calendar-item')).toContainText('OC auta')
+  await expect(page.getByTestId('radar-calendar-day').getByTestId('radar-calendar-item')).toContainText('1 240,00 zł')
 })
