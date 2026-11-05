@@ -196,7 +196,11 @@ test('przegląd R1 13 (AP-15): folder tylko do odczytu – wyłączone przyciski
     await expect(page.getByTestId('import-rules-locked')).toHaveCount(0)
     await expect(editor.getByTestId('import-rule-conditions-save')).toBeEnabled()
   } finally {
-    if (existsSync(away) && !existsSync(dataDir)) await renameRetrying(away, dataDir)
+    // A failed step leaves the folder away: back, and seen back, before closing (the app would wait on its pending write).
+    if (existsSync(away) && !existsSync(dataDir)) {
+      await renameRetrying(away, dataDir)
+      await expect(page.getByTestId('banner-ro')).toHaveCount(0, { timeout: 10_000 }).catch(() => undefined)
+    }
     await app.close()
   }
 })
