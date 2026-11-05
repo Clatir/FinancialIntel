@@ -1,5 +1,31 @@
 # Financial Intel – zmiany
 
+## 1.17.0
+
+Rozwojowe 2 – plan spłaty pożyczek, prognoza wieloletnia, wykres „Skąd i dokąd” i kwota w walucie:
+
+- **Plan spłaty pożyczek (Radar):** pod „Pożyczki” widać pożyczki wzięte miesiąc po miesiącu – według harmonogramu,
+  „lawiną” (nadpłata najpierw na najwyżej oprocentowaną) i „kulą śnieżną” (najpierw na najmniejszą). Wpisujesz nadpłatę
+  co miesiąc i jednorazową teraz („wolne do decyzji” z osłon jednym kliknięciem). Widać datę spłaty każdej pożyczki,
+  odsetki, ile mniej i o ile krócej; rata pożyczki spłaconej wcześniej przechodzi na następną. Pożyczka, której odsetki
+  zjadają nadpłatę, ma „nigdy” (bez sumy odsetek), a mniejsza spłacana obok dostaje swoją datę. To propozycja – nic nie
+  zapisuje i nie przesuwa pieniędzy. Oprocentowanie roczne podajesz przy pożyczce, tylko dla planu, z dokładnością do
+  0,01 % (dłuższe zaokrągla się z komunikatem przy polu). Także na telefonie.
+- **Prognoza wieloletnia (Wywiad):** 3, 5 albo 10 lat w trzech scenariuszach – ostrożnym, bazowym i optymistycznym: siła
+  floty netto na koniec każdego roku na wykresie i w tabeli, rok osiągnięcia celów, kiedy osłony spadną do zera i kiedy
+  zabraknie na koszty. Pierwszy rok to kurs na 12 miesięcy; założenia (wzrost wpływów z pracy, inflacja kosztów, dostawy
+  z ICTTJ rocznie, wydatki jednorazowe) zmieniasz w panelu i są zapamiętane w folderze danych; „domyślne” i „Cofnij”
+  nie gubią pól. Prognoza – nie gwarancja; nie czyta wyników tradingu.
+- **Kurs na 12 miesięcy i prognoza:** raty pożyczek wziętych liczą się w swoich miesiącach (także spłacane z osłon),
+  rata pożyczki z kontenerem w Ładowni wychodzi też w tym miesiącu, a przy przyjętych średnich kosztach nie liczy się
+  dwa razy. Rata i spłata pożyczki w jednym miesiącu liczą się osobno; cel kadłuba i zasięg w kolejnych latach
+  prognozy są jak w pierwszym. „Osłony do zera” mówi „teraz”, gdy to już się stało.
+- **Debriefing – wykres „Skąd i dokąd”:** przychód przez miesiąc do kopert, Ładowni i okrętu oraz pensja przez energię;
+  dymek z kwotą i procentem; także w PDF. Czerwony „Z osłon i kadłuba” to tylko deficyt miesiąca, wypływy spoza
+  przychodu i kosztów stoją pod własnym nagłówkiem, a wstęgi się nie krzyżują.
+- **Operacje – kwota w walucie:** informacyjnie, np. 45,00 EUR, w edytorze i szybkim wpisie (także na telefonie), z
+  kursem; na liście, w wyszukiwaniu (po kodzie i kwocie) i w eksporcie CSV / Excel. Złote i silnik pieniędzy bez zmian.
+
 ## 1.16.0
 
 Rozwojowe 1 – drugi bank, import w tle, reguły z warunkami, kalendarz Radaru i opis folderu danych:
