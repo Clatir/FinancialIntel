@@ -5,6 +5,7 @@
  * invisible node of that column, under the column's own nodes – it never crosses them. Pure: the screen and the PDF draw
  * the same layout.
  */
+import { formatPln } from './format'
 import { nodeValues, type FlowNode, type Flows } from './calc/sankey'
 
 export interface SankeyOptions {
@@ -39,6 +40,8 @@ export interface LaidLink {
   width: number
   /** The band as an SVG path (filled). */
   d: string
+  /** Its top edge at each column it touches: its source's bars, the columns it passes, its end's bars. */
+  points: Array<{ x: number; y: number }>
 }
 
 export interface LaidHeading {
@@ -105,14 +108,23 @@ export function sankeyLayout(flows: Flows, o: SankeyOptions): SankeyLayout {
   }
   const byColumn: Array<Array<{ id: string; node?: FlowNode }>> = Array.from({ length: cols + 1 }, () => [])
   for (const n of flows.nodes) byColumn[n.column]!.push({ id: n.id, node: n })
-  for (const v of vias) byColumn[v.column]!.push({ id: v.id })
-  const fullest = Math.max(0, ...byColumn.map((list) => list.reduce((a, x) => a + valueOf(x.id), 0)))
+  // The column's invisible nodes after its own ones, in the order of where their bands come from (przegląd R2 pkt 3 –
+  // no two cross): the previous column is laid out by then.
+  const fromOf = new Map(segs.map((x) => [x.to, x.from]))
+  const viaIndex = new Map(vias.map((v, i) => [v.id, i]))
+  const columnOf = (id: string) => column.get(id) ?? vias.find((v) => v.id === id)!.column
+  const totals = Array.from({ length: cols + 1 }, () => 0)
+  for (const id of new Set(segs.flatMap((x) => [x.from, x.to]))) totals[columnOf(id)]! += valueOf(id)
+  const fullest = Math.max(0, ...totals)
   const k = fullest > 0 ? bands / fullest : 0
   const pos = new Map<string, { y0: number; y1: number; x0: number; x1: number }>()
   const nodes: LaidNode[] = []
   const headings: LaidHeading[] = []
   let height = 0
   byColumn.forEach((list, c) => {
+    const own = vias.filter((v) => v.column === c)
+    own.sort((a, b) => (pos.get(fromOf.get(a.id)!)?.y0 ?? 0) - (pos.get(fromOf.get(b.id)!)?.y0 ?? 0) || viaIndex.get(a.id)! - viaIndex.get(b.id)!)
+    for (const v of own) list.push({ id: v.id })
     let y = top
     let group: string | undefined
     let heading: LaidHeading | null = null
@@ -175,7 +187,8 @@ export function sankeyLayout(flows: Flows, o: SankeyOptions): SankeyLayout {
       .map((s) => curve(xt(s), s.ty + w, xs(s), s.sy + w))
       .join(' ')
     const d = `M${r1(xs(first))},${r1(first.sy)} ${topEdge} L${r1(xt(last))},${r1(last.ty + w)} ${bottomEdge} Z`
-    return { from: l.from, to: l.to, value: l.value, width: w, d }
+    const points = [{ x: xs(first), y: first.sy }, ...parts.map((x) => ({ x: xt(x), y: x.ty }))]
+    return { from: l.from, to: l.to, value: l.value, width: w, d, points }
   })
   return { width: o.width, height: Math.ceil(height), nodes, links, headings, columns: columnX, bar }
 }
@@ -190,10 +203,19 @@ export function fitText(text: string, px: number): string {
   return `${text.slice(0, n).trimEnd()}…`
 }
 
+/** A label: its name (cut when long) and its amount (never – przegląd R2 pkt 4, D73). */
+export interface SankeyLabel {
+  name: string
+  amount: string
+}
+
+/** „Jedzenie… · 1 520,00 zł” in `px`: the name cut, the amount whole. */
+export const labelText = (l: SankeyLabel, px: number): string => `${fitText(l.name, px - textWidth(` · ${l.amount}`))} · ${l.amount}`
+
 export interface SankeySvgOptions {
-  /** A node's label with its amount („Jedzenie · 1 520,00 zł”). */
-  label: (n: LaidNode) => string
-  heading: (h: LaidHeading) => string
+  /** A node's name and amount („Jedzenie”, „1 520,00 zł”). */
+  label: (n: LaidNode) => SankeyLabel
+  heading: (h: LaidHeading) => SankeyLabel
   colors: { band: string; bandOpacity: number; bar: string; text: string; muted: string; up: string; down: string; halo: string }
 }
 
@@ -211,12 +233,54 @@ export function sankeySvg(l: SankeyLayout, o: SankeySvgOptions): string {
   for (const n of l.nodes) parts.push(`<rect x="${r1(n.x0)}" y="${r1(n.y0)}" width="${r1(n.x1 - n.x0)}" height="${r1(Math.max(1, n.y1 - n.y0))}" fill="${c.bar}"/>`)
   const text = (x: number, y: number, s: string, anchor: string, fill: string, size = 11) =>
     `<text x="${r1(x)}" y="${r1(y)}" text-anchor="${anchor}" fill="${fill}" font-size="${size}" stroke="${c.halo}" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${esc(s)}</text>`
-  for (const h of l.headings) parts.push(h.column === 0 ? text(l.columns[0]! - 6, h.y, o.heading(h), 'end', c.muted, 10) : text(l.columns[h.column]! + l.bar + 6, h.y, o.heading(h), 'start', c.muted, 10))
+  for (const h of l.headings)
+    parts.push(
+      h.column === 0
+        ? text(l.columns[0]! - 6, h.y, labelText(o.heading(h), l.columns[0]! - 10), 'end', c.muted, 10)
+        : text(l.columns[h.column]! + l.bar + 6, h.y, labelText(o.heading(h), l.width - l.columns[h.column]! - l.bar - 10), 'start', c.muted, 10)
+    )
   for (const n of l.nodes) {
     const y = (n.y0 + n.y1) / 2 + 4
     const fill = n.tone === 'up' ? c.up : n.tone === 'down' ? c.down : c.text
-    if (n.column === 0) parts.push(text(n.x0 - 6, y, fitText(o.label(n), l.columns[0]! - 10), 'end', fill))
-    else parts.push(text(n.x1 + 6, y, fitText(o.label(n), n.column === last ? l.width - n.x1 - 10 : l.columns[n.column + 1]! - n.x1 - 10), 'start', fill))
+    if (n.column === 0) parts.push(text(n.x0 - 6, y, labelText(o.label(n), l.columns[0]! - 10), 'end', fill))
+    else parts.push(text(n.x1 + 6, y, labelText(o.label(n), n.column === last ? l.width - n.x1 - 10 : l.columns[n.column + 1]! - n.x1 - 10), 'start', fill))
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${l.width}" height="${l.height}" viewBox="0 0 ${l.width} ${l.height}" font-family="Segoe UI, Arial, sans-serif">${parts.join('')}</svg>`
+}
+
+const layouts = new WeakMap<Flows, Map<string, SankeyLayout>>()
+
+/**
+ * The layout of a chart (przegląd R2 pkt 12): once per flows and width – the pointer's moves render the chart again, never
+ * lay it out again. The label areas from the real amounts (T491): hiding the amounts never moves a bar.
+ */
+export function layoutOf(flows: Flows, width: number, bands = 260): SankeyLayout {
+  const key = `${width}:${bands}`
+  const known = layouts.get(flows)?.get(key)
+  if (known) return known
+  // The nodes' labels and their groups' headings (the heading with the whole's amount – never less than its group's).
+  const label = (column: number) =>
+    Math.max(
+      0,
+      ...flows.nodes
+        .filter((n) => n.column === column)
+        .map((n) => Math.max(textWidth(`${n.label} · ${formatPln(amountOf(flows, n.id))} zł`), n.group ? textWidth(`${n.group} · ${formatPln(flows.total)} zł`) : 0))
+    )
+  const left = Math.min(Math.max(120, label(0) + 14), width * 0.3)
+  const right = Math.min(Math.max(140, label(2) + 14), width * 0.34)
+  const laid = sankeyLayout(flows, { width, left, right, bands })
+  const byWidth = layouts.get(flows) ?? layouts.set(flows, new Map()).get(flows)!
+  byWidth.set(key, laid)
+  return laid
+}
+
+/** A node's money: in or out of it (a node is balanced). */
+function amountOf(flows: Flows, id: string): number {
+  let into = 0
+  let out = 0
+  for (const l of flows.links) {
+    if (l.to === id) into += l.value
+    if (l.from === id) out += l.value
+  }
+  return Math.max(into, out)
 }

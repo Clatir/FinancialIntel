@@ -76,6 +76,8 @@ export interface OutsideMoney {
   transfersIn: number
   /** XTB top-ups beyond the month's withdrawals (the fuel balance counts the trading net, never below zero – N4). */
   topUps: number
+  /** The month's XTB top-ups whole (the tax pool's money not – `incomeParts`): the deliveries are their net. */
+  topUpsGross: number
 }
 
 /**
@@ -91,9 +93,11 @@ export function outsideMoney(transactions: readonly Transaction[], month: string
   let loansIn = 0
   let transfersOut = 0
   let transfersIn = 0
+  let topUpsGross = 0
   // One-sided transfers between the budget's accounts (before 1.7.0 – each side its own operation): their pair cancels out.
   let inside = 0
   for (const t of transactions) {
+    if (t.kind === 'trading' && t.amount < 0) topUpsGross -= incomeParts(t, ctx).trading
     if (t.kind === 'expense') {
       // My lines paid from a goal's money (T24 – no cost): the rest of the purchase is the costs' or the household's.
       for (const p of partsOf(t)) if (!p.refundable && p.goalId) goals -= p.amount
@@ -120,7 +124,7 @@ export function outsideMoney(transactions: readonly Transaction[], month: string
   if (inside < 0) transfersOut -= inside
   else transfersIn += inside
   const trading = incomeByMonth(transactions, ctx).get(month)?.trading ?? 0
-  return { goals, financed: sum(financed.map((f) => f.amount)), members, membersDeposit, loansOut, loansIn, transfersOut, transfersIn, topUps: Math.max(0, -trading) }
+  return { goals, financed: sum(financed.map((f) => f.amount)), members, membersDeposit, loansOut, loansIn, transfersOut, transfersIn, topUps: Math.max(0, -trading), topUpsGross }
 }
 
 export interface MonthFlowsInput {
@@ -185,7 +189,8 @@ export function monthFlows(input: MonthFlowsInput): Flows {
   const total = work + trading + returns + deficit + sum(passes.map((v) => Math.max(0, v)))
   const small = total * SMALL_SHARE
   if (work) node({ id: 'work', label: 'Przychody z pracy', column: 0 })
-  if (trading) node({ id: 'trading', label: o.topUps ? 'Dostawy z ICTTJ (netto)' : 'Dostawy z ICTTJ', column: 0 })
+  // Bilans paliwa's trading net (przegląd R2 pkt 9): „netto” when the month topped XTB up.
+  if (trading) node({ id: 'trading', label: o.topUpsGross ? 'Dostawy z ICTTJ (netto)' : 'Dostawy z ICTTJ', column: 0 })
   if (returns) node({ id: 'returns', label: 'Zwroty ponad zakupy', column: 0, detail: returned })
   if (deficit) node({ id: 'reserve', label: 'Z osłon i kadłuba', column: 0, tone: 'down' })
   if (work + trading + returns + deficit) node({ id: MONTH_NODE, label: running ? 'Miesiąc (do dziś)' : 'Miesiąc', column: 1 })
@@ -217,15 +222,16 @@ export function monthFlows(input: MonthFlowsInput): Flows {
     node({ id: 'ship', label: running ? 'Ponad koszty (do dziś)' : 'Dołożone do okrętu', column: 2, tone: 'up' })
     link(MONTH_NODE, 'ship', surplus)
   }
-  // Outside the income and the costs: from its source straight to its end (the layout passes the month by).
-  // Under their own heading on both sides; the shields and the hull giving the month its deficit stay with the month.
+  // Outside the income and the costs: from its source straight to its end (the layout passes the month by), under their
+  // own heading on both sides – the shields' and the hull's money for them its own source (przegląd R2 pkt 6): the red
+  // „Z osłon i kadłuba” of the month is its deficit alone, as Bilans paliwa.
   const pass = (from: FlowNode, to: FlowNode, value: number) => {
     if (value <= 0) return
     node({ ...from, group: OUTSIDE_GROUP })
     node({ ...to, group: OUTSIDE_GROUP })
     link(from.id, to.id, value)
   }
-  const RESERVE: FlowNode = { id: 'reserve', label: 'Z osłon i kadłuba', column: 0 }
+  const RESERVE: FlowNode = { id: 'reserve-out', label: 'Z osłon i kadłuba', column: 0 }
   const TO_RESERVE: FlowNode = { id: 'to-reserve', label: 'Do osłon i kadłuba', column: 2 }
   const MEMBERS: FlowNode = { id: 'members', label: 'Wpłaty domowników', column: 0 }
   pass({ id: 'goals', label: 'Ze środków celów', column: 0 }, { id: 'goals-spent', label: 'Zakupy ze środków celów', column: 2 }, o.goals)
@@ -242,7 +248,10 @@ export function monthFlows(input: MonthFlowsInput): Flows {
   return { nodes: ordered(nodes), links, total }
 }
 
-/** The order in a column: the month's own flows first, the money outside it below them (the layout keeps it). */
+/**
+ * The order in a column (przegląd R2 pkt 3): the month's own flows first, the money outside it below them – its sources in
+ * the order of their ends, so no two bands cross (the layout keeps the order).
+ */
 const ORDER = [
   'work',
   'trading',
@@ -255,6 +264,7 @@ const ORDER = [
   'members',
   'loans-in',
   'transfers-in',
+  'reserve-out',
   MONTH_NODE,
   // The main categories under their envelopes (in the groups' order, the most first).
   'costs',
@@ -265,15 +275,16 @@ const ORDER = [
   'members-spent',
   'members-back',
   'deposit',
+  'to-reserve',
   'loans-out',
   'transfers-out',
-  'xtb',
-  'to-reserve'
+  'xtb'
 ]
 
 function ordered(nodes: FlowNode[]): FlowNode[] {
+  // An envelope's category – the costs' place; the money outside the month – its own.
   const rank = (n: FlowNode) => {
-    const i = ORDER.indexOf(n.group ? 'costs' : n.id)
+    const i = ORDER.indexOf(n.group && n.group !== OUTSIDE_GROUP ? 'costs' : n.id)
     return i >= 0 ? i : ORDER.length
   }
   // Stable: the categories keep their groups' order and, in a group, the most first.
@@ -295,21 +306,33 @@ export function energyFlows(brief: Debriefing): Flows | null {
   const running = !brief.ended
   const nodes: FlowNode[] = []
   const links: FlowLink[] = []
-  const add = (n: FlowNode, from: string, to: string, value: number) => {
+  // salary + loot = sinking + rates + used + result (the debriefing's): a part below zero goes to the other side under
+  // its own name (przegląd R2 pkt 7 – refunds beyond the spending), so the energy's node is always balanced.
+  const source = (id: string, label: string, value: number, tone?: 'up' | 'down') => {
     if (value <= 0) return
-    nodes.push(n)
-    links.push({ from, to, value })
+    nodes.push({ id, label, column: 0, ...(tone ? { tone } : {}) })
+    links.push({ from: id, to: ENERGY_NODE, value })
   }
-  add({ id: 'salary', label: 'Pensja od siebie', column: 0 }, 'salary', ENERGY_NODE, e.salary)
-  add({ id: 'loot', label: 'Łupy poprzedniego miesiąca', column: 0 }, 'loot', ENERGY_NODE, e.loot)
-  add({ id: 'over', label: 'Ponad energię – z osłon', column: 0, tone: 'down' }, 'over', ENERGY_NODE, -e.result)
+  const end = (id: string, label: string, value: number, tone?: 'up' | 'down') => {
+    if (value <= 0) return
+    nodes.push({ id, label, column: 2, ...(tone ? { tone } : {}) })
+    links.push({ from: ENERGY_NODE, to: id, value })
+  }
+  source('salary', 'Pensja od siebie', e.salary)
+  source('loot', 'Łupy poprzedniego miesiąca', e.loot)
+  source('sinking-back', 'Odkładki – zwrot do energii', -e.sinking)
+  source('rates-back', 'Raty celów – zwrot do energii', -e.rates)
+  source('used-back', 'Zwroty ponad wydatki', -e.used)
+  source('over', 'Ponad energię – z osłon', -e.result, 'down')
   const total = sum(links.map((l) => l.value))
   if (!total) return null
   nodes.push({ id: ENERGY_NODE, label: running ? 'Energia miesiąca (do dziś)' : 'Energia miesiąca', column: 1 })
-  add({ id: 'sinking', label: 'Odkładki do zbiorników (Ładownia)', column: 2 }, ENERGY_NODE, 'sinking', e.sinking)
-  add({ id: 'rates', label: 'Raty celów', column: 2 }, ENERGY_NODE, 'rates', e.rates)
-  add({ id: 'used', label: 'Wydane (z energii i ponad nią)', column: 2 }, ENERGY_NODE, 'used', e.used)
-  add({ id: 'left', label: running ? 'Zostało (do dziś)' : 'Zostało – łupy', column: 2, tone: 'up' }, ENERGY_NODE, 'left', e.result)
+  end('salary-back', 'Pensja – oddana', -e.salary)
+  end('loot-back', 'Łupy – oddane', -e.loot)
+  end('sinking', 'Odkładki do zbiorników (Ładownia)', e.sinking)
+  end('rates', 'Raty celów', e.rates)
+  end('used', 'Wydane (z energii i ponad nią)', e.used)
+  end('left', running ? 'Zostało (do dziś)' : 'Zostało – łupy', e.result, 'up')
   return { nodes, links, total }
 }
 
