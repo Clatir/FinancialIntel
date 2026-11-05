@@ -15,16 +15,23 @@
  * N3 integration (T390, T391): the month's rest pays what its plan still spends (the envelopes, the fees due) from the
  * month's energy left – today's energy is never more (AP-13, T371) – and over it from the shields; the hull counts as
  * full from 99 % of its target (AP-17, T372), its docking and the goals' installments at 100 %.
+ *
+ * R2 review (T486): a taken loan's installments leave the money in their months (`extras` – a late one this month), as
+ * the engine pays them – a loan op from the shields, or a payment of its cargo container; the months spend the average
+ * costs without the part of them those containers' payments are (`loanCosts`), the range and the hull's target read the
+ * average whole (Mostek's). This month's installment of a loan with a container in the hold is the hold's due already
+ * (`restNeeds`).
  */
 import type { Settings } from '../schema/settings'
-import type { Goal, MonthPlan, Scheduled, Transaction } from '../schema/records'
+import type { Container, Goal, MonthPlan, Scheduled, Transaction } from '../schema/records'
 import type { CargoStatus } from './cargoStatus'
 import { addMonths, monthOf } from './dates'
 import { dockAmount, goalInstallment, hullCountsFull, paySalary, rangeMonths, ratedIn, shipClass, type DockTargets, type FleetState, type ShipClass } from './fleet'
 import { byPriority } from './goals'
 import type { IncomeStats } from './income'
 import { categoryIndex, sum } from './operations'
-import { planFor } from './plan'
+import { monthsBefore } from './history'
+import { containerCostsByMonth, planFor } from './plan'
 import { openDays, scheduledWindow } from './scheduled'
 
 export const COURSE_MONTHS = 12
@@ -57,12 +64,21 @@ export interface CourseInput {
   planMonths?: readonly string[]
   /** The average costs a month (the engine's `costs.average`); null = not known yet. */
   costs: number | null
+  /**
+   * Of them the taken loans' installments (their cargo containers' payments in the months the average reads – T486): the
+   * months spend `costs` without it, the installments leave in their months (`extras`); the range and the hull's target
+   * read `costs` whole (Mostek's). Absent – none.
+   */
+  loanCosts?: number
   layers: { shieldSalaries: number; hullMonths: number }
   /** The minimum of the shields in salaries (the orders – never above their target, B84). */
   minShieldSalaries: number
   /** The income a month by its source (`courseIncome`). */
   income: { work: number; trading: number }
-  /** Money of the planned operations and the repayments expected, by month (grosze, signed): this month's rest too. */
+  /**
+   * Money of the planned operations, the repayments expected and the taken loans' installments (T486), by month (grosze,
+   * signed): this month's rest too.
+   */
   extras: ReadonlyMap<string, number>
   /** What the taken loans still want back, and each installment's month (the debt falls by them – the range, D72). */
   debt: number
@@ -135,6 +151,11 @@ export interface Course {
    * end the rest at zero, as a month – AF-32).
    */
   rest: { overEnergy: number; short: number }
+  /**
+   * The shields' lowest point of this month's rest: after what it pays from them, before what it brings in – never below
+   * zero (the forecast's „Osłony do zera”, R2 review – T487).
+   */
+  restLow: number
   months: CourseMonth[]
   /**
    * The first month the shields and the hull end full – this month when full now (null = not in the course); the hull
@@ -200,7 +221,9 @@ export function feesDue(tanks: Pick<FleetState, 'tanks'>['tanks'], cargo: Readon
  * the average costs and the debt are the engine's – the course's „teraz” is Mostek's (AF-33). The income – `courseIncome`.
  * `cargo` – the fees' state (`cargoStatuses`): the month's rest pays the ones still due from its energy (T390). A buoy
  * of this month spent from a planned envelope (its category's) is in that envelope's rest already (`restNeeds`): only
- * what it is over the rest is this month's extra (N3 review).
+ * what it is over the rest is this month's extra (N3 review). The taken loans' installments (T486, R2 review): each one
+ * in its month (a late one this month) – this month's of a loan with a container in the hold (`containers`) is the hold's
+ * due (`restNeeds`); the part of the average costs their containers' payments are – `loanCosts`.
  */
 export function courseInputOf(
   fleet: FleetState,
@@ -211,6 +234,8 @@ export function courseInputOf(
     scheduled: readonly Scheduled[]
     transactions: readonly Transaction[]
     cargo?: readonly CargoStatus[]
+    /** The cargo hold's containers: a taken loan's container (`loanId`) pays its installments. Absent – none. */
+    containers?: readonly Container[]
   }
 ): CourseInput | null {
   if (!fleet.started) return null
@@ -232,12 +257,29 @@ export function courseInputOf(
     add(month, amount + fromEnvelope)
   }
   const installments: Array<{ month: string; amount: number }> = []
+  const taken = new Set<string>()
+  // The taken loans paid by a container in the hold (not archived): its due of this month is the cargo's.
+  const held = new Set((r.containers ?? []).filter((c) => c.loanId != null && !c.archived).map((c) => c.loanId!))
   for (const l of fleet.loans) {
+    if (l.loan.direction === 'taken') taken.add(l.loan.id)
     if (l.loan.closedAt) continue
     for (const i of l.left) {
-      if (l.loan.direction === 'given') add(i.date < fleet.today ? fleet.month : monthOf(i.date), i.amount)
-      else installments.push({ month: monthOf(i.date), amount: i.amount })
+      const month = i.date < fleet.today ? fleet.month : monthOf(i.date)
+      if (l.loan.direction === 'given') add(month, i.amount)
+      else {
+        installments.push({ month: monthOf(i.date), amount: i.amount })
+        if (month !== fleet.month || !held.has(l.loan.id)) add(month, -i.amount)
+      }
     }
+  }
+  // The taken loans' containers' payments in the months the average costs read (`averageCosts` – the history only; the
+  // assumed costs know none), a loan closed since too: its installments are in the average, none ahead.
+  const window = fleet.costs.source === 'history' ? monthsBefore(fleet.historyMonths, fleet.month, 12) : []
+  let loanCosts = 0
+  if (window.length) {
+    const byContainer = containerCostsByMonth(r.transactions)
+    for (const c of r.containers ?? []) if (c.loanId != null && taken.has(c.loanId)) for (const m of window) loanCosts += byContainer.get(c.id)?.get(m) ?? 0
+    loanCosts = Math.max(0, Math.round(loanCosts / window.length))
   }
   const records = new Map(r.goals.map((g) => [g.id, g]))
   return {
@@ -255,6 +297,7 @@ export function courseInputOf(
     salaryOf: (m: string) => planFor(r.plans, m)?.salary ?? null,
     planMonths: r.plans.map((p) => p.month),
     costs: fleet.costs.average,
+    ...(loanCosts ? { loanCosts } : {}),
     layers: r.settings.layers,
     minShieldSalaries: r.settings.orders.minShieldSalaries,
     income: { work: 0, trading: 0 },
@@ -273,6 +316,8 @@ export function course(input: CourseInput, kind: CourseKind): Course {
   const goals = input.goals.map((g) => ({ ...g }))
   const goalEta: Record<string, string | null> = {}
   const costs = input.costs
+  // What the months spend (T486): the average without the taken loans' installments – those leave in their months.
+  const spent = costs == null ? null : Math.max(0, costs - (input.loanCosts ?? 0))
   const drawShields = (v: number) => {
     const fromShields = Math.min(v, Math.max(0, shields))
     const fromHull = Math.min(v - fromShields, Math.max(0, hull))
@@ -320,7 +365,8 @@ export function course(input: CourseInput, kind: CourseKind): Course {
   // Its planned operations and repayments still to come (its salary is behind it).
   const now = input.extras.get(input.month) ?? 0
   if (now < 0) drawShields(-now)
-  else dock(now, turnNow)
+  const restLow = Math.max(0, shields)
+  if (now > 0) dock(now, turnNow)
   // What the rest lacks (AF-32, as a month's): the shields end it at zero – the next month starts from what is.
   const restShort = Math.max(0, -shields)
   shields += restShort
@@ -348,7 +394,7 @@ export function course(input: CourseInput, kind: CourseKind): Course {
         rates += take
       }
     // The month's costs from the salary, over it from the shields; the planned payments out of the shields.
-    const costsOfMonth = costs ?? salary
+    const costsOfMonth = spent ?? salary
     const fromEnergy = Math.min(costsOfMonth, Math.max(0, energy))
     energy -= fromEnergy
     if (costsOfMonth > fromEnergy) drawShields(costsOfMonth - fromEnergy)
@@ -393,6 +439,7 @@ export function course(input: CourseInput, kind: CourseKind): Course {
     rangeNow,
     rangeRest,
     rest: { overEnergy, short: restShort },
+    restLow,
     months,
     shieldsFull,
     hullFull,

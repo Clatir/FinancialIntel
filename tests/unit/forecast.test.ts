@@ -6,7 +6,20 @@
 import { describe, expect, it } from 'vitest'
 import { course, courseIncome, courseInputOf, feesDue, restNeeds, type CourseInput } from '@shared/calc/course'
 import { computeFleet, layersSum, type FleetInput } from '@shared/calc/fleet'
-import { assumptionsOf, forecast, forecastInputOf, forecasts, FORECAST_DEFAULTS, sameAssumptions, type ForecastAssumptions, type ForecastInput } from '@shared/calc/forecast'
+import {
+  assumptionsOf,
+  forecast,
+  forecastInputOf,
+  forecasts,
+  FORECAST_DEFAULTS,
+  otherFieldsOf,
+  readScenario,
+  sameAssumptions,
+  unreadableScenarios,
+  type ForecastAssumptions,
+  type ForecastInput
+} from '@shared/calc/forecast'
+import { containerCostsByMonth } from '@shared/calc/plan'
 import { netAdjustments } from '@shared/calc/netWorth'
 import { createDefaultSettings } from '@shared/defaults'
 import { isAmountPath } from '@shared/merge'
@@ -14,6 +27,8 @@ import {
   balanceSchema,
   containerSchema,
   defaultCategoryId,
+  FORECAST_MAX_AMOUNT,
+  FORECAST_PCT_RANGE,
   loanSchema,
   MBANK_ACCOUNT_ID,
   monthPlanSchema,
@@ -60,7 +75,6 @@ const input = (over: Partial<ForecastInput> = {}, c: Partial<CourseInput> = {}):
     household: 0,
     given: { open: 0, repayments: [] },
     later: new Map(),
-    loanCosts: 0,
     ...over
   }
 }
@@ -134,6 +148,18 @@ describe('AP-44: prognoza wieloletnia (1.17.0)', () => {
     expect([ok.shieldsEmpty, ok.shortFrom]).toEqual([null, null])
   })
 
+  it('R2 przegląd: „Osłony do zera” – teraz, gdy resztka tego miesiąca je opróżnia (jak „Brakuje na koszty od”)', () => {
+    // 1 000 zł of shields, no hull; this month's plan still spends 1 500 over its energy left (0): the shields empty now,
+    // 500 lacking.
+    const f = forecast(input({ total: zl(1000) }, { shields: zl(1000), hull: 0, energy: { left: 0, needs: zl(1500) } }), 'base', flat, 1)
+    expect([f.shieldsEmpty, f.shortFrom]).toEqual(['2026-11', '2026-11'])
+    // A buoy of this month taking them whole (the hull pays nothing of it) – zero, nothing lacking.
+    const b = forecast(input({ total: zl(13000) }, { shields: zl(1000), extras: new Map([['2026-11', -zl(1000)]]) }), 'base', flat, 1)
+    expect([b.shieldsEmpty, b.shortFrom]).toEqual(['2026-11', null])
+    // The rest leaving them above zero: not now.
+    expect(forecast(input(), 'base', flat, 1).shieldsEmpty).toBeNull()
+  })
+
   it('T485: rok osiągnięcia celu – w roku 2 szybciej przy wyższych wpływach', () => {
     // The shields and the hull full: from January 500 zł a month to the goal (5 500 by November); December of year 2 –
     // 500 more (no growth) or 700 (3 300 in: 800 over the shields' refill).
@@ -146,18 +172,23 @@ describe('AP-44: prognoza wieloletnia (1.17.0)', () => {
     expect(forecast(input({ total: zl(30200) }, { hull: zl(15000), goals: [{ ...goal, amount: zl(6200) }] }), 'base', flat, 2).goalEta).toEqual({ g1: '2026-11' })
   })
 
-  it('T486: rata pożyczki wziętej – w średnich kosztach w roku 1, w swoich miesiącach od roku 2 (koszty bez niej): siła floty +12 000 co rok', () => {
+  it('T486: rata pożyczki wziętej w swoich miesiącach każdego roku, koszty bez niej: siła floty +12 000 co rok', () => {
     // The costs 2 500 hold the installment of 500 (consumption 2 000): the net worth grows 1 000 a month whether the loan
-    // is paid or not. The debt 9 000 – 18 installments from December; 6 of them in year 2.
+    // is paid or not. The debt 9 000 – 18 installments from December: 12 in year 1 (the course's extras), 6 in year 2.
     const installments = Array.from({ length: 18 }, (_, i) => ({ month: `${2026 + Math.floor((11 + i) / 12)}-${String(((11 + i) % 12) + 1).padStart(2, '0')}`, amount: zl(500) }))
     expect(installments[0]!.month).toBe('2026-12')
     expect(installments.at(-1)!.month).toBe('2028-05')
+    const extras = new Map(installments.filter((i) => i.month <= '2027-11').map((i) => [i.month, -i.amount]))
     const later = new Map(installments.filter((i) => i.month > '2027-11').map((i) => [i.month, -i.amount]))
-    const f = forecast(input({ later, loanCosts: zl(500) }, { debt: zl(9000), installments }), 'base', flat, 3)
+    const f = forecast(input({ later }, { debt: zl(9000), installments, extras, loanCosts: zl(500) }), 'base', flat, 3)
     expect(f.now).toBe(zl(12000))
     expect(nets(f)).toEqual([zl(24000), zl(36000), zl(48000)])
     expect(f.years.map((y) => y.debt)).toEqual([zl(3000), 0, 0])
-    expect(f.years.map((y) => y.costs)).toEqual([zl(30000), zl(24000), zl(24000)])
+    expect(f.years.map((y) => y.costs)).toEqual([zl(24000), zl(24000), zl(24000)])
+    // The course spends the average without the installments; its range reads the average whole (Mostek's).
+    const c = course({ ...courseInput({ debt: zl(9000), installments, extras, loanCosts: zl(500) }), income: { work: zl(3000), trading: 0 } }, 'noXtb')
+    expect(c.months[0]!.shields + c.months[0]!.hull).toBe(zl(21000) + zl(3000) - zl(2000) - zl(500))
+    expect(c.months[0]!.range).toBeCloseTo((c.months[0]!.shields + c.months[0]!.hull - zl(8500)) / zl(2500))
   })
 
   it('T487: spłaty pożyczki udzielonej – pieniądze rosną, należność maleje, siła floty bez zmian; gospodarstwo i podatek', () => {
@@ -191,6 +222,18 @@ describe('AP-44: prognoza wieloletnia (1.17.0)', () => {
     // 500 % – out of range: the scenario's defaults.
     expect(a.cautious).toEqual(FORECAST_DEFAULTS.cautious)
     expect(a.optimistic).toEqual(FORECAST_DEFAULTS.optimistic)
+    // …said, never silently (R2 review – AP-15): unreadable, and kept in the file as it is (the next save writes it back).
+    expect(unreadableScenarios(parsed.intel.forecast)).toEqual(['cautious'])
+    expect(parsed.intel.forecast?.cautious).toEqual({ wages: 500, inflation: 2, deliveries: 0, oneOff: 0 })
+    expect(settingsSchema.parse(JSON.parse(JSON.stringify(parsed))).intel.forecast?.cautious).toEqual({ wages: 500, inflation: 2, deliveries: 0, oneOff: 0 })
+    expect(unreadableScenarios(settingsSchema.parse({ ...s0, intel: { ...s0.intel, forecast: { base: 'zły', optimistic: { ...FORECAST_DEFAULTS.optimistic, deliveries: FORECAST_MAX_AMOUNT } } } }).intel.forecast)).toEqual(['base'])
+    // The fields' bound is the file's: one grosz more – unreadable.
+    expect(readScenario({ ...FORECAST_DEFAULTS.base, oneOff: FORECAST_MAX_AMOUNT })).not.toBeNull()
+    expect(readScenario({ ...FORECAST_DEFAULTS.base, oneOff: FORECAST_MAX_AMOUNT + 1 })).toBeNull()
+    expect(readScenario({ ...FORECAST_DEFAULTS.base, wages: FORECAST_PCT_RANGE[1] + 0.5 })).toBeNull()
+    // A newer version's fields beside the four – kept by an edit and by „domyślne”.
+    expect(otherFieldsOf(parsed.intel.forecast?.base)).toEqual({ later: 'x' })
+    expect(otherFieldsOf('zły')).toEqual({})
     expect(sameAssumptions(a.optimistic, FORECAST_DEFAULTS.optimistic)).toBe(true)
     expect(sameAssumptions(a.base, FORECAST_DEFAULTS.base)).toBe(false)
     expect(isAmountPath(['settings', 'intel', 'forecast', 'base', 'deliveries'])).toBe(true)
@@ -257,13 +300,16 @@ describe('AP-44: wejście prognozy ze stanu silnika', () => {
   it('rok 1 = kurs z ekranu; siła floty teraz = przegląd roczny; boje, pożyczki i rata w średniej na kolejne lata', () => {
     const f = computeFleet(fleetInput)
     expect(layersSum(f)).toBe(f.total)
-    const ci = courseInputOf(f, { settings, plans, goals: [], scheduled, transactions })!
-    const fi = forecastInputOf(f, ci, { scheduled, transactions, containers: [rata] })
+    const ci = courseInputOf(f, { settings, plans, goals: [], scheduled, transactions, containers: [rata] })!
+    const fi = forecastInputOf(f, ci, { scheduled, transactions })
     expect(fi.work).toBe(courseIncome(f.incomeStats, 'noXtb').work)
     expect(fi.work).toBe(zl(5000))
-    // The average costs (3 500 + 500) hold the installment: 500 a month.
+    // The average costs (3 500 + 500) hold the installment: 500 a month - the course spends without it, the installments
+    // leave in their months; November's is the hold's due this month (its container - `restNeeds`), not an extra.
     expect(f.costs.average).toBe(zl(4000))
-    expect(fi.loanCosts).toBe(zl(500))
+    expect(ci.loanCosts).toBe(zl(500))
+    expect(ci.extras.get('2026-11') ?? 0).toBe(0)
+    expect([ci.extras.get('2026-12'), ci.extras.get('2027-03'), ci.extras.get('2027-11')]).toEqual([-zl(500), -zl(500) - zl(1200), -zl(500)])
     // The later years (from December 2027): the buoy every March, the wedding, Tomek's 500 back, the 2 installments left
     // after November 2027 (December, January).
     const expected = new Map<string, number>([
@@ -281,5 +327,74 @@ describe('AP-44: wejście prognozy ze stanu silnika', () => {
     const [adj] = netAdjustments([f.today], { loans: [given, taken], transactions, containers: [rata], household: f.household, today: f.today })
     expect(fc.now).toBe(f.total + adj!)
     expect(fc.now).toBe(f.total + zl(500) - zl(7500))
+  })
+
+  it('R2 przegląd: indeks płatności kontenerów po miesiącu – raz na listę operacji', () => {
+    const by = containerCostsByMonth(transactions)
+    expect(containerCostsByMonth(transactions)).toBe(by)
+    expect([...by.get(rata.id)!]).toEqual([
+      ['2026-08', zl(500)],
+      ['2026-09', zl(500)],
+      ['2026-10', zl(500)]
+    ])
+    expect(by.size).toBe(1)
+  })
+})
+
+describe('R2 przegląd: pożyczka wzięta w kursie i prognozie liczy się jak w silniku', () => {
+  const s0 = createDefaultSettings(AT).settings
+  const settings: Settings = { ...s0, budget: { ...s0.budget, start: '2026-08-01', initial: { shields: 0, hull: zl(4000), goals: {} } } }
+  // 12 000 zł borrowed, 12 installments of 1 000 from December; 3 000 in and 3 000 of costs a month.
+  const loanOf = () =>
+    loanSchema.parse({
+      ...base(),
+      name: 'Pożyczka od brata',
+      direction: 'taken',
+      amount: zl(12000),
+      date: '2026-08-02',
+      schedule: Array.from({ length: 12 }, (_, i) => ({ id: nextId(), date: `${2026 + Math.floor((11 + i) / 12)}-${String(((11 + i) % 12) + 1).padStart(2, '0')}-10`, amount: zl(1000) }))
+    })
+  const history = (loanId: string) => [
+    ...['2026-08', '2026-09', '2026-10'].flatMap((m) => [tx(`${m}-15`, -zl(3000), { categoryId: FOOD }), tx(`${m}-25`, zl(3000), { kind: 'income', counterparty: 'Pracodawca', categoryId: null })]),
+    tx('2026-08-02', zl(12000), { kind: 'loan', loanId, categoryId: null })
+  ]
+  const plans = [monthPlanSchema.parse({ ...base(), month: '2026-08', salary: zl(3000), envelopes: {} })]
+  const balances = [balanceSchema.parse({ ...base(), date: '2026-08-01', accountId: MBANK_ACCOUNT_ID, kind: 'opening', amount: zl(8000) })]
+
+  it('scenariusz recenzji: pożyczka bez kontenera – raty wychodzą w roku 1, siła floty bez wzrostu (8 000, nie 20 000)', () => {
+    const loan = loanOf()
+    const transactions = history(loan.id)
+    const f = computeFleet({ settings, transactions, loans: [loan], months: plans, balances, now: '2026-11-04T12:00:00+01:00' })
+    expect([f.total, f.debt]).toEqual([zl(20000), zl(12000)])
+    const ci = courseInputOf(f, { settings, plans, goals: [], scheduled: [], transactions, containers: [] })!
+    const fc = forecast(forecastInputOf(f, ci, { scheduled: [], transactions }), 'base', { ...flat, inflation: 0 }, 2)
+    expect(fc.now).toBe(zl(8000))
+    expect(fc.years[0]).toMatchObject({ money: zl(8000), debt: 0, net: zl(8000), short: 0 })
+    expect(fc.years[1]!.net).toBe(zl(8000))
+  })
+
+  it('kurs = silnik w miesiącu z ratą – spłata z osłon (bez kontenera) i rata z kontenera ładowni', () => {
+    for (const withContainer of [false, true]) {
+      const loan = loanOf()
+      const rata = containerSchema.parse({ ...base(), name: 'Rata', type: 'installment', amount: zl(1000), dueMonth: '2026-12', dueDay: 10, from: '2026-12', until: '2027-11', loanId: loan.id })
+      const containers = withContainer ? [rata] : []
+      const before = history(loan.id)
+      // Now: the last evening of November. Then December as the course assumes it: the salary on the 1st, the installment
+      // on the 10th, the costs on the 15th, the income on the 28th.
+      const a = computeFleet({ settings, transactions: before, loans: [loan], containers, months: plans, balances, now: '2026-11-30T20:00:00+01:00' })
+      const december = [
+        withContainer ? tx('2026-12-10', -zl(1000), { categoryId: null, containerId: rata.id }) : tx('2026-12-10', -zl(1000), { kind: 'loan', loanId: loan.id, categoryId: null }),
+        tx('2026-12-15', -zl(3000), { categoryId: FOOD }),
+        tx('2026-12-28', zl(3000), { kind: 'income', counterparty: 'Pracodawca', categoryId: null })
+      ]
+      const b = computeFleet({ settings, transactions: [...before, ...december], loans: [loan], containers, months: plans, balances, now: '2026-12-31T20:00:00+01:00' })
+      const ci = courseInputOf(a, { settings, plans, goals: [], scheduled: [], transactions: before, containers })!
+      const m = course({ ...ci, income: courseIncome(a.incomeStats, 'noXtb') }, 'noXtb').months[0]!
+      // The money outside the course's layers (November's energy left - the loot) as it was; the rest as the engine's.
+      const outside = a.total - a.shields.amount - a.hull.amount
+      expect(b.total).toBe(a.total - zl(1000))
+      expect(m.shields + m.hull + outside).toBe(b.total)
+      expect(b.debt).toBe(zl(11000))
+    }
   })
 })

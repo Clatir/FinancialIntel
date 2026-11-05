@@ -579,21 +579,28 @@ export type ForecastScenario = (typeof FORECAST_SCENARIOS)[number]
  * One scenario's assumptions of the forecast for years (AP-44, T488) – typed by the captain, shared by the computers:
  * the income from work and the costs grow by % a year, the ICTTJ deliveries a year are the captain's assumption (never
  * read from ICTTJ – the trading is not FI's), the one-off expenses a year in today's prices. A field out of its range
- * (a hand-edited fi.json) – the whole scenario counts by its defaults (`calc/forecast.ts`).
+ * (a hand-edited fi.json) – the scenario counts by its defaults and the screen says so (`unreadableScenarios`).
  */
+export const FORECAST_PCT_RANGE = [-50, 100] as const
+/** The most a scenario's amount a year may be: 100 000 000 zł (the fields refuse more with a message – AP-15). */
+export const FORECAST_MAX_AMOUNT = 100_000_000_00
 export const forecastAssumptionsSchema = z.looseObject({
-  wages: z.number().min(-50).max(100),
-  inflation: z.number().min(-50).max(100),
-  deliveries: grosze.min(0).max(100_000_000_00),
-  oneOff: grosze.min(0).max(100_000_000_00)
+  wages: z.number().min(FORECAST_PCT_RANGE[0]).max(FORECAST_PCT_RANGE[1]),
+  inflation: z.number().min(FORECAST_PCT_RANGE[0]).max(FORECAST_PCT_RANGE[1]),
+  deliveries: grosze.min(0).max(FORECAST_MAX_AMOUNT),
+  oneOff: grosze.min(0).max(FORECAST_MAX_AMOUNT)
 })
 export type ForecastAssumptions = z.infer<typeof forecastAssumptionsSchema>
 
-/** The scenarios edited (AP-44): absent – the scenario's defaults. */
+/**
+ * The scenarios edited (AP-44): absent – the scenario's defaults. One that does not read is kept as it is in the file
+ * (R2 review – never dropped on the next save, never silently the defaults): `calc/forecast.ts` reads it (`readScenario`).
+ */
+const savedScenario = z.union([forecastAssumptionsSchema, z.unknown()]).optional()
 export const forecastSettingsSchema = z.looseObject({
-  cautious: forecastAssumptionsSchema.optional().catch(undefined),
-  base: forecastAssumptionsSchema.optional().catch(undefined),
-  optimistic: forecastAssumptionsSchema.optional().catch(undefined)
+  cautious: savedScenario,
+  base: savedScenario,
+  optimistic: savedScenario
 })
 export type ForecastSettings = z.infer<typeof forecastSettingsSchema>
 

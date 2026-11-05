@@ -13,12 +13,15 @@ import {
   FORECAST_SCENARIOS,
   forecastInputOf,
   forecasts,
+  otherFieldsOf,
   sameAssumptions,
+  unreadableScenarios,
   SCENARIO_LABEL,
   type Forecast,
   type ForecastAssumptions,
   type ForecastScenario
 } from '@shared/calc/forecast'
+import { FORECAST_MAX_AMOUNT, FORECAST_PCT_RANGE } from '@shared/schema'
 import { countLabel, decimalText, percentText, plMonth as mm, rangeText } from '@shared/format'
 import { AmountField, amountsHidden, plnText } from '../../components/fields'
 import { NumberField, Panel, Segmented, cx } from '../../components/ui'
@@ -49,25 +52,41 @@ function readYears(): Years {
   }
 }
 
-/** A scenario's assumptions saved (T488); null – back to its defaults. */
-export function setForecastScenario(s: ForecastScenario, a: ForecastAssumptions | null): boolean {
+/** The scenario as the file holds it now (raw – an unreadable one too). */
+const scenarioNow = (s: ForecastScenario): unknown => useData.getState().fi?.settings.intel.forecast?.[s]
+
+/** A scenario's content in the file (T488): `next` from what it holds now; undefined – none (its defaults). */
+function writeScenario(s: ForecastScenario, next: (now: unknown) => unknown): boolean {
   return updateSettings((f) => {
     const forecast = { ...(f.settings.intel.forecast ?? {}) }
-    if (a) forecast[s] = { ...(forecast[s] ?? {}), ...a }
-    else delete forecast[s]
+    const value = next(forecast[s])
+    if (value === undefined) delete forecast[s]
+    else forecast[s] = value
     return { ...f, settings: { ...f.settings, intel: { ...f.settings.intel, forecast } } }
   })
 }
 
-/** „domyślne” (AP-22): the scenario back to its defaults with „Cofnij” – taken back only while it still is by them. */
+/** A scenario's assumptions saved (T488): the four over what it holds – a newer version's fields kept (R2 review). */
+export function setForecastScenario(s: ForecastScenario, a: ForecastAssumptions): boolean {
+  return writeScenario(s, (now) => ({ ...otherFieldsOf(now), ...a }))
+}
+
+/**
+ * „domyślne” (AP-22, R2 review): the scenario back to its defaults – a newer version's fields stay (with the defaults
+ * written out), without them the scenario goes; „Cofnij” brings back what it was, whole – only while it still is as
+ * „domyślne” left it.
+ */
 function resetScenario(s: ForecastScenario): void {
-  const before = useData.getState().fi?.settings.intel.forecast?.[s]
-  if (!before || !setForecastScenario(s, null)) return
+  const before = scenarioNow(s)
+  if (before === undefined) return
+  const others = otherFieldsOf(before)
+  const left = Object.keys(others).length ? { ...others, ...FORECAST_DEFAULTS[s] } : undefined
+  if (!writeScenario(s, () => left)) return
   toast(`Scenariusz ${SCENARIO_LABEL[s]}: założenia domyślne.`, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
-      if (useData.getState().fi?.settings.intel.forecast?.[s]) toast(`Scenariusz ${SCENARIO_LABEL[s]} zmieniony od tego czasu – zostaje.`, 'info', 6000)
-      else setForecastScenario(s, { wages: before.wages, inflation: before.inflation, deliveries: before.deliveries, oneOff: before.oneOff })
+      if (JSON.stringify(scenarioNow(s)) !== JSON.stringify(left)) toast(`Scenariusz ${SCENARIO_LABEL[s]} zmieniony od tego czasu – zostaje.`, 'info', 6000)
+      else writeScenario(s, () => before)
     }
   })
 }
@@ -83,7 +102,6 @@ function assumptionsText(a: Readonly<Record<ForecastScenario, ForecastAssumption
 export function ForecastPanel({ fleet, input }: { fleet: FleetState; input: CourseInput | null }) {
   const scheduled = useRecordList('scheduled')
   const transactions = useRecordList('transactions')
-  const containers = useRecordList('containers')
   const cargo = useCargoStatuses()
   const saved = useData((s) => s.fi?.settings.intel.forecast)
   const [years, setYearsState] = useState<Years>(readYears)
@@ -95,8 +113,10 @@ export function ForecastPanel({ fleet, input }: { fleet: FleetState; input: Cour
       /* storage unavailable: the choice lives for the session */
     }
   }
-  const fi = useMemo(() => (input ? forecastInputOf(fleet, input, { scheduled, transactions, containers, cargo }) : null), [fleet, input, scheduled, transactions, containers, cargo])
+  const fi = useMemo(() => (input ? forecastInputOf(fleet, input, { scheduled, transactions, cargo }) : null), [fleet, input, scheduled, transactions, cargo])
   const assumptions = useMemo(() => assumptionsOf(saved), [saved])
+  // A scenario the file holds but cannot read (R2 review – AP-15): counted by its defaults, said here, kept in the file.
+  const unreadable = useMemo(() => unreadableScenarios(saved), [saved])
   const results = useMemo(() => (fi ? forecasts(fi, assumptions, Number(years)) : []), [fi, assumptions, years])
   const edit = (s: ForecastScenario, patch: Partial<ForecastAssumptions>) => {
     const next = { ...assumptions[s], ...patch }
@@ -205,11 +225,17 @@ export function ForecastPanel({ fleet, input }: { fleet: FleetState; input: Cour
               <Row label="Zasięg na koniec" values={results.map((f) => (f.years.at(-1)!.range == null ? '—' : rangeText(f.years.at(-1)!.range!)))} />
             </tbody>
           </table>
-          <AssumptionsTable assumptions={assumptions} edit={edit} />
+          <AssumptionsTable assumptions={assumptions} unreadable={unreadable} edit={edit} />
+          {unreadable.length > 0 && (
+            <span className="text-[11.5px] text-accent" data-testid="intel-forecast-unreadable">
+              {unreadable.length > 1 ? 'Scenariusze' : 'Scenariusz'} {unreadable.map((s) => SCENARIO_LABEL[s]).join(', ')}: zapis w folderze danych nieczytelny (np. po ręcznej
+              zmianie fi.json) – prognoza liczy {unreadable.length > 1 ? 'je' : 'go'} z założeniami domyślnymi. Zapis zostaje w pliku; zmiana pola albo „domyślne” go zastąpi.
+            </span>
+          )}
           <span className="text-[11px] text-dim" data-testid="intel-forecast-note">
             Prognoza – nie gwarancja. Założenia: {assumptionsText(assumptions)}. Rok 1 to kurs na 12 miesięcy bez wypłat z XTB (wpływy z pracy – mediana z 12 miesięcy) z
             dostawami scenariusza; od roku 2 wpływy z pracy rosną o wzrost, koszty i pensja planu – o inflację, wydatki jednorazowe w ostatnim miesiącu roku z osłon (w cenach
-            dziś), boje w swoich miesiącach (roczne co roku), pożyczki według harmonogramu. Dostawy z ICTTJ to tylko Twoje założenie – prognoza nie czyta wyników tradingu.
+            dziś), boje w swoich miesiącach (roczne co roku), pożyczki według harmonogramu (raty pożyczek wziętych w swoich miesiącach, średnie koszty bez nich). Dostawy z ICTTJ to tylko Twoje założenie – prognoza nie czyta wyników tradingu.
             Siła floty netto: pieniądze na kontach + należności − dług − braki (rezerwa podatkowa poza nią – PIT-38 w ciągu roku); bez IKE, IKZE, PPK i inwestycji.
           </span>
         </div>
@@ -234,7 +260,17 @@ function Row({ label, values, late, title, testId }: { label: string; values: st
 }
 
 /** The scenarios' assumptions, each saved on leaving its field (T488); „domyślne” under a scenario changed. */
-function AssumptionsTable({ assumptions, edit }: { assumptions: Readonly<Record<ForecastScenario, ForecastAssumptions>>; edit: (s: ForecastScenario, patch: Partial<ForecastAssumptions>) => void }) {
+function AssumptionsTable({
+  assumptions,
+  unreadable,
+  edit
+}: {
+  assumptions: Readonly<Record<ForecastScenario, ForecastAssumptions>>
+  unreadable: readonly ForecastScenario[]
+  edit: (s: ForecastScenario, patch: Partial<ForecastAssumptions>) => void
+}) {
+  // „domyślne” under a scenario changed – or saved unreadable (R2 review).
+  const resettable = (s: ForecastScenario) => unreadable.includes(s) || !sameAssumptions(assumptions[s], FORECAST_DEFAULTS[s])
   const pct = (field: 'wages' | 'inflation', what: string) =>
     FORECAST_SCENARIOS.map((s) => (
       <td key={s} className="py-[2px] pl-2">
@@ -244,8 +280,8 @@ function AssumptionsTable({ assumptions, edit }: { assumptions: Readonly<Record<
             value={assumptions[s][field]}
             step={0.5}
             commitOnBlur
-            range={[-50, 100]}
-            isValid={(v) => v != null && v >= -50 && v <= 100}
+            range={FORECAST_PCT_RANGE}
+            isValid={(v) => v != null && v >= FORECAST_PCT_RANGE[0] && v <= FORECAST_PCT_RANGE[1]}
             onChange={(v) => v != null && edit(s, { [field]: v })}
             aria-label={`${what} – scenariusz ${SCENARIO_LABEL[s]}`}
             data-testid={`intel-forecast-${field}-${s}`}
@@ -262,7 +298,11 @@ function AssumptionsTable({ assumptions, edit }: { assumptions: Readonly<Record<
             className="h-[22px] w-[96px]"
             value={assumptions[s][field]}
             allowEmpty
-            onChange={(v) => edit(s, { [field]: v ?? 0 })}
+            onChange={(v) => {
+              // The file's bound (R2 review – AP-15): more is refused at the field, never saved to read back as the defaults.
+              if (v != null && v > FORECAST_MAX_AMOUNT) toast(`Najwyżej ${plnText(FORECAST_MAX_AMOUNT)} zł rocznie – zostaje poprzednia.`, 'error', 6000)
+              else edit(s, { [field]: v ?? 0 })
+            }}
             aria-label={`${what} – scenariusz ${SCENARIO_LABEL[s]}`}
             data-testid={`intel-forecast-${field}-${s}`}
           />
@@ -306,12 +346,12 @@ function AssumptionsTable({ assumptions, edit }: { assumptions: Readonly<Record<
           </td>
           {amount('oneOff', 'Wydatki jednorazowe rocznie')}
         </tr>
-        {FORECAST_SCENARIOS.some((s) => !sameAssumptions(assumptions[s], FORECAST_DEFAULTS[s])) && (
+        {FORECAST_SCENARIOS.some(resettable) && (
           <tr>
             <td />
             {FORECAST_SCENARIOS.map((s) => (
               <td key={s} className="pt-0.5 text-right">
-                {!sameAssumptions(assumptions[s], FORECAST_DEFAULTS[s]) && (
+                {resettable(s) && (
                   <button type="button" className="text-[11px] text-muted hover:text-fg-strong" onClick={() => resetScenario(s)} data-testid={`intel-forecast-reset-${s}`}>
                     domyślne
                   </button>

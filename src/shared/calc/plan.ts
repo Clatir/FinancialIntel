@@ -52,6 +52,29 @@ export function costsByMonth(transactions: readonly Transaction[]): ReadonlyMap<
   return out
 }
 
+/** Each list's costs of the containers' payments, by container and month, once per list (R2 review, as `costsByMonth`). */
+const containerCostsMemo = new WeakMap<readonly Transaction[], ReadonlyMap<string, ReadonlyMap<string, number>>>()
+
+/**
+ * The net costs (`costOf`) of each container's payments month by month – the taken loans' share of the average costs
+ * (`courseInputOf`, T486) reads it on every engine run without walking the history again. Shared, never to be changed.
+ */
+export function containerCostsByMonth(transactions: readonly Transaction[]): ReadonlyMap<string, ReadonlyMap<string, number>> {
+  const memo = containerCostsMemo.get(transactions)
+  if (memo) return memo
+  const out = new Map<string, Map<string, number>>()
+  for (const t of transactions) {
+    if (t.containerId == null) continue
+    const c = costOf(t)
+    if (!c) continue
+    const m = monthOf(t.date)
+    const by = out.get(t.containerId) ?? out.set(t.containerId, new Map()).get(t.containerId)!
+    by.set(m, (by.get(m) ?? 0) + c)
+  }
+  containerCostsMemo.set(transactions, out)
+  return out
+}
+
 /** Each list's operations by month, once per list (W30, W38): a month's debriefing never filters the whole history. */
 const txMonths = new WeakMap<readonly Transaction[], Map<string, Transaction[]>>()
 

@@ -12,8 +12,9 @@
  * month from the shields (in today's prices – × the inflation), the buoys in their months (a yearly one every year).
  *
  * T486: the loans by their schedules – a given loan's installments come back in their months (the receivable falls by
- * them), a taken loan's (its cargo's container – „własna rata”) are in the average costs the first year (the course's
- * rule) and in their months from the second one: the costs from then on without the share the average holds of them.
+ * them), a taken loan's leave the money in their months every year, the first one too (the course's – `courseInputOf`:
+ * a loan op from the shields or its cargo container, „własna rata”), the costs without the share the average holds of
+ * the loans' containers (`CourseInput.loanCosts`) – never paid twice, nor after the last installment, nor never.
  *
  * T487: the net worth at each year's end – as the year's review counts it (F24): the money on the accounts (the course's
  * shields, hull and goals, the rest of the layers as they are now, less what this month still spends from the energy and
@@ -21,14 +22,13 @@
  * the loans given still open), less the debt (the taken loans after their installments) and less what the money lacked
  * so far (the course's `short`: its months end the shields at zero, the lack is the captain's anyway). Pure.
  */
-import type { Container, Scheduled, Transaction } from '../schema/records'
-import { FORECAST_SCENARIOS, type ForecastAssumptions, type ForecastScenario, type ForecastSettings } from '../schema/budget'
+import type { Scheduled, Transaction } from '../schema/records'
+import { FORECAST_SCENARIOS, forecastAssumptionsSchema, type ForecastAssumptions, type ForecastScenario, type ForecastSettings } from '../schema/budget'
 import type { CargoStatus } from './cargoStatus'
 import { COURSE_MONTHS, course, courseIncome, feesDue, type Course, type CourseInput, type CourseMonth } from './course'
 import { addMonths, lastDayOf, monthOf } from './dates'
 import type { FleetState } from './fleet'
-import { monthsBefore } from './history'
-import { costOf, sum } from './operations'
+import { sum } from './operations'
 import { openDays, scheduledDays } from './scheduled'
 
 export { FORECAST_SCENARIOS, type ForecastAssumptions, type ForecastScenario }
@@ -48,14 +48,35 @@ export const FORECAST_DEFAULTS: Readonly<Record<ForecastScenario, ForecastAssump
   optimistic: { wages: 7, inflation: 2.5, deliveries: 0, oneOff: 0 }
 }
 
-/** The assumptions in force: the saved scenario (its four fields – a newer version's kept in the file only), else its defaults. */
+/** The four assumptions' keys: a scenario's other fields are a newer version's – kept as they are (T488). */
+export const ASSUMPTION_KEYS = ['wages', 'inflation', 'deliveries', 'oneOff'] as const
+
+/** A scenario as the file holds it: its four assumptions, or null – absent, or unreadable (a field out of its range). */
+export function readScenario(v: unknown): ForecastAssumptions | null {
+  if (v === undefined) return null
+  const p = forecastAssumptionsSchema.safeParse(v)
+  return p.success ? { wages: p.data.wages, inflation: p.data.inflation, deliveries: p.data.deliveries, oneOff: p.data.oneOff } : null
+}
+
+/** The assumptions in force: the saved scenario's four, else its defaults (an unreadable one – said, `unreadableScenarios`). */
 export function assumptionsOf(saved: ForecastSettings | null | undefined): Record<ForecastScenario, ForecastAssumptions> {
   const out = {} as Record<ForecastScenario, ForecastAssumptions>
-  for (const s of FORECAST_SCENARIOS) {
-    const v = saved?.[s]
-    out[s] = v ? { wages: v.wages, inflation: v.inflation, deliveries: v.deliveries, oneOff: v.oneOff } : FORECAST_DEFAULTS[s]
-  }
+  for (const s of FORECAST_SCENARIOS) out[s] = readScenario(saved?.[s]) ?? FORECAST_DEFAULTS[s]
   return out
+}
+
+/**
+ * The scenarios saved but unreadable (R2 review – AP-15, T488): kept in the file as they are, counted by their defaults –
+ * the screen says so, never silently.
+ */
+export function unreadableScenarios(saved: ForecastSettings | null | undefined): ForecastScenario[] {
+  return FORECAST_SCENARIOS.filter((s) => saved?.[s] !== undefined && readScenario(saved[s]) == null)
+}
+
+/** A scenario's fields beside the four (a newer version's): kept by an edit and by „domyślne” (T488). */
+export function otherFieldsOf(v: unknown): Record<string, unknown> {
+  if (v == null || typeof v !== 'object' || Array.isArray(v)) return {}
+  return Object.fromEntries(Object.entries(v).filter(([k]) => !(ASSUMPTION_KEYS as readonly string[]).includes(k)))
 }
 
 /** The same assumptions (the screen's „domyślne” shown only when they differ). */
@@ -82,20 +103,17 @@ export interface ForecastInput {
    * back, the taken loans' installments going out (T486).
    */
   later: ReadonlyMap<string, number>
-  /** The taken loans' installments the average costs hold, a month (T486): the costs after the first year are without it. */
-  loanCosts: number
 }
 
 /**
  * The forecast's input from the engine's state now, the course's input and the records (Wywiad): the money of the later
  * years (the buoys over the whole horizon, the loans' schedules), the loans given, the household, the tanks' part of
- * this month's fees (`cargo` – AP-10's state), the taken loans' share of the average costs (their containers' payments
- * in the months the average reads – `monthsBefore`, as `averageCosts`; the assumed costs – none known).
+ * this month's fees (`cargo` – AP-10's state). The taken loans' share of the average costs is the course's (`loanCosts`).
  */
 export function forecastInputOf(
   fleet: FleetState,
   input: CourseInput,
-  r: { scheduled: readonly Scheduled[]; transactions: readonly Transaction[]; containers: readonly Container[]; cargo?: readonly CargoStatus[] }
+  r: { scheduled: readonly Scheduled[]; transactions: readonly Transaction[]; cargo?: readonly CargoStatus[] }
 ): ForecastInput {
   const yearEnd = addMonths(input.month, COURSE_MONTHS)
   const end = addMonths(input.month, COURSE_MONTHS * FORECAST_YEARS)
@@ -108,9 +126,7 @@ export function forecastInputOf(
     if (d.scheduled.amount != null) add(monthOf(d.date), d.scheduled.amount)
   const repayments: Array<{ month: string; amount: number }> = []
   let open = 0
-  const taken = new Set<string>()
   for (const l of fleet.loans) {
-    if (l.loan.direction === 'taken') taken.add(l.loan.id)
     if (l.loan.closedAt) continue
     if (l.loan.direction === 'given') {
       open += l.open
@@ -122,15 +138,6 @@ export function forecastInputOf(
       }
     } else for (const i of l.left) add(monthOf(i.date), -i.amount)
   }
-  // The taken loans' installments in the average costs (T486): their containers' payments in its months – a loan closed
-  // since too (its payments are still in the average, none ahead).
-  const window = fleet.costs.source === 'history' ? monthsBefore(fleet.historyMonths, fleet.month, 12) : []
-  const containers = new Set(r.containers.filter((c) => c.loanId != null && taken.has(c.loanId)).map((c) => c.id))
-  let held = 0
-  if (window.length && containers.size) {
-    const months = new Set(window)
-    for (const t of r.transactions) if (t.containerId != null && containers.has(t.containerId) && months.has(monthOf(t.date))) held += costOf(t)
-  }
   return {
     course: input,
     work: courseIncome(fleet.incomeStats, 'noXtb').work,
@@ -139,8 +146,7 @@ export function forecastInputOf(
     taxHold: fleet.taxHold,
     household: fleet.household.owed - fleet.household.deposit,
     given: { open, repayments },
-    later,
-    loanCosts: window.length ? Math.max(0, Math.round(held / window.length)) : 0
+    later
   }
 }
 
@@ -182,7 +188,10 @@ export interface Forecast {
   months: CourseMonth[]
   /** Each goal's month (null – not in the forecast; full now – this month). */
   goalEta: Record<string, string | null>
-  /** The first month the shields fall to zero (the hull, or nothing, pays the rest of it); null – never. */
+  /**
+   * The first month the shields fall to zero (the hull, or nothing, pays the rest of it) – this month when its rest
+   * empties them (R2 review, as `shortFrom`); null – never.
+   */
   shieldsEmpty: string | null
   /** The first month the money lacks (this month – its rest); null – never. */
   shortFrom: string | null
@@ -216,6 +225,7 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
   const goalEta: Record<string, string | null> = {}
   let deficit = 0
   let shortFrom: string | null = null
+  let shieldsEmpty: string | null = null
   let prev: CourseMonth | null = null
   for (let y = 1; y <= count; y++) {
     const inflation = (1 + a.inflation / 100) ** (y - 1)
@@ -225,7 +235,8 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
     const oneOff = Math.round(a.oneOff * inflation)
     const purchases = oneOff > 0 ? [{ month: last, goalId: null, amount: oneOff }] : []
     const work = Math.round(input.work * growth)
-    const costs = y === 1 ? c.costs : c.costs == null ? null : Math.max(0, Math.round((c.costs - input.loanCosts) * inflation))
+    // What the months spend (T486): the average without the taken loans' installments – those leave in their months.
+    const costs = c.costs == null ? null : Math.max(0, Math.round((c.costs - (c.loanCosts ?? 0)) * inflation))
     const from: CourseMonth | null = prev
     const run: Course = !from
       ? course({ ...c, income: { work, trading }, purchases: [...(c.purchases ?? []), ...purchases], horizon: COURSE_MONTHS }, 'noXtb')
@@ -241,6 +252,8 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
               return s == null ? null : Math.round(s * inflation)
             },
             costs,
+            // The installments are in `later` – the costs above are without them already.
+            loanCosts: 0,
             income: { work, trading },
             extras: between(input.later, start, last),
             purchases,
@@ -254,6 +267,9 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
     // A goal's first month (a later year's „now” is the year before's last month – named by it already).
     for (const [id, m] of Object.entries(run.goalEta)) if (goalEta[id] == null) goalEta[id] = m
     if (y === 1 && run.rest.short > 0) shortFrom = c.month
+    // This month's rest empties the shields (R2 review): „teraz”, as the lack.
+    if (y === 1 && run.restLow <= 0) shieldsEmpty = c.month
+    if (!shieldsEmpty) shieldsEmpty = run.months.find((m) => m.low <= 0)?.month ?? null
     if (!shortFrom) shortFrom = run.months.find((m) => m.short > 0)?.month ?? null
     months.push(...run.months)
     const end: CourseMonth = run.months.at(-1)!
@@ -288,7 +304,7 @@ export function forecast(input: ForecastInput, scenario: ForecastScenario, a: Fo
     years: out,
     months,
     goalEta,
-    shieldsEmpty: months.find((m) => m.low <= 0)?.month ?? null,
+    shieldsEmpty,
     shortFrom
   }
 }

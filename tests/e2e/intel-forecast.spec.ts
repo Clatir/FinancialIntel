@@ -71,6 +71,13 @@ test('AP-44: prognoza wieloletnia – scenariusze, założenia zapisane w fi.jso
     await deliveries.press('Tab')
     await expect.poll(async () => (await json(join(dataDir, 'fi.json'))).settings.intel.forecast?.optimistic?.deliveries).toBe(zl(12000))
     await expect(note).toContainText('dostawy z ICTTJ 12 000,00 zł/rok')
+    // Over the file's bound (R2 review – AP-15): refused at the field with a message, nothing saved.
+    await deliveries.click()
+    await deliveries.fill('200000000')
+    await deliveries.press('Tab')
+    await expect(page.getByText('Najwyżej 100 000 000,00 zł rocznie – zostaje poprzednia.')).toBeVisible()
+    await expect(deliveries).toHaveValue(/^12\s000,00$/)
+    expect((await json(join(dataDir, 'fi.json'))).settings.intel.forecast?.optimistic?.deliveries).toBe(zl(12000))
 
     // 10 years – kept on this computer.
     await panel.getByRole('radio', { name: '10 lat' }).click()
@@ -97,6 +104,55 @@ test('AP-44: prognoza wieloletnia – scenariusze, założenia zapisane w fi.jso
     await expect(panel.getByTestId('intel-forecast-chart').locator('text').first()).toHaveText('•••')
     await page.keyboard.press('Control+Shift+Digit4')
     await expect(base(1)).not.toHaveText('•••')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('R2 przegląd: scenariusz nieczytelny zostaje w pliku i jest nazwany; „domyślne” i „Cofnij” zachowują pola nowszej wersji', async () => {
+  const { month } = warsawNow()
+  const first = addMonths(month, -3)
+  const ended = monthRange(first, addMonths(month, -1))
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-forecast-raw-')), 'FinancialIntel')
+  const cautious = { wages: 500, inflation: 2, deliveries: 0, oneOff: 0 }
+  const base = { wages: 8, inflation: 1, deliveries: 0, oneOff: 0, later: 'x' }
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start: `${first}-01`, initial: { shields: 0, hull: zl(10000), goals: {} } }, intel: { ...s.intel, forecast: { cautious, base } } }),
+    records: {
+      balances: [{ date: `${first}-01`, accountId: MBANK, kind: 'opening', amount: zl(30000) }],
+      months: [{ month: first, salary: zl(4000), envelopes: {} }],
+      transactions: ended.map((m) => ({ date: `${m}-15`, accountId: MBANK, kind: 'expense', amount: -zl(3000), counterparty: 'Sklep', categoryId: FOOD }))
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  const saved = async () => (await json(join(dataDir, 'fi.json'))).settings.intel.forecast
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+9')
+    const panel = page.getByTestId('intel-forecast')
+    // 500 % – unreadable: named, counted by its defaults, never dropped.
+    await expect(panel.getByTestId('intel-forecast-unreadable')).toContainText('Scenariusz ostrożny: zapis w folderze danych nieczytelny')
+    await expect(panel.getByTestId('intel-forecast-wages-cautious')).toHaveValue('0')
+    // Another scenario's edit saves fi.json: the unreadable one stays as it was, the newer version's field of the base too.
+    await panel.getByTestId('intel-forecast-wages-optimistic').fill('6')
+    await panel.getByTestId('intel-forecast-wages-optimistic').press('Tab')
+    await expect.poll(async () => (await saved())?.optimistic?.wages).toBe(6)
+    expect((await saved())?.cautious).toEqual(cautious)
+    await panel.getByTestId('intel-forecast-inflation-base').fill('2')
+    await panel.getByTestId('intel-forecast-inflation-base').press('Tab')
+    await expect.poll(async () => (await saved())?.base).toEqual({ ...base, inflation: 2 })
+
+    // „domyślne”: the defaults written beside the newer version's field; „Cofnij” – the scenario whole again.
+    await panel.getByTestId('intel-forecast-reset-base').click()
+    await expect.poll(async () => (await saved())?.base).toEqual({ later: 'x', wages: 4, inflation: 3, deliveries: 0, oneOff: 0 })
+    await page.getByRole('button', { name: 'Cofnij', exact: true }).click()
+    await expect.poll(async () => (await saved())?.base).toEqual({ ...base, inflation: 2 })
+
+    // The unreadable one: „domyślne” takes it away (nothing of a newer version in it) – the note goes.
+    await panel.getByTestId('intel-forecast-reset-cautious').click()
+    await expect.poll(async () => (await saved())?.cautious ?? null).toBeNull()
+    await expect(panel.getByTestId('intel-forecast-unreadable')).toHaveCount(0)
     expect(errors).toEqual([])
   } finally {
     await app.close()

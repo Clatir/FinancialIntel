@@ -130,8 +130,10 @@ paths:
 
 - Prognoza wieloletnia (AP-44, T485–T487, `calc/forecast.ts`): rok 1 to `course` z tym samym wejściem (`courseInputOf`) –
   zmiana kursu zmienia prognozę (test „rok 1 = kurs”); lata dalej – założenia scenariusza, boje i harmonogramy pożyczek
-  z `later`. **Pułapka:** rata pożyczki wziętej jest w średnich kosztach – od roku 2 w miesiącach harmonogramu, koszty bez
-  niej (`loanCosts`), inaczej płaciłaby się dwa razy albo po ostatniej racie. Dostawy z ICTTJ – tylko założenie kapitana.
+  z `later`. **Pułapka (przegląd R2):** rata pożyczki wziętej wychodzi w swoim miesiącu w kursie i prognozie (`extras`,
+  także spłata z osłon bez kontenera), miesiące wydają średnie koszty bez płatności kontenerów pożyczek
+  (`CourseInput.loanCosts`) – inaczej rata płaci się dwa razy, po ostatniej racie albo wcale (dług maleje bez pieniędzy);
+  zasięg i cel kadłuba kursu – średnia cała (Mostek). Dostawy z ICTTJ – tylko założenie kapitana.
 
 ## Wydajność
 - Pamięć po rekordzie albo liście w `WeakMap` (`sortedOps`, `partsOf`, `costsByMonth`, `payeeKey`, `pastStates`); wyniki
