@@ -203,6 +203,22 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.intel` | obiekt | domyślnie pusty obiekt | Wywiad. |
 | `settings.intel.tagGoals` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Cel tagu na Mapie gwiezdnej: klucz tagu → identyfikator celu. |
 | `settings.intel.cpi` | mapa: tekst → dowolna wartość | domyślnie pusty obiekt | Inflacja CPI z GUS wpisana ręcznie: miesiąc RRRR-MM → zmiana rok do roku w procentach (liczba). |
+| `settings.intel.forecast` | obiekt | opcjonalne | Założenia prognozy wieloletniej (Wywiad) – brak scenariusza: jego założenia domyślne. Prognoza nie czyta wyników tradingu z ICTTJ. |
+| `settings.intel.forecast.cautious` | obiekt | opcjonalne | Scenariusz ostrożny: wszystkie cztery założenia albo żadne (wtedy domyślne). |
+| `settings.intel.forecast.cautious.wages` | liczba | wymagane | Wzrost wpływów z pracy w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.cautious.inflation` | liczba | wymagane | Inflacja kosztów i pensji planu w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.cautious.deliveries` | grosze (liczba całkowita) | wymagane | Dostawy z ICTTJ do budżetu rocznie – założenie kapitana (0 = bez dostaw). |
+| `settings.intel.forecast.cautious.oneOff` | grosze (liczba całkowita) | wymagane | Wydatki jednorazowe rocznie w cenach dzisiejszych (w ostatnim miesiącu każdego roku prognozy). |
+| `settings.intel.forecast.base` | obiekt | opcjonalne | Scenariusz bazowy: wszystkie cztery założenia albo żadne (wtedy domyślne). |
+| `settings.intel.forecast.base.wages` | liczba | wymagane | Wzrost wpływów z pracy w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.base.inflation` | liczba | wymagane | Inflacja kosztów i pensji planu w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.base.deliveries` | grosze (liczba całkowita) | wymagane | Dostawy z ICTTJ do budżetu rocznie – założenie kapitana (0 = bez dostaw). |
+| `settings.intel.forecast.base.oneOff` | grosze (liczba całkowita) | wymagane | Wydatki jednorazowe rocznie w cenach dzisiejszych (w ostatnim miesiącu każdego roku prognozy). |
+| `settings.intel.forecast.optimistic` | obiekt | opcjonalne | Scenariusz optymistyczny: wszystkie cztery założenia albo żadne (wtedy domyślne). |
+| `settings.intel.forecast.optimistic.wages` | liczba | wymagane | Wzrost wpływów z pracy w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.optimistic.inflation` | liczba | wymagane | Inflacja kosztów i pensji planu w procentach rocznie (od drugiego roku prognozy). |
+| `settings.intel.forecast.optimistic.deliveries` | grosze (liczba całkowita) | wymagane | Dostawy z ICTTJ do budżetu rocznie – założenie kapitana (0 = bez dostaw). |
+| `settings.intel.forecast.optimistic.oneOff` | grosze (liczba całkowita) | wymagane | Wydatki jednorazowe rocznie w cenach dzisiejszych (w ostatnim miesiącu każdego roku prognozy). |
 
 ### Operacje – `transactions/RRRR/RRRR-MM-DD_ULID.json`
 

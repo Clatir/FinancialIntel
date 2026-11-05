@@ -3909,3 +3909,50 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   zdanie o zasadzie „tylko do odczytu, nie zapisuj, gdy aplikacja działa” i „Opis formatu folderu i przykładowy skrypt ›”,
   otwiera w przeglądarce `FOLDER_FORMAT_PAGE` (plik w publicznym repozytorium – D61; `shared/update.ts`). Opisu nie ma
   w aplikacji (bez sieci link się nie otworzy) – w Ustawieniach, nie w F1, bo dotyczy folderu.
+- **T485** Prognoza wieloletnia (1.17.0, R2 – AP-44, D99: bez IKE / IKZE / PPK – F32 odrzucone, D88): `calc/forecast.ts`
+  `forecast` – czysta, deterministyczna, 1–10 lat (`FORECAST_YEARS`), trzy scenariusze (ostrożny, bazowy, optymistyczny).
+  **Rok 1 to kurs na 12 miesięcy** (`course` z tym samym wejściem `courseInputOf` – stan silnika teraz, resztka miesiąca
+  z energii, boje, spłaty pożyczek udzielonych; wpływy z pracy – mediana 12 miesięcy jak kurs „bez wypłat z XTB”, dostawy
+  scenariusza); test: 12 pierwszych miesięcy = miesiące kursu. Każdy następny rok – te same reguły miesięcy kursu (pensja
+  z osłon 1. dnia, raty celów, koszty po średniej, dokowanie D13) od końca roku poprzedniego, z założeniami roku: wpływy
+  z pracy × (1 + wzrost)^(rok − 1), koszty i pensja planu × (1 + inflacja)^(rok − 1) (pensja płaci koszty – jak propozycja
+  pensji ze średnich kosztów; cele warstw rosną z nią), dostawy z ICTTJ rocznie ÷ 12 co miesiąc – **tylko założenie
+  kapitana** (domyślnie „bez dostaw”; prognoza nie czyta ICTTJ ani wyników tradingu), wydatki jednorazowe rocznie
+  w ostatnim miesiącu roku z osłon (kadłub, gdy brakuje – jak zakup manewru), w cenach dziś (× inflacja). Boje w swoich
+  miesiącach na cały horyzont (roczna co roku, kwoty bez inflacji – wpisane przez kapitana), jak w kursie.
+- **T486** Prognoza – pieniądze poza warstwami kursu, ładownia i pożyczki (1.17.0, R2 – AP-44): reszta warstw (energia,
+  zbiorniki, depozyt domowników, łupy, cele bez pobierania) zostaje na stanie dziś – zbiorniki na koniec roku w tym samym
+  punkcie cyklu, płatności opłat są w średnich kosztach; minus to, co resztka miesiąca jeszcze wyda z energii
+  (`min(needs, left)` – T390) i ze zbiorników (opłaty tego miesiąca – `feesDue`, wydzielone z `restNeeds` bez zmiany jego
+  wyniku). Pożyczka udzielona: raty harmonogramu nieopłacone wracają w swoich miesiącach (zaległa – w tym, jak kurs),
+  należność maleje o nie. Pożyczka wzięta: rata to opłata ładowni – w roku 1 w średnich kosztach (reguła kursu), od roku 2
+  w miesiącach harmonogramu, a koszty bez części, którą średnia ma z rat (`loanCosts`: płatności kontenerów pożyczek
+  wziętych w miesiącach średniej ÷ ich liczba, także spłaconej już pożyczki; przyjęte koszty – 0) – inaczej po ostatniej
+  racie prognoza płaciłaby ją dalej. Dług na koniec roku – jak zasięg kursu (dług minus raty do miesiąca).
+- **T487** Siła floty netto na koniec roku (1.17.0, R2 – AP-44): jak przegląd roczny (F24, T449) – pieniądze na kontach
+  (osłony, kadłub i cele z kursu + reszta warstw – T486 – minus rezerwa podatkowa: PIT-38 płatny w ciągu roku) + należności
+  (saldo domowników jak dziś, pożyczki udzielone jeszcze otwarte) − dług − **wszystkie braki dotąd** (`short` kursu:
+  miesiąc kończy osłony na zerze, a tego, czego zabrakło, kapitan i tak nie ma – siła floty może spaść pod zero). „Teraz”
+  = konta + należności − dług (test: = przegląd roczny przez `netAdjustments`). Wynik też: miesiąc osiągnięcia każdego celu
+  (pierwszy w całej prognozie; pełny teraz – „teraz”), „Osłony do zera” – pierwszy miesiąc z najniższym punktem osłon 0
+  (resztę płaci kadłub albo brakuje), „Brakuje na koszty od” – pierwszy miesiąc z brakiem (resztka tego miesiąca – „teraz”),
+  zasięg na koniec roku.
+- **T488** Założenia scenariuszy w `fi.json` (1.17.0, R2 – AP-44; addytywnie, bez podbijania `SCHEMA_VERSION`):
+  `settings.intel.forecast.{cautious|base|optimistic}` = `{ wages, inflation, deliveries, oneOff }` (procenty rocznie
+  od −50 do 100; grosze ≥ 0), brak scenariusza – jego założenia domyślne (`FORECAST_DEFAULTS`: ostrożny 0 % / 5 %, bazowy
+  4 % / 3 %, optymistyczny 7 % / 2,5 %, bez dostaw i wydatków jednorazowych); pole spoza zakresu – cały scenariusz
+  domyślnie (`.catch(undefined)`), nieznane pola zachowane (`z.looseObject`). W `fi.json`, nie na komputerze: założenia to
+  plan kapitana jak plan miesiąca i CPI wpisane ręcznie (`settings.intel.cpi`) – mają być te same na każdym komputerze
+  i w folderze na OneDrive; zmiana przez scalanie trójstronne jak inne ustawienia (nazwy pól w `merge.ts`, kwoty
+  w `AMOUNT_FIELDS`, opis w `docs/format-folderu.md`). Liczba lat na ekranie (3 / 5 / 10, domyślnie 5) to wybór widoku –
+  na tym komputerze (`localStorage`, jak linia majątku). Pole zapisuje po wyjściu z pola; „domyślne” pod zmienionym
+  scenariuszem z „Cofnij” (cofa tylko, gdy scenariusz nadal jest domyślny – AP-22).
+- **T489** Zaokrąglenia i ekran prognozy (1.17.0, R2 – AP-44): każda kwota roku zaokrąglana raz do grosza (`Math.round`)
+  od dzisiejszej – czynnik roku jako liczba zmiennoprzecinkowa, nigdy zaokrąglona kwota roku poprzedniego × wzrost (test:
+  rok 4); dostawy rocznie ÷ 12 do grosza (rok może różnić się od wpisanej kwoty o kilka groszy); pensja, koszty, wpływy
+  i wydatek jednorazowy roku – tak samo; dalej grosze jak w kursie. Wywiad – panel „Prognoza wieloletnia” pod kursem na
+  12 miesięcy: siła floty netto teraz i na końcu horyzontu w każdym scenariuszu, wykres SVG (bazowy – ciągła jasna linia,
+  ostrożny i optymistyczny – przerywana i kropkowana, pasmo między najniższym a najwyższym, legenda, dymki punktów), tabela
+  lat (dymek: konta, warstwy, należności, dług, braki, wpływy, koszty, zasięg), wiersze celów, „Osłony do zera”, „Brakuje
+  na koszty od”, zasięg na koniec, tabela założeń do edycji i podpis „Prognoza – nie gwarancja. Założenia: …” z założeniami
+  każdego scenariusza, zasadą roku 1 i granicą ICTTJ. Ukryte kwoty (Ctrl+$) – maska w tabeli, polach, dymkach i na osi.
