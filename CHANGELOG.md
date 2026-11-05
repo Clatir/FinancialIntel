@@ -1,5 +1,35 @@
 # Financial Intel – zmiany
 
+## 1.16.0
+
+Rozwojowe 1 – drugi bank, import w tle, reguły z warunkami, kalendarz Radaru i opis folderu danych:
+
+- **Import CSV z innego banku:** przy pierwszym pliku wskazujesz kolumny (data, kwota albo uznania i obciążenia, opis,
+  kontrahent, opcjonalnie saldo, numer rachunku), separator, kodowanie, format daty i liczb, a Financial Intel zapamiętuje
+  je przy koncie i następne pliki tego banku wczytuje sam. Dalej import działa jak z mBanku: duplikaty, reguły, kopia
+  zapasowa, „Cofnij import”. W Ustawieniach → Konta wybierasz import konta: bez importu, CSV z mBanku albo CSV innego
+  banku. Plik, do którego nie pasują zapamiętane kolumny, proponuje nowe konto, a zastąpienie kolumn istniejącego konta
+  wymaga potwierdzenia. Zmiana kolumn nie dubluje operacji już zaimportowanych. Bez kolumny „Rodzaj operacji” przelewy,
+  bankomat, zwroty, opłaty banku, wpłaty domowników i przelewy własne są rozpoznawane po opisie. Kwota zapisana innym
+  znakiem dziesiętnym niż ustawiony jest pomijana z powodem, zamiast wczytać się 100 razy za dużą. Przelew własny trafia
+  na konto drugiej strony, operacja usunięta z budżetu nie wraca z kolejnego pliku (nawet gdy bank zmienił jej wiersz),
+  bardzo długi wiersz zapisuje się poprawnie, a wpłata we wpłatomacie nie jest brana za wypłatę z bankomatu.
+- **Duży plik z banku wczytuje się w tle** z paskiem postępu – okno w tym czasie dalej odpowiada.
+- **Reguły z warunkami:** w Ustawieniach → Import z banku → „Nowa reguła z warunkami” połączysz kilka warunków –
+  kontrahent zawiera, tytuł zawiera, kwota od–do, konto – tak, by były spełnione wszystkie (I) albo którykolwiek (LUB).
+  Reguła z kilkoma warunkami „wszystkie” ma pierwszeństwo przed regułami marek; dotychczasowe reguły działają jak dotąd.
+  Przy regule zaznacz „także dla wpisów ręcznych”, a szybki wpis i edytor operacji podpowiedzą jej kategorię i to, kto
+  płaci – przyjmujesz ją jednym kliknięciem. Audyt reguł i „Zastosuj do historii” działają też z regułami z warunkami.
+  Reguła z warunkami działa od wersji 1.16.0 – zaktualizuj aplikację na wszystkich komputerach; reguły i kolumny CSV
+  zapisane przez nowszą wersję zostają w ustawieniach nienaruszone (ta wersja ich nie stosuje). W folderze tylko do
+  odczytu wyłączone przyciski reguł mówią obok, dlaczego.
+- **Radar – widok „kalendarz”:** miesiąc w siatce od poniedziałku do niedzieli. W każdym dniu przydział energii i wydane
+  z puli dziennej (dni naprzód – prognoza) oraz płatności, wpływy i terminy z Radaru. Kliknięty dzień pokazuje swoje
+  pozycje i prowadzi do operacji tego dnia. Miesiące do końca 90 dni Radaru; działa też na telefonie.
+- **Opis formatu folderu i przykładowy skrypt** (Ustawienia → Folder i kopie): opis plików folderu danych dla własnych
+  narzędzi – pola rekordów, kwoty w groszach, daty, historia, konflikty OneDrive, zasada „tylko odczyt” – i skrypt liczący
+  wydatki miesiąca po kategoriach (paragon dzielony liczy jak aplikacja).
+
 ## 1.15.9
 
 Poprawki po audycie – ścieżki i ergonomia: kreator i pierwszy miesiąc, domownicy, szybki wpis, dokowanie, konflikty,
