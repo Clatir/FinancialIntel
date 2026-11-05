@@ -644,17 +644,22 @@ const AMOUNT_FIELDS = [
   'settings.intel.forecast.*.oneOff'
 ].map((f) => f.split('.'))
 
-/** Is the field at `path` an amount in grosze (B7)? Items of lists (`#id`, `[n]`) do not count as keys. */
-export function isAmountPath(path: Path): boolean {
+/** Does the field at `path` match one of `fields`? Items of lists (`#id`, `[n]`) do not count as keys; `*` – any key. */
+function pathIn(fields: ReadonlyArray<readonly string[]>, path: Path): boolean {
   const named = path.filter((p) => !p.startsWith('#') && !/^\[\d+\]$/.test(p))
-  return AMOUNT_FIELDS.some((f) => f.length === named.length && f.every((k, i) => k === '*' || k === named[i]))
+  return fields.some((f) => f.length === named.length && f.every((k, i) => k === '*' || k === named[i]))
 }
 
-/** The amount of an operation in another currency (AP-48): hundredths of its unit, never złoty. */
-export const isForeignAmountPath = (path: Path): boolean => {
-  const named = path.filter((p) => !p.startsWith('#') && !/^\[\d+\]$/.test(p))
-  return named.length === 2 && named[0] === 'foreign' && named[1] === 'amount'
+/** Is the field at `path` an amount in grosze (B7)? */
+export function isAmountPath(path: Path): boolean {
+  return pathIn(AMOUNT_FIELDS, path)
 }
+
+/** The amounts in another currency (AP-48, T492): hundredths of its unit, never złoty – written as the field writes them. */
+export const FOREIGN_AMOUNT_FIELDS = ['foreign.amount'].map((f) => f.split('.'))
+
+/** Is the field at `path` an amount in another currency? The amounts' one rule of paths (przegląd R2 pkt 14). */
+export const isForeignAmountPath = (path: Path): boolean => pathIn(FOREIGN_AMOUNT_FIELDS, path)
 
 /** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */
 export const isAmountKey = (key: string): boolean => isAmountPath(key.replace(/\[\d+\]/g, '').split('.').filter(Boolean))

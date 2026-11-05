@@ -150,16 +150,15 @@ describe('AP-46: Sankey miesiąca – liczby debriefingu i Bilansu paliwa (T490)
     expect(value(flows, 'goals', 'goals-spent')).toBe(zl(400))
     expect(value(flows, 'financed', 'members-spent')).toBe(brief.financed.reduce((a, f) => a + f.amount, 0))
     expect(value(flows, 'financed', 'members-spent')).toBe(zl(300))
-    expect(value(flows, 'reserve', 'loans-out')).toBe(zl(1000))
+    expect(value(flows, 'reserve-out', 'loans-out')).toBe(zl(1000))
     expect(value(flows, 'loans-in', 'to-reserve')).toBe(zl(300))
-    expect(value(flows, 'reserve', 'transfers-out')).toBe(zl(700))
+    expect(value(flows, 'reserve-out', 'transfers-out')).toBe(zl(700))
     // The member's 250 zł repays the 300 zł purchase (back to the shields) – not income, not the deposit.
     expect(value(flows, 'members', 'to-reserve')).toBe(zl(250))
     expect(value(flows, 'members', 'deposit')).toBe(0)
-    for (const id of ['goals', 'goals-spent', 'financed', 'members-spent', 'loans-out', 'loans-in', 'to-reserve', 'transfers-out', 'members']) expect(node(flows, id)!.group, id).toBe(OUTSIDE_GROUP)
-    // With a surplus the shields and the hull give the month nothing: their node is outside the month (its heading).
-    expect(value(flows, 'reserve', MONTH_NODE)).toBe(0)
-    expect(node(flows, 'reserve')!.group).toBe(OUTSIDE_GROUP)
+    for (const id of ['goals', 'goals-spent', 'financed', 'members-spent', 'loans-out', 'loans-in', 'to-reserve', 'transfers-out', 'members', 'reserve-out']) expect(node(flows, id)!.group, id).toBe(OUTSIDE_GROUP)
+    // With a surplus the shields and the hull give the month nothing (przegląd R2 pkt 6: the money outside – its own source).
+    expect(node(flows, 'reserve')).toBeUndefined()
   })
 
   it('koszty ponad przychód: „Z osłon i kadłuba” do miesiąca (na minus) = bilans paliwa; zaliczka domownika do depozytu', () => {
@@ -255,8 +254,8 @@ describe('AP-46: geometria (T491)', () => {
     }
     const l = sankeyLayout(flows, { width: 760, left: 240, right: 180 })
     const svg = sankeySvg(l, {
-      label: (n) => `${n.label} · ${n.value / 100} zł`,
-      heading: (h) => h.group,
+      label: (n) => ({ name: n.label, amount: `${n.value / 100} zł` }),
+      heading: (h) => ({ name: h.group, amount: '' }),
       colors: { band: '#999', bandOpacity: 0.4, bar: '#555', text: '#111', muted: '#666', up: '#2ebd85', down: '#f6465d', halo: '#fff' }
     })
     expect(svg.startsWith('<svg')).toBe(true)

@@ -5,10 +5,10 @@
  * the plus / on the minus; every label with its amount, the tooltip with the amount and its percent of the chart. The
  * hidden amounts (Ctrl+$) hide the amounts – the bands and the bars stay as they are (the layout reads the real ones).
  */
-import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import type { Flows } from '@shared/calc/sankey'
-import { fitText, sankeyLayout, sankeySvg, textWidth, type LaidNode, type SankeyLayout } from '@shared/sankeyLayout'
-import { formatPln, percentText } from '@shared/format'
+import { fitText, layoutOf, sankeySvg, textWidth, type LaidNode } from '@shared/sankeyLayout'
+import { percentText } from '@shared/format'
 import { plnText } from '../../components/fields'
 import { Segmented } from '../../components/ui'
 
@@ -22,22 +22,6 @@ const VIEWS: Array<{ value: SankeyView; label: string }> = [
 /** The narrowest the chart is drawn (a narrower window scrolls it sideways – the phone). */
 const MIN_WIDTH = 640
 
-/** The label areas from the real amounts (T491): hiding the amounts never moves a bar. */
-export function sankeyLayoutFor(flows: Flows, width: number, bands = 260): SankeyLayout {
-  // The nodes' labels and their groups' headings (the heading with the whole's amount – never less than its group's).
-  const label = (column: number) =>
-    Math.max(0, ...flows.nodes.filter((n) => n.column === column).map((n) => Math.max(textWidth(`${n.label} · ${formatPln(0)} zł`) + amountWidth(flows, n.id), n.group ? textWidth(`${n.group} · ${formatPln(flows.total)} zł`) : 0)))
-  const left = Math.min(Math.max(120, label(0) + 14), width * 0.3)
-  const right = Math.min(Math.max(140, label(2) + 14), width * 0.34)
-  return sankeyLayout(flows, { width, left, right, bands })
-}
-
-/** The width of a node's amount beyond „0,00” (its value as the screens write it). */
-function amountWidth(flows: Flows, id: string): number {
-  const v = flows.links.filter((l) => l.from === id || l.to === id).reduce((a, l) => a + l.value, 0)
-  return textWidth(formatPln(v)) - textWidth(formatPln(0))
-}
-
 /** The amount of a node: in or out of it (a node is balanced). */
 const nodeAmount = (n: LaidNode) => n.value
 
@@ -48,10 +32,9 @@ const COLORS = { band: '#7a838e', bar: '#7a838e', text: '#c3cbd4', muted: '#7a83
 
 /** The debriefing's PDF (light paper): the same layout, real amounts (D73). */
 export function sankeyPdfSvg(flows: Flows, money: (g: number) => string): string {
-  const l = sankeyLayoutFor(flows, 700, 240)
-  return sankeySvg(l, {
-    label: (n) => `${n.label} · ${money(nodeAmount(n))}`,
-    heading: (h) => `${h.group} · ${money(h.value)}`,
+  return sankeySvg(layoutOf(flows, 700, 240), {
+    label: (n) => ({ name: n.label, amount: money(nodeAmount(n)) }),
+    heading: (h) => ({ name: h.group, amount: money(h.value) }),
     colors: { band: '#9aa3ad', bandOpacity: 0.35, bar: '#5f6873', text: '#1d232a', muted: '#5f6873', up: '#1f9e6c', down: '#d63c50', halo: '#ffffff' }
   })
 }
@@ -74,9 +57,10 @@ export function MonthSankey({ money, energy, empty, view, onView }: { money: Flo
   }, [])
   const flows = view === 'energy' ? energy : money
   const shown = flows && flows.links.length ? flows : null
-  const layout = shown ? sankeyLayoutFor(shown, width) : null
+  // Laid out once per flows and width (przegląd R2 pkt 12): a move of the pointer renders, never lays out again.
+  const layout = useMemo(() => (shown ? layoutOf(shown, width) : null), [shown, width])
+  const labelOf = useMemo(() => new Map(layout?.nodes.map((n) => [n.id, n.label]) ?? []), [layout])
   const zl = (g: number) => `${plnText(g)} zł`
-  const labelOf = new Map(layout?.nodes.map((n) => [n.id, n.label]) ?? [])
   const at = (e: MouseEvent) => {
     const r = box.current!.getBoundingClientRect()
     return { x: e.clientX - r.left + box.current!.scrollLeft, y: e.clientY - r.top }

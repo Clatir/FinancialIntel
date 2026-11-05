@@ -4173,7 +4173,13 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   korekty sald, wpływ ujemny. Miesiąc w toku – do dziś, nazwy „(do dziś)”, „Ponad koszty (do dziś)” zamiast „Dołożone”.
   Kategorie poniżej 1% wszystkich pieniędzy wykresu – „Pozostałe” swojej grupy (z nazwami w dymku), gdy są co najmniej
   dwie. Test: każdy węzeł zbilansowany, koszty, przychód, bilans paliwa i energia co do grosza
-  (`tests/unit/sankey-ap46.test.ts`).
+  (`tests/unit/sankey-ap46.test.ts`). Przegląd R2: czerwony „Z osłon i kadłuba” przy miesiącu to tylko jego deficyt (= Bilans
+  paliwa na minus) – pożyczki, przelewy i dopłaty do XTB z osłon mają własne źródło „Z osłon i kadłuba” pod nagłówkiem
+  „Poza przychodem i kosztami”; w kolumnie najpierw przepływy miesiąca (kategorie, Ładownia, okręt), potem ten nagłówek,
+  jego źródła w kolejności swoich celów – wstęgi się nie krzyżują; „Dostawy z ICTTJ (netto)”, gdy miesiąc miał dopłaty
+  do XTB; „Pensja i energia” – część ujemna (zwroty ponad wydatki, zwrot odkładek albo rat, pensja lub łupy poniżej zera)
+  po drugiej stronie pod własną nazwą, więc węzeł energii zawsze zbilansowany. Własność „każdy węzeł zbilansowany, sumy
+  = debriefing i Bilans paliwa, wstęgi bez krzyżowania” – na losowych miesiącach (`tests/unit/sankey-r2-review.test.ts`).
 - **T491** Sankey miesiąca – wygląd (1.17.0, R2 – AP-46): własne SVG bez biblioteki (`shared/sankeyLayout.ts` – ta sama
   geometria na ekranie i w PDF): trzy kolumny (skąd, miesiąc / energia, dokąd), słupek i wstęga proporcjonalne do kwoty,
   wstęga „poza przychodem i kosztami” przechodzi pod węzłem miesiąca (niewidoczny węzeł kolumny), etykiety z kwotą
@@ -4183,7 +4189,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   prawdziwych kwot, więc słupki się nie ruszają. Miejsce: Raporty → Debriefing, pod „Wynik wobec planu”, miesiąc z
   wyboru debriefingu, widok przełącznikiem (domyślnie „Przychód i koszty”, wybór do zmiany ekranu). PDF debriefingu –
   oba widoki po „Wyniku wobec planu”, jasne barwy druku, prawdziwe kwoty (D73; `ReportSection.svg`). Okno węższe niż
-  640 px przewija wykres w bok; Raporty nie są na telefonie (D92).
+  640 px przewija wykres w bok; Raporty nie są na telefonie (D92). Przegląd R2: za długa etykieta (ekran i PDF) traci
+  koniec nazwy, nigdy kwotę (`labelText`); układ liczony raz na przepływy i szerokość (`layoutOf`) – ruch wskaźnika tylko
+  rysuje.
 - **T492** Kwota w walucie – dane (1.17.0, R2 – AP-48; „kwoty tylko w PLN” bez zmian): pole operacji `foreign`
   (`{ amount, currency }`, addytywnie, bez podbijania `SCHEMA_VERSION`; starsza wersja je zachowuje – `looseObject`) –
   tylko informacja dla użytkownika (wyjazd). `amount` – setne części jednostki waluty dla każdej waluty (jak grosze:
@@ -4193,7 +4201,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   go nie czytają (test: ten sam stan silnika z polem i bez). Kurs = złote ÷ kwota w walucie, tylko pokazywany (cztery
   miejsca, „kurs 4,3000 zł za 1 EUR”), nigdzie nie zapisywany. Historia i konflikty: polskie nazwy pól, kwota jak pole
   ją pisze („45,00”, ukryta z kwotami – `ValueText.foreign`), nigdy setne ani złote. Duplikat usunięty przy imporcie oddaje
-  ją zostającej operacji (`takeUserData`), jak notatkę.
+  ją zostającej operacji (`takeUserData`), jak notatkę. Przegląd R2: ścieżka kwoty w walucie – ta sama reguła co kwot
+  w groszach (`FOREIGN_AMOUNT_FIELDS` obok `AMOUNT_FIELDS`, jedno dopasowanie ścieżek).
 - **T493** Kwota w walucie – okno (1.17.0, R2 – AP-48): edytor operacji (każdy rodzaj) i szybki wpis (także na
   telefonie) – przy kwocie zwinięte „+ kwota w walucie” (klik; poza kolejnością Tab – od kwoty do kontrahenta dalej
   jeden Tab, AP-20, AP-34); rozwinięte: kwota (wpisywana jak złote), kod waluty (lista częstych, dowolne trzy litery;
