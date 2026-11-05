@@ -11,9 +11,13 @@ nowy komputer, eksport, Operacje i klawiatura:
   „Gotówka” zostają bez zmian; ujemne saldo Gotówki wyrównasz jednym potwierdzeniem salda (Ustawienia → Konta).
 - **Kreator i pierwszy miesiąc:** krok „Podział środków” pokazuje pierwszą pensję do energii, zaliczki domowników i osłony
   po starcie – takie same jak na Mostku, a podział liczy się od środków na początek dnia. Propozycje kopert mieszczą się
-  w pensji; bez historii kreator przypomina o kopertach codziennych. „Uruchom budżet” zapisuje start w całości albo
-  wcale: gdy folder nie przyjmie zmian, odpowiedzi zostają, a ponowne kliknięcie dokończy start; przycisk mówi, czego
-  brakuje. Rachunek co 2 miesiące o zmiennej kwocie (np. prąd) jest proponowany do Ładowni, a anulowana subskrypcja już
+  w pensji (bez propozycji nie ma informacji o ich zmniejszeniu); bez historii kreator przypomina o kopertach
+  codziennych, a osłony po starcie poniżej minimum są oznaczone kolorem ostrzeżenia. „Uruchom budżet” zapisuje start
+  w całości albo wcale: najpierw ustawienia budżetu, salda otwarcia, plan i kontenery dopiero po nich. Gdy folder nie
+  przyjmie ustawień, nic ze startu nie trafia do folderu, odpowiedzi zostają, a ponowne kliknięcie zaczyna od nowa;
+  saldo czy plan, których folder chwilowo nie przyjmie, zapiszą się same, a gdy okno zamknie się wcześniej – po
+  ponownym otwarciu folderu dopisze je baner „Start budżetu niedokończony – Dokończ” (do tego czasu gra nie ocenia dni).
+  Przy wolnym folderze start czeka na zapis i mówi o tym; przycisk mówi, czego brakuje. Rachunek co 2 miesiące o zmiennej kwocie (np. prąd) jest proponowany do Ładowni, a anulowana subskrypcja już
   nie. Cele z prognozy ICTTJ układają się według terminów, meldunki z dawnej historii pojawiają się dopiero po
   uruchomieniu budżetu, a przerwanie kreatora wymienia też folder ICTTJ i zrobiony import. Nowe dane w folderze z innymi
   plikami: aplikacja najpierw pyta o podfolder FinancialIntel.
@@ -36,17 +40,24 @@ nowy komputer, eksport, Operacje i klawiatura:
   pary minęło, aplikacja prosi o nowszy plik z mBanku zamiast podawać datę, która już minęła. Po zapisaniu nowego podziału
   toast mówi „Zmieniono podział”, z kwotą z banku; dostawa ma jedną datę – dzień pieniędzy w banku. „Ostatnia dostawa”
   pojawia się dopiero po dokowaniu, a zadokowane dostawy widać także przy wyłączonym ICTTJ. Słowo „firewall” pojawia się
-  tylko przy dopłacie wbrew rozkazowi; dopłata do XTB widoczna tylko w mBanku czeka w Meldunkach na potwierdzenie.
+  tylko przy dopłacie wbrew rozkazowi; dopłata do XTB widoczna tylko w mBanku czeka w Meldunkach na potwierdzenie,
+  a „Potwierdź” niczego nie przesuwa w warstwach (alarm firewalla i naruszenie w grze zostają).
   Ostrzeżenia folderu ICTTJ mówią, który plik jest brany, a wpis z nieznaną pulą nie jest liczony jako pominięty.
 - **Konflikty i historia:** karta konfliktu mówi, której operacji dotyczy (kontrahent, data, kwota, konto) i który komputer
   zapisał każdą wersję. Różnice w konfliktach, historii, dzienniku zmian i odzyskaniu – wszystkie pola po polsku, wartości
-  słowami, daty jak w aplikacji, bez JSON-u. „Scal…” i „Zachowaj tę wersję” odmawiają, gdy kopia zmieni się w trakcie –
-  nic nie ginie, „Scal od nowa” pokazuje nową treść.
+  słowami, daty jak w aplikacji, bez JSON-u. „Scal…”, „Zachowaj tę wersję” i „Zaakceptuj nowsze” nie rozstrzygają
+  wersji, której nie widziałeś: gdy w trakcie przyjdzie nowsza kopia, decyzja jest odrzucona z komunikatem, a karta
+  pokazuje nową wersję („Scal od nowa”); Twoje własne zmiany zapisane tuż przed decyzją nie są „nowszą kopią”,
+  a „Zaakceptuj nowsze” zostawia wersję, którą karta pokazała jako nowszą.
 - **Nowy komputer:** po pierwszym otwarciu budżetu na nowym komputerze lista „Ustaw na tym komputerze”; ustawienia tego
   komputera mają znak „tylko ten komputer”. Folder tylko do odczytu – komunikat na każdej zakładce Ustawień. „Co nowego”
   działa bez internetu, także po aktualizacji spoza aplikacji. Po zmianie folderu kopii wcześniejsze kopie zostają na
-  liście i dają się odzyskać. Uruchomienie aplikacji nie zmienia już startu z Windows – zmienia go tylko przełącznik na
-  tym komputerze; zajęty plik ustawień komputera – zapis ponawia się sam. Wyłączony ICTTJ nie mówi już, że scenariusza
+  liście i dają się odzyskać. Przełącznik „Uruchamiaj z Windows” pokazuje, czy Windows naprawdę uruchamia tę kopię
+  (gdy zapisane ustawienie mówi co innego – z notką), działa od razu także przy chwilowo zajętym pliku ustawień
+  komputera i naprawia wpis wyłączony w Menedżerze zadań; aplikacja przy starcie nigdy nie usuwa wpisu autostartu.
+  Plik ustawień komputera zajęty albo nieczytelny: zmiany tej sesji działają i są widoczne do końca sesji, zapis ponawia
+  się sam, listy ostatnich folderów nie są zastępowane, a folder ICT Trade Journal, jego program, token GitHub, folder
+  kopii i ustawienia aktualizacji nie zmieniają się po cichu – aplikacja mówi, że zmiana nie została zapamiętana. Wyłączony ICTTJ nie mówi już, że scenariusza
   „nie ma w ICTTJ”, a Meldunki wyjaśniają, kiedy zgłaszają podwójne korekty salda.
 - **Debriefing, plan i przegląd roczny:** debriefing miesiąca w toku mówi „miesiąc trwa”, a Raporty mówią, gdy łupy
   przeliczył późny import. Koszty bieżącego miesiąca (debriefing, przegląd roczny, bilans paliwa, Wywiad) liczone do
@@ -57,12 +68,13 @@ nowy komputer, eksport, Operacje i klawiatura:
 - **Eksport:** arkusz „Części” w Excelu i plik „Części – CSV” – każda część paragonu i wspólnego zakupu z własną kwotą
   i kategorią, więc kategorie roku zsumujesz w Excelu. W Excelu daty i godziny są prawdziwymi datami (filtr dat, tabela
   przestawna). Okres eksportu zapamiętany na tym komputerze („do dziś” przesuwa się z dniem). „Miesiące”: nowe kolumny
-  „Energia miesiąca” i „Sfinansowane przez domowników”.
+  „Energia miesiąca” i „Sfinansowane przez domowników”; przychody i koszty bieżącego miesiąca liczone do dziś, jak
+  Bilans paliwa, a operacje z datą po dziś w kolumnach „Zaplanowane koszty” i „Zaplanowane przychody”.
 - **Operacje, import i klawiatura:** przy pasku sum Operacji dopisek o przelewach własnych poza Wpływami i Wydatkami;
   Przychody – dopisek przy „12 mies.”, gdy był miesiąc z dopłatą do XTB. Wspólny zakup w procentach: edytor operacji nie
   zapisze podziału innego niż 100 % (jak szybki wpis), przycisk „dopełnij ostatniej do 100 %”. Podgląd zmiany
-  zaznaczonych operacji pokazuje też łupy i koperty miesiąca, z którego operacje wychodzą, cele i wypłaty z ICTTJ, które
-  stracą parę w banku. Fokus klawiatury nie ucieka z okien ani z palety i po zamknięciu wraca na miejsce. Ctrl+N nie
+  zaznaczonych operacji pokazuje też łupy i koperty miesiąca, z którego operacje wychodzą, cele i wypłaty oraz zwroty
+  do masy z ICTTJ, które stracą parę w banku. Fokus klawiatury nie ucieka z okien ani z palety i po zamknięciu wraca na miejsce. Ctrl+N nie
   czyści wyszukiwania; w wydatku od kwoty do kategorii są dwa Taby. Lista Operacji pamięta „całą historię” i okres
   „od – do”, a „mój filtr” przywraca swój okres. Import: „(jak grupa)” w każdym wierszu, opłaty banku zawsze w „Opłaty
   banku”, podpowiedzi mBanku osobno dla każdej kategorii banku, szukanie po rodzaju operacji (np. „bankomat”). Para
