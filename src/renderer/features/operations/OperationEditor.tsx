@@ -783,8 +783,8 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
                     refundable: only?.refundable ?? false,
                     memberId: only?.refundable ? only.memberId : null,
                     gift: only?.refundable && only.gift ? true : undefined,
-                    containerId: only?.containerId ?? r.containerId,
-                    goalId: only?.goalId ?? r.goalId,
+                    containerId: r.kind === 'expense' ? (only?.containerId ?? r.containerId) : null,
+                    goalId: r.kind === 'expense' ? (only?.goalId ?? r.goalId) : null,
                     // The line's tags stay the operation's (F17), its description too (D89).
                     ...(only?.tags?.length ? { tags: withTags(r.tags ?? [], only.tags) } : {}),
                     ...(only?.note.trim() ? { note: r.note.trim() ? `${r.note}\n${only.note.trim()}` : only.note.trim() } : {})

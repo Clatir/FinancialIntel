@@ -373,12 +373,32 @@ interface FeeToday extends FeeDuesState {
 
 const NO_PLANNED: ReadonlyMap<string, CargoPayment> = new Map()
 
-/** The dues holding a payment dated after `today` – that payment's (its first one): planned (T398). */
-function plannedIn(dues: readonly FeeDue[], today: string): Map<string, CargoPayment> {
+/**
+ * The dues unpaid in `stateDues` (at `today`) that `viewDues` (with the payments written ahead, up to the Radar's
+ * window) leaves paid (T398, T495): a due holding a payment dated after `today` – its first one; a late due closed by an
+ * earlier payment shifted to it by a second payment of a window written ahead – the forward payment that shifted it.
+ */
+function plannedIn(stateDues: readonly FeeDue[], viewDues: readonly FeeDue[], today: string): Map<string, CargoPayment> {
+  const paidNow = new Set(stateDues.slice(0, -1).filter((d) => d.payments.length).map((d) => d.month))
+  const byMoved = new Map<Linked, CargoPayment>()
+  const viewByMonth = new Map(viewDues.slice(0, -1).map((d) => [d.month, d]))
+  const shifted: CargoPayment[] = []
+  for (const d of stateDues.slice(0, -1)) {
+    if (!d.payments.length) continue
+    const v = viewByMonth.get(d.month)
+    const forward = v?.payments.find((x) => x.date > today)
+    if (!forward) continue
+    const stripped = strip(forward)
+    shifted.push(stripped)
+    for (const p of d.payments) byMoved.set(p, stripped)
+  }
+  let s = 0
   const out = new Map<string, CargoPayment>()
-  for (const d of dues.slice(0, -1)) {
+  for (const d of viewDues.slice(0, -1)) {
+    if (paidNow.has(d.month) || !d.payments.length) continue
     const p = d.payments.find((x) => x.date > today)
-    if (p) out.set(d.month, strip(p))
+    const plan = p ? strip(p) : (byMoved.get(d.payments[0]!) ?? shifted[s++])
+    if (plan) out.set(d.month, plan)
   }
   return out
 }
@@ -386,8 +406,8 @@ function plannedIn(dues: readonly FeeDue[], today: string): Map<string, CargoPay
 /**
  * The fee `c` today – one rule for the state (`cargoStatuses`) and the dues planned on the Radar and in the briefing
  * (`plannedDues`): a payment written ahead (dated after today – B127) pays no due before its day, as in the engine
- * (`paidBefore` up to today – T398); the due the same rule gives it (`feeDuesOf` with all the payments, up to the
- * Radar's window) is planned – only that one (przegląd 3 N3): a due closed by an earlier payment it moves is not.
+ * (`paidBefore` up to today – T398); a due unpaid today that the same rule leaves paid (`feeDuesOf` with all the
+ * payments, up to the Radar's window – directly or by shifting an earlier payment of the window, T495) is planned.
  */
 function feeToday(c: FeeDuesOf & Pick<Container, 'dueDay'>, all: readonly Linked[], today: string, start: string | null): FeeToday {
   const month = monthOf(today)
@@ -399,7 +419,7 @@ function feeToday(c: FeeDuesOf & Pick<Container, 'dueDay'>, all: readonly Linked
   const state = feeDuesOf(c, linked, day, follow)
   if (ahead === all.length) return { ...state, all, linked, day, dayFrom, follow, view: follow, planned: NO_PLANNED }
   const view: FeeFollow = { ...follow, until: monthOf(addDays(today, AHEAD_DAYS)) }
-  return { ...state, all, linked, day, dayFrom, follow, view, planned: plannedIn(feeDuesOf(c, all, day, view).dues, today) }
+  return { ...state, all, linked, day, dayFrom, follow, view, planned: plannedIn(state.dues, feeDuesOf(c, all, day, view).dues, today) }
 }
 
 /**
@@ -412,7 +432,15 @@ function paidToday(c: FeeDuesOf, f: FeeToday, today: string): string | null {
   const closed = (dues: readonly FeeDue[], planned: ReadonlyMap<string, unknown>) => new Set([...dues.slice(0, -1).filter((d) => d.payments.length).map((d) => d.month), ...planned.keys()])
   const before = closed(f.dues, f.planned)
   const ahead = f.all.slice(f.linked.length)
-  const after = closed(feeDuesOf(c, [...f.linked, payment], f.day, f.follow).dues, ahead.length ? plannedIn(feeDuesOf(c, [...f.linked, payment, ...ahead], f.day, f.view).dues, today) : NO_PLANNED)
+  const stateAfter = feeDuesOf(c, [...f.linked, payment], f.day, f.follow).dues
+  const plannedAfter = new Map<string, CargoPayment>()
+  if (ahead.length) {
+    for (const d of feeDuesOf(c, [...f.linked, payment, ...ahead], f.day, f.view).dues.slice(0, -1)) {
+      const p = d.payments.find((x) => x.date > today)
+      if (p) plannedAfter.set(d.month, strip(p))
+    }
+  }
+  const after = closed(stateAfter, plannedAfter)
   return f.dues.slice(0, -1).find((d) => !before.has(d.month) && after.has(d.month))?.month ?? null
 }
 
