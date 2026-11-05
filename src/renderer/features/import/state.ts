@@ -1020,6 +1020,13 @@ export function selectedRowKeys(groups: readonly ImportGroup[], selected = useIm
  * loan, PIT-38, XTB or a member's money and the decision another kind (AP-6, `bulkKeeps`: counted as not fitting,
  * `kept` of them). Returns how many took it, and not.
  */
+function withKeptShares(current: Choice, next: Choice): Choice {
+  if (current.memberId && current.memberId === next.memberId && current.shares?.length && !next.shares?.length) {
+    return { ...next, shares: current.shares }
+  }
+  return next
+}
+
 export function chooseSelected(groups: readonly ImportGroup[], option: Option, categoryId: string | null, share: Share | null = null): { applied: number; unfit: number; kept: number } {
   const { selected, lastDecided, choices, accepted } = useImport.getState()
   const choice = choiceFor(option, { kind: 'expense', categoryId }, share)
@@ -1040,17 +1047,20 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
   const rowGroup = new Map(groups.flatMap((g) => g.rows.map((p) => [p.key, g] as const)))
   for (const g of groups) {
     if (!selected.groups[g.group]) continue
-    if (takes(g.direction, shown(g))) {
+    const cur = shown(g)
+    if (takes(g.direction, cur)) {
       // Remembered – a loan's repayment over what did not repay one: no rule of it unless asked (D100, T358).
-      decided.push([g.group, choice, remembersByDefault(choice, shown(g), true)])
+      const c = withKeptShares(cur, choice)
+      decided.push([g.group, c, remembersByDefault(c, cur, true)])
       applied++
     } else unfit++
   }
   for (const key of Object.keys(selected.rows)) {
     const g = rowGroup.get(key)
     if (!g || selected.groups[g.group]) continue
-    if (takes(g.direction, choices.rows[key] ?? shown(g))) {
-      rows[key] = choice
+    const cur = choices.rows[key] ?? shown(g)
+    if (takes(g.direction, cur)) {
+      rows[key] = withKeptShares(cur, choice)
       applied++
     } else unfit++
   }
@@ -1058,6 +1068,25 @@ export function chooseSelected(groups: readonly ImportGroup[], option: Option, c
   // decided apart closes when it changes.
   useImport.setState(groupsDecided({ choices: { ...choices, rows }, accepted, lastDecided }, decided, { closesProposal: true }))
   return { applied, unfit, kept }
+}
+
+export function pruneStaleAccountNumbers(
+  current: Readonly<Record<string, string>>,
+  transactions: readonly Transaction[],
+  targetAcc: string,
+  number: string
+): Record<string, string> {
+  const result: Record<string, string> = { ...current, [targetAcc]: number }
+  for (const [accId, num] of Object.entries(current)) {
+    if (accId === targetAcc) continue
+    if (num === number) {
+      const hasTx = transactions.some((t) => t.accountId === accId && !!t.bank)
+      if (!hasTx) {
+        delete result[accId]
+      }
+    }
+  }
+  return result
 }
 
 export const setSkip = (keys: readonly string[], on: boolean) =>
@@ -1434,7 +1463,7 @@ export async function runImport(): Promise<void> {
           lastImport: { ...f.settings.import.lastImport, [acc]: now },
           coveredTo: covered && covered > (f.settings.import.coveredTo[acc] ?? '') ? { ...f.settings.import.coveredTo, [acc]: covered } : f.settings.import.coveredTo,
           // The account's number (F4): a file of another account is said before its import.
-          accountNumbers: number && f.settings.import.accountNumbers[acc] !== number ? { ...f.settings.import.accountNumbers, [acc]: number } : f.settings.import.accountNumbers,
+          accountNumbers: number ? pruneStaleAccountNumbers(f.settings.import.accountNumbers, listOf(useData.getState().records.transactions), acc, number) : f.settings.import.accountNumbers,
           // The imports' times (the mission „Łączność z bazą”, E7): the last 100.
           log: Object.fromEntries(
             Object.entries({ ...f.settings.import.log, [now]: acc })

@@ -5,7 +5,8 @@
  */
 import { warsawNow } from '@shared/calc/dates'
 import { newId } from '@shared/ids'
-import { MBANK_ACCOUNT_ID, scheduledSchema, SCHEMA_VERSION, transactionSchema, type Scheduled } from '@shared/schema'
+import { sameContentAs } from '@shared/merge'
+import { MBANK_ACCOUNT_ID, scheduledSchema, SCHEMA_VERSION, transactionSchema, type Scheduled, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
@@ -29,6 +30,8 @@ export interface NewScheduled {
 /** The signed amount of a form (null = a term). */
 export const signedOf = (o: Pick<NewScheduled, 'amount' | 'direction'>): number | null => (o.amount == null || o.amount <= 0 ? null : o.direction === 'out' ? -o.amount : o.amount)
 
+const undoChanged = () => toast('Nie cofnięto – wpis został w międzyczasie zmieniony.', 'info', 6000)
+
 export function addScheduled(o: NewScheduled): Scheduled | null {
   if (!canWrite()) return null
   const now = new Date().toISOString()
@@ -49,7 +52,14 @@ export function addScheduled(o: NewScheduled): Scheduled | null {
   })
   addRecord('scheduled', record)
   playSound('entry')
-  toast(`Boja „${record.name}” na radarze.`, 'success', 5000, { label: 'Cofnij', run: () => deleteOrSay('scheduled', record.id) })
+  toast(`Boja „${record.name}” na radarze.`, 'success', 5000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.scheduled[record.id]?.record
+      if (!cur || !sameContentAs(cur, record)) return undoChanged()
+      void deleteOrSay('scheduled', record.id)
+    }
+  })
   return record
 }
 
@@ -67,7 +77,15 @@ export function tickDay(s: Scheduled, date: string): void {
   if (!canWrite()) return
   const before = s.done
   patchScheduled(s.id, { done: { ...s.done, [date]: '' } })
-  toast(`„${s.name}” odhaczone.`, 'success', 5000, { label: 'Cofnij', run: () => patchScheduled(s.id, { done: before }) })
+  const after = useData.getState().records.scheduled[s.id]?.record
+  toast(`„${s.name}” odhaczone.`, 'success', 5000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.scheduled[s.id]?.record
+      if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+      patchScheduled(s.id, { done: before })
+    }
+  })
 }
 
 /** The bank's operation matched to a day is not it: never matched to this buoy again. */
@@ -80,8 +98,8 @@ export function notThis(s: Scheduled, txId: string): void {
  * „Wykonaj teraz”: the operation of the day written now – its amount, category, account and payee, today (the editor
  * changes what differs) – saved, opened in Operacje, and the day done by it. „Cofnij” takes both back.
  */
-export function executeDay(s: Scheduled, date: string): void {
-  if (!canWrite() || s.amount == null) return
+export function executeDay(s: Scheduled, date: string): Transaction | undefined {
+  if (!canWrite() || s.amount == null) return undefined
   const fi = useData.getState().fi
   const accounts = fi?.settings.accounts.filter((a) => !a.archived) ?? []
   const accountId = s.accountId && accounts.some((a) => a.id === s.accountId) ? s.accountId : (accounts[0]?.id ?? MBANK_ACCOUNT_ID)
@@ -103,13 +121,18 @@ export function executeDay(s: Scheduled, date: string): void {
   const before = s.done
   addRecord('transactions', t)
   patchScheduled(s.id, { done: { ...s.done, [date]: t.id } })
+  const afterSched = useData.getState().records.scheduled[s.id]?.record
   playSound('entry')
   openOperation(t)
   toast(`Operacja z boi „${s.name}” zapisana.`, 'success', 6000, {
     label: 'Cofnij',
     run: () => {
+      const curTx = useData.getState().records.transactions[t.id]?.record
+      const curSched = useData.getState().records.scheduled[s.id]?.record
+      if (!curTx || !sameContentAs(curTx, t) || !curSched || !afterSched || !sameContentAs(curSched, afterSched)) return undoChanged()
       void deleteOrSay('transactions', t.id)
       patchScheduled(s.id, { done: before })
     }
   })
+  return t
 }

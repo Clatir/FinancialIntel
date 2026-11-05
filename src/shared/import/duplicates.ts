@@ -189,8 +189,14 @@ export function findDuplicates(
   const bankFormat: Array<{ a: Transaction; b: Transaction; days: number }> = []
   const formatOf = formatsOf(txs)
   const spans = new Map<string, { from: string; to: string }>()
+  const bankedByDate = new Map<string, Transaction[]>()
   for (const t of txs) {
     if (!t.bank) continue
+    if (!inRowGroups.has(t.id)) {
+      const list = bankedByDate.get(t.date)
+      if (list) list.push(t)
+      else bankedByDate.set(t.date, [t])
+    }
     const k = `${t.accountId}|${t.bank.importedAt}`
     const span = spans.get(k)
     if (!span) spans.set(k, { from: t.date, to: t.date })
@@ -204,8 +210,14 @@ export function findDuplicates(
   for (const a of txs) {
     if (!a.bank || a.bank.pending || used.has(a.id) || inRowGroups.has(a.id) || formatOf(a) !== 'historia') continue
     around(a.date).forEach((day, i) => {
-      for (const b of banked.get(`${a.accountId}|${day}`) ?? []) {
-        if (b.amount !== a.amount || b.bank!.pending || used.has(b.id) || formatOf(b) !== 'lista') continue
+      for (const b of bankedByDate.get(day) ?? []) {
+        if (b.id === a.id || b.amount !== a.amount || b.bank!.pending || used.has(b.id) || formatOf(b) !== 'lista') continue
+        if (b.accountId !== a.accountId) {
+          if (a.kind === 'transfer' || b.kind === 'transfer' || a.counterAccountId || b.counterAccountId) continue
+          const numA = accountNumbers?.[a.accountId]
+          const numB = accountNumbers?.[b.accountId]
+          if (numA && numB && numA !== numB) continue
+        }
         if (!similarCounterparty(a.bank!.counterparty || a.bank!.description, b.bank!.counterparty || b.bank!.description)) continue
         if (!within(a, b) || !within(b, a) || dismissed[duplicateKey([a.id, b.id])]) continue
         bankFormat.push({ a, b, days: Math.abs(i - MATCH_DAYS) })

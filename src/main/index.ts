@@ -1131,6 +1131,12 @@ function registerIpc(): void {
   handle('rescan', async () => {
     await refreshes?.request()
   })
+  handle('unlockReadOnlyFiles', async () => {
+    const s = requireStore()
+    const { unlocked, change } = await s.unlockReadOnlyFiles()
+    send(change)
+    return unlocked
+  })
   handle('exportZip', async () => {
     const s = requireStore()
     const res = await dialog.showSaveDialog(mainWindow!, {
