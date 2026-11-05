@@ -558,6 +558,8 @@ export interface QuickData {
   /** The tags of the history (F17 – suggested) and the one used within the last days (offered with one click). */
   knownTags?: string[]
   lastTag?: string | null
+  /** The currency of the latest operation with an amount in one (AP-48): „+ w walucie” starts with it. */
+  lastCurrency?: string
 }
 
 /** What a template or „Powtórz ostatni” fills in the quick entry (F7). */

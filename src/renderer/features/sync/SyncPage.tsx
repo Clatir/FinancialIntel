@@ -61,7 +61,7 @@ async function mergeBase(c: ConflictEntry): Promise<unknown> {
 }
 
 const zl = (g: number) => `${plnText(g)} zł`
-const shownValue = (path: readonly string[], v: unknown, names: ReadonlyMap<string, string>) => formatValue(v, 80, { path: [...path], names, amount: zl })
+const shownValue = (path: readonly string[], v: unknown, names: ReadonlyMap<string, string>) => formatValue(v, 80, { path: [...path], names, amount: zl, foreign: (h) => plnText(h) })
 /** The record's own id is never a choice (AP-27): the merged version keeps the original's, at its path. */
 const isIdField = (f: MergeConflict) => f.path.length === 1 && f.path[0] === 'id'
 const CHANGED_WHO = {

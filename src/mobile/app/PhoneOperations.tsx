@@ -10,6 +10,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, marksOf, matchesFilter, narrows, noNarrowing, sortOperations, sumOperations, type OperationsFilter, type PeriodFilter } from '@shared/operationsView'
 import type { Transaction } from '@shared/schema'
+import { foreignText } from '@shared/foreign'
 import { listOf, useData } from '@renderer/store/data'
 import { useMinute } from '@renderer/store/fleet'
 import { plnText, signedPln } from '@renderer/components/fields'
@@ -212,6 +213,8 @@ function Card({ t, top, view, picking }: { t: Transaction; top: number; view: st
         <span className={cx('truncate text-[14px]', draft ? 'text-accent' : 'text-fg-strong')}>{draft ? 'nowa operacja' : name}</span>
         <span className="truncate text-[11.5px] text-muted">
           <span className={cx(uncategorized && 'text-accent')}>{what}</span> · {account}
+          {/* AP-48: the amount in its currency (information). */}
+          {t.foreign && <span data-testid="operation-row-foreign"> · {foreignText(t.foreign, plnText)}</span>}
           {shownMarks.map((m) => (
             <span key={m} className="text-accent">
               {' '}

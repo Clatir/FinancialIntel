@@ -19,6 +19,8 @@ import { api } from '../../lib/api'
 import type { QuickDraft } from '../../store/quickHost'
 import { useUi } from '../../store/ui'
 import { fieldWords } from './fieldWords'
+import { ForeignField } from '../operations/ForeignField'
+import { currencyRefusal, DEFAULT_CURRENCY } from '@shared/foreign'
 
 type Kind = QuickDraft['kind']
 interface Line {
@@ -41,7 +43,7 @@ export const KEEP_DRAFT_MS = 30 * 60 * 1000
 
 /** Something typed that would be lost by a fresh form. */
 const typedIn = (d: QuickDraft, lines: readonly Line[], share: Share | null) =>
-  d.amount > 0 || !!d.counterparty.trim() || !!d.note.trim() || !!d.logNote.trim() || lines.length > 0 || share != null || !!d.tags?.length
+  d.amount > 0 || !!d.counterparty.trim() || !!d.note.trim() || !!d.logNote.trim() || lines.length > 0 || share != null || !!d.tags?.length || !!d.foreign?.amount
 
 /** A template's or the last operation's fields over a fresh draft (F7): today, now, an account still in use. */
 function fromTemplate(t: QuickTemplate, data: QuickData, base: QuickDraft): QuickDraft {
@@ -212,11 +214,19 @@ export function QuickApp() {
       setMsg({ ok: r.ok && !r.pending, text: [r.message, ...said].join(' ') })
       setRestored(false)
       if (r.ok && next.current) {
-        // „Zapisz i następny” (F7): a fresh draft of the same account, day, kind and tags (a trip's receipts – F17); the
-        // energy as it is now.
+        // „Zapisz i następny” (F7): a fresh draft of the same account, day, kind and tags (a trip's receipts – F17), the
+        // currency open with no amount (AP-48); the energy as it is now.
         next.current = false
         if (r.data) setData(r.data)
-        setD((x) => ({ ...blank(null), accountId: x.accountId, date: x.date, time: x.time, kind: x.kind === 'income' ? 'income' : 'expense', ...(x.tags?.length ? { tags: x.tags } : {}) }))
+        setD((x) => ({
+          ...blank(null),
+          accountId: x.accountId,
+          date: x.date,
+          time: x.time,
+          kind: x.kind === 'income' ? 'income' : 'expense',
+          ...(x.tags?.length ? { tags: x.tags } : {}),
+          ...(x.foreign ? { foreign: { amount: 0, currency: x.foreign.currency } } : {})
+        }))
         setLines([])
         setShare(null)
         setShares({})
@@ -471,6 +481,9 @@ export function QuickApp() {
     const refuse = (text: string) => setMsg({ ok: false, text: [text, ...words.now()].join(' ') })
     if (data.readOnly) return refuse(data.readOnlyReason ?? 'Folder jest tylko do odczytu.')
     if (d.amount <= 0) return refuse('Wpisz kwotę.')
+    // AP-48: a code the field did not take never reaches here – a draft of another version might.
+    const currency = d.foreign?.amount ? currencyRefusal(d.foreign.currency) : null
+    if (currency) return refuse(currency)
     if (d.kind !== 'income' && lines.length > 1 && lines.reduce((a, l) => a + l.amount, 0) !== d.amount) return refuse('Części paragonu nie sumują się do kwoty.')
     if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return refuse('Wybierz domownika, który finansuje zakup.')
     // A member „pytaj” (D80 b, AP-19): the rest beyond what they owe is chosen – never saved as income unasked.
@@ -692,7 +705,25 @@ export function QuickApp() {
             <div className="flex items-center gap-2">
               <AmountField ref={amountRef} className="w-[130px] text-[14px]" value={d.amount || null} allowEmpty onChange={(v) => set({ amount: v ?? 0 })} aria-label="Kwota" data-testid="quick-amount" />
               <span className="text-muted">zł</span>
+              {/* AP-48 (T493): folded – a trip's purchase in its currency, information only. */}
+              {!d.foreign && (
+                // Out of the Tab order (AP-20, SW.36): the amount, Tab, the counterparty – a click opens it.
+                <button type="button" tabIndex={-1} className="text-[11.5px] text-accent hover:underline" onClick={() => set({ foreign: { amount: 0, currency: data?.lastCurrency ?? DEFAULT_CURRENCY } })} data-testid="quick-foreign-open">
+                  + kwota w walucie
+                </button>
+              )}
             </div>
+            {d.foreign && (
+              <ForeignField
+                value={d.foreign.amount > 0 ? d.foreign : null}
+                pln={d.kind === 'income' ? d.amount : -d.amount}
+                currency={d.foreign.currency}
+                open
+                onOpen={(open, c) => setD((x) => ({ ...x, foreign: open ? { amount: x.foreign?.amount ?? 0, currency: c ?? x.foreign?.currency ?? DEFAULT_CURRENCY } : null }))}
+                onChange={(f) => setD((x) => ({ ...x, foreign: f ?? (x.foreign ? { amount: 0, currency: x.foreign.currency } : null) }))}
+                testId="quick-foreign"
+              />
+            )}
           </Row>
           <Row label={d.kind === 'income' ? 'Od kogo' : 'Gdzie'}>
             <input className="input" list="quick-counterparties" value={d.counterparty} onChange={(e) => onCounterparty(e.currentTarget.value)} maxLength={300} placeholder="sklep, usługa, osoba" data-testid="quick-counterparty" />

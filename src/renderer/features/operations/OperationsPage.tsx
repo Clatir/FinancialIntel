@@ -17,6 +17,7 @@ import { navigate, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
 import { usePanels } from '../../store/panels'
 import { plnText, signedPln } from '../../components/fields'
+import { foreignText, rateText } from '@shared/foreign'
 import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../../components/icons'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
@@ -259,6 +260,12 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
               {m === 'refundable' && repaid ? ` · ${MARK_LABEL[repaid]}` : ''}
             </Badge>
           ))}
+          {/* AP-48 (T493): the amount in its currency – information beside the złoty, the rate in the hint. */}
+          {t.foreign && (
+            <Badge title={`Kwota w walucie: ${foreignText(t.foreign, plnText)}${rateText(amount, t.foreign) ? ` · ${rateText(amount, t.foreign)}` : ''}`} data-testid="operation-row-foreign">
+              {foreignText(t.foreign, plnText)}
+            </Badge>
+          )}
           {orders && needsLog(t, orders) && (
             <Badge tone="warn" title="Od progu dziennika kapitańskiego: plan czy impuls?">
               ?
@@ -266,7 +273,7 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
           )}
         </span>
       )}
-      <span className={cx('num text-right font-medium', TONE_CLASS[tone])} data-testid="operation-amount-cell">
+      <span className={cx('num text-right font-medium', TONE_CLASS[tone])} title={t.foreign ? `w walucie: ${foreignText(t.foreign, plnText)}` : undefined} data-testid="operation-amount-cell">
         {signedPln(amount)}
       </span>
     </div>

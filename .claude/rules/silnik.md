@@ -151,7 +151,8 @@ z domownikami), `repayments.ts` (zwroty przypisane do zakupów), `share.ts` (wsp
 miesięcy), `yearPlan.ts` (plan roczny), `cargoStatus.ts` / `cargoWatch.ts` (opłaty, ceny, ciche kontenery), `anomalies.ts`, `returns.ts` (zwroty
 w drodze), `tags.ts` (tagi i wyprawy), `drill.ts`, `fuel.ts` (bilans paliwa), `netWorth.ts`, `inflation.ts`, `why.ts`
 („skąd ta liczba?”), `game.ts` (oceny dni, stopnie, misje), `intel.ts` (analizy ICT), `inbox.ts` (meldunki), `quick.ts`
-(szablony szybkiego wpisu), `effect.ts` (skutek zmiany zbiorczej).
+(szablony szybkiego wpisu), `effect.ts` (skutek zmiany zbiorczej), `sankey.ts` (Sankey miesiąca – tylko liczby
+debriefingu, Bilansu paliwa i części operacji, każdy węzeł zbilansowany – T490; nowy przepływ z liczby, którą już mają).
 
 Szczegóły funkcji i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji) i `docs/decyzje.md`
 (T-decyzje).

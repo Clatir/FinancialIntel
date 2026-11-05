@@ -121,6 +121,21 @@ export const bankRowSchema = z.looseObject({
 })
 export type BankRow = z.infer<typeof bankRowSchema>
 
+/** An ISO 4217 code of a currency („EUR”, „USD”): three capital letters. */
+export const CURRENCY_CODE = /^[A-Z]{3}$/
+
+/**
+ * The operation's amount in the currency it was paid in (1.17.0, AP-48, T492) – for the user alone (a trip abroad): the
+ * budget, the layers and every sum count the złoty of `amount` (spec: only PLN). In hundredths of the currency's unit
+ * for every currency (as grosze – 45,00 EUR = 4500, 1 500 JPY = 150000), always above zero: the operation's amount
+ * gives the direction. The rate shown = złoty ÷ this amount.
+ */
+export const foreignAmountSchema = z.looseObject({
+  amount: z.number().int().min(1).max(1e15),
+  currency: z.string().regex(CURRENCY_CODE)
+})
+export type ForeignAmount = z.infer<typeof foreignAmountSchema>
+
 /** A return of money awaited (1.9.0, F34). */
 export const awaitReturnSchema = z.looseObject({
   amount: grosze.min(1),
@@ -210,7 +225,9 @@ export const transactionSchema = z.looseObject({
   /** Tags (1.10.0, F17): the trip or the project the operation is for; its receipt's lines may add their own. */
   tags: tagListSchema.optional().catch(undefined),
   /** A balance correction (`kind === 'correction'`) explained by the user (N-PC-1): no longer raises a yellow alarm on the bridge. */
-  explained: z.boolean().optional().catch(undefined)
+  explained: z.boolean().optional().catch(undefined),
+  /** The amount in another currency (AP-48, T492): information only; absent / null = none (an older version keeps it). */
+  foreign: foreignAmountSchema.nullable().optional().catch(undefined)
 })
 export type Transaction = z.infer<typeof transactionSchema>
 

@@ -4156,3 +4156,56 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   lat (dymek: konta, warstwy, należności, dług, braki, wpływy, koszty, zasięg), wiersze celów, „Osłony do zera”, „Brakuje
   na koszty od”, zasięg na koniec, tabela założeń do edycji i podpis „Prognoza – nie gwarancja. Założenia: …” z założeniami
   każdego scenariusza, zasadą roku 1 i granicą ICTTJ. Ukryte kwoty (Ctrl+$) – maska w tabeli, polach, dymkach i na osi.
+- **T490** Sankey miesiąca – liczby (1.17.0, R2 – AP-46; zmienia „Sankey – nie” z T294): wykres tylko układa liczby,
+  które już są (`calc/sankey.ts`), nic nie liczy od nowa. Dwa widoki: „Przychód i koszty” – przychody z pracy i dostawy
+  z ICTTJ (praca i trading netto z Bilansu paliwa), zwroty ponad zakupy kategorii (część kosztów poniżej zera – źródło,
+  nigdy wstęga ujemna) i – gdy koszty były wyższe od przychodu – „Z osłon i kadłuba” (na czerwono) → „Miesiąc” → kategorie
+  główne pod nagłówkami „Koperty codzienne” (z „Bez kategorii” – pula codzienna), „Koperty planowe”, „Bez koperty”
+  (wiersze debriefingu), „Ładownia” i „Dołożone do okrętu” (na zielono); bilans = przychód − koszty netto debriefingu
+  (= Bilans paliwa, te same operacje do dnia budżetu – AP-36). Pod nagłówkiem „Poza przychodem i kosztami” – od źródła
+  prosto do celu, obok miesiąca: zakupy ze środków celów, zakupy domowników (`financed` debriefingu), wpłaty domowników
+  (to, czego `incomeParts` nie liczy jako przychód, bez pożyczek i puli „Podatek”: zaliczki z księgi domowników do
+  depozytu, reszta do osłon i kadłuba), pożyczki (wypływy; wpływy do długu – `loanBacks`, odsetki są przychodem – T70),
+  przelewy własne poza budżet i spoza niego (dwustronny – nic; para jednostronnych w budżecie – netto) i dopłaty do XTB
+  ponad wypłaty miesiąca (trading netto poniżej zera – N4). „Pensja i energia” – energia debriefingu: pensja od siebie
+  i łupy poprzedniego miesiąca → energia → odkładki do zbiorników, raty celów, wydane (z energii i ponad nią), zostało;
+  wynik energii poniżej zera – źródło „Ponad energię – z osłon”. Poza wykresem: pula „Podatek” i PIT-38 (poza budżetem),
+  korekty sald, wpływ ujemny. Miesiąc w toku – do dziś, nazwy „(do dziś)”, „Ponad koszty (do dziś)” zamiast „Dołożone”.
+  Kategorie poniżej 1% wszystkich pieniędzy wykresu – „Pozostałe” swojej grupy (z nazwami w dymku), gdy są co najmniej
+  dwie. Test: każdy węzeł zbilansowany, koszty, przychód, bilans paliwa i energia co do grosza
+  (`tests/unit/sankey-ap46.test.ts`).
+- **T491** Sankey miesiąca – wygląd (1.17.0, R2 – AP-46): własne SVG bez biblioteki (`shared/sankeyLayout.ts` – ta sama
+  geometria na ekranie i w PDF): trzy kolumny (skąd, miesiąc / energia, dokąd), słupek i wstęga proporcjonalne do kwoty,
+  wstęga „poza przychodem i kosztami” przechodzi pod węzłem miesiąca (niewidoczny węzeł kolumny), etykiety z kwotą
+  (źródła po lewej, reszta po prawej, za długa – ucięta „…”), nagłówki grup z sumą. Wstęgi i słupki szare, akcent tylko
+  pod wskaźnikiem, zieleń / czerwień tylko dla kwot na plus / minus, kwoty `.num`, bez gradientów i cieni; dymek – nazwa,
+  kwota i procent wszystkich pieniędzy wykresu. Ukryte kwoty (Ctrl+$) – kwoty `•••`, miejsca na etykiety liczone z
+  prawdziwych kwot, więc słupki się nie ruszają. Miejsce: Raporty → Debriefing, pod „Wynik wobec planu”, miesiąc z
+  wyboru debriefingu, widok przełącznikiem (domyślnie „Przychód i koszty”, wybór do zmiany ekranu). PDF debriefingu –
+  oba widoki po „Wyniku wobec planu”, jasne barwy druku, prawdziwe kwoty (D73; `ReportSection.svg`). Okno węższe niż
+  640 px przewija wykres w bok; Raporty nie są na telefonie (D92).
+- **T492** Kwota w walucie – dane (1.17.0, R2 – AP-48; „kwoty tylko w PLN” bez zmian): pole operacji `foreign`
+  (`{ amount, currency }`, addytywnie, bez podbijania `SCHEMA_VERSION`; starsza wersja je zachowuje – `looseObject`) –
+  tylko informacja dla użytkownika (wyjazd). `amount` – setne części jednostki waluty dla każdej waluty (jak grosze:
+  45,00 EUR = 4500, także waluty bez groszy – 1 500 JPY = 150000; waluty z trzema miejscami zaokrąglane do setnych),
+  zawsze powyżej zera – kierunek daje kwota operacji; `currency` – kod ISO 4217 (trzy wielkie litery); wartość, która
+  nimi nie jest, jest pomijana (`catch`), operacja zostaje. Silnik, warstwy, sumy, raporty i kwoty w złotych eksportów
+  go nie czytają (test: ten sam stan silnika z polem i bez). Kurs = złote ÷ kwota w walucie, tylko pokazywany (cztery
+  miejsca, „kurs 4,3000 zł za 1 EUR”), nigdzie nie zapisywany. Historia i konflikty: polskie nazwy pól, kwota jak pole
+  ją pisze („45,00”, ukryta z kwotami – `ValueText.foreign`), nigdy setne ani złote. Duplikat usunięty przy imporcie oddaje
+  ją zostającej operacji (`takeUserData`), jak notatkę.
+- **T493** Kwota w walucie – okno (1.17.0, R2 – AP-48): edytor operacji (każdy rodzaj) i szybki wpis (także na
+  telefonie) – przy kwocie zwinięte „+ kwota w walucie” (klik; poza kolejnością Tab – od kwoty do kontrahenta dalej
+  jeden Tab, AP-20, AP-34); rozwinięte: kwota (wpisywana jak złote), kod waluty (lista częstych, dowolne trzy litery;
+  małe litery – wielkimi; PLN albo nie-kod – odmowa jak przy kwocie, zostaje poprzedni – AP-15), kurs i „×” (bez kwoty
+  w walucie). Nowa kwota zaczyna od waluty ostatniej operacji z kwotą w walucie (wyjazd trwa), bez
+  niej – EUR; rozwinięte bez kwoty – szkic okna (AP-8), w szybkim wpisie „Zapisz i następny” zostawia walutę rozwiniętą.
+  Lista Operacji – plakietka „45,00 EUR” w oznaczeniach (dymek z kursem), na telefonie dopisek w drugiej linii karty.
+  Wyszukiwanie – po kodzie waluty i po kwocie w walucie („45,00”). Eksport CSV i Excel „Operacje” – kolumny „Kwota
+  w walucie” (ze znakiem kwoty w złotych) i „Waluta” na końcu (wcześniejsze kolumny na swoich miejscach); „Części” bez
+  zmian. Ukryte kwoty (Ctrl+$) maskują też kwotę w walucie.
+- **T494** Import z mBanku a kwota w walucie (1.17.0, R2 – AP-48): znane formaty (`tests/fixtures/mbank`, `parseMbank`)
+  nie mają kwoty w walucie oryginalnej przy płatności kartą za granicą z rachunku w złotych – kolumna kwoty jest w walucie
+  rachunku; wiersz w innej walucie (rachunek walutowy) jest pomijany jak dotąd („kwota w EUR – FI prowadzi tylko PLN”).
+  Import nic nie zapisuje w `foreign` i nie zgaduje kwoty z opisu – do zrobienia, gdy pojawi się zanonimizowany plik
+  z taką płatnością, w którym bank ją podaje.

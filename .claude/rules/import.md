@@ -50,6 +50,8 @@ paths:
   mówi przedrostek klucza (`csv:` – `keyKindOf`); **pułapka:** `bank.format` zostaje 'mbank', `bank.source` dla CSV nie
   zapisuj (1.15.9 by je zgubiło). Tożsamość – cały wiersz pliku (`rowText`), nigdy role kolumn (przegląd R1 1); rodzaj
   operacji słowami mBanku (`operationOf`) – rozpoznanie w `classify.ts` czyta tylko je.
+- Kwota w walucie (AP-48, T494): import jej nie pisze – znane pliki mBanku jej nie mają (wiersz w innej walucie pominięty);
+  usuwana kopia oddaje ją zostającej operacji (`takeUserData`), jak notatkę.
 
 ## Rozpoznanie
 - Kolejność: reguła (`findRule`: marka → cała nazwa → „zawiera” → słowo użytkownika; tryb `amount` z `maxAmount`) →
