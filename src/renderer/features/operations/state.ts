@@ -415,7 +415,7 @@ export function changeKind(id: string, kind: TxKind, direct: boolean): boolean {
       label: 'Cofnij',
       run: () => {
         const cur = useData.getState().records.transactions[id]?.record
-        if (!cur || !sameContentAs(cur, made)) return undoChanged()
+        if (!cur || cur.kind !== made.kind) return undoChanged()
         void updateRecord('transactions', id, (r) => kindUndone(r, was, made))
       }
     })
