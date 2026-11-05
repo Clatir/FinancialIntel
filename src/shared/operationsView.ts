@@ -313,7 +313,10 @@ export function noteLineOf(t: Pick<Transaction, 'note' | 'splits'>): string {
   return notes.map((x) => x.replace(/\s+/g, ' ')).join(' · ')
 }
 
-/** Text the search looks in: counterparty, title, notes (the receipt lines' too – D89), the bank's description, category, account, tags (F17). */
+/**
+ * Text the search looks in: counterparty, title, notes (the receipt lines' too – D89), the bank's description, category,
+ * account, tags (F17), the currency of an amount in one (AP-48 – „EUR”).
+ */
 export function searchTextOf(t: Transaction, ctx: FilterContext): string {
   if (!texts || texts.categories !== ctx.categories || texts.accounts !== ctx.accounts)
     texts = { categories: ctx.categories, accounts: ctx.accounts, names: new Map(ctx.accounts.map((a) => [a.id, a.name])), byTx: new WeakMap() }
@@ -322,7 +325,7 @@ export function searchTextOf(t: Transaction, ctx: FilterContext): string {
     const cats = [t.categoryId, ...t.splits.map((s) => s.categoryId)].filter(Boolean).map((id) => ctx.categories.label(id))
     const other = isTwoSided(t) ? (texts.names.get(t.counterAccountId!) ?? '') : ''
     const tags = [...tagsOf(t), ...t.splits.flatMap((x) => x.tags ?? [])].map((x) => `#${x}`)
-    text = fold([t.counterparty, t.title, t.note, ...t.splits.map((s) => s.note), t.logNote, t.bank?.description ?? '', ...cats, texts.names.get(t.accountId) ?? '', other, ...tags].join(' \u0001 '))
+    text = fold([t.counterparty, t.title, t.note, ...t.splits.map((s) => s.note), t.logNote, t.bank?.description ?? '', ...cats, texts.names.get(t.accountId) ?? '', other, ...tags, t.foreign?.currency ?? ''].join(' \u0001 '))
     texts.byTx.set(t, text)
   }
   return text
@@ -365,12 +368,15 @@ export function matchesFilter(t: Transaction, f: OperationsFilter, ctx: FilterCo
   return matchesQuery(t, f.query, ctx)
 }
 
-/** The search of Operacje (and of the palette – F19): every word in the texts (no Polish letters), or the amount typed. */
+/**
+ * The search of Operacje (and of the palette – F19): every word in the texts (no Polish letters), or the amount typed –
+ * in złoty or in the operation's currency (AP-48: „45,00” finds 45,00 EUR).
+ */
 export function matchesQuery(t: Transaction, query: string, ctx: FilterContext): boolean {
   const q = query.trim()
   if (!q) return true
   const { amount, words } = parsedQuery(q)
-  if (amount != null && Math.abs(t.amount) === amount) return true
+  if (amount != null && (Math.abs(t.amount) === amount || t.foreign?.amount === amount)) return true
   const text = searchTextOf(t, ctx)
   return words.every((w) => text.includes(w))
 }

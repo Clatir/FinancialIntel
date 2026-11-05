@@ -259,6 +259,9 @@ Jedna operacja w pliku; folder roku i data w nazwie to data warszawska operacji.
 | `awaitReturn.closedAt` | chwila ISO 8601 (UTC) | domyślnie `null`, może być `null` | Zamknięty ręcznie; `null` – otwarty. |
 | `tags` | lista: tekst | opcjonalne | Tagi (wyprawa, projekt). |
 | `explained` | tak / nie (`true` / `false`) | opcjonalne | Korekta salda wyjaśniona przez użytkownika. |
+| `foreign` | obiekt | opcjonalne, może być `null` | Kwota w walucie, w której zapłacono (wyjazd) – tylko informacja; budżet liczy złote z `amount`. |
+| `foreign.amount` | liczba całkowita | wymagane | W setnych częściach jednostki waluty (jak grosze: 45,00 EUR = 4500), zawsze dodatnia – kierunek daje `amount`. |
+| `foreign.currency` | tekst | wymagane | Kod waluty ISO 4217 – trzy wielkie litery, np. `EUR`. |
 
 ### Kontenery Ładowni – `containers/ULID.json`
 

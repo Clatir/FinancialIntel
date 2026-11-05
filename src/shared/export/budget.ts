@@ -48,6 +48,13 @@ export interface OperationRow {
   note: string
   /** Its tags (F17): the operation's and its lines', „#wakacje #remont”; '' = none. */
   tags: string
+  /**
+   * Its amount in another currency (AP-48, T493 – information only): hundredths of the currency's unit, signed as the
+   * row's złoty; null – none. The rate is not exported (the złoty ÷ this amount).
+   */
+  foreign: number | null
+  /** The currency's code („EUR”); '' – none. */
+  currency: string
 }
 
 export function operationRows(
@@ -91,7 +98,7 @@ export function operationRowsOf(
         : `${accountName.get(t.counterAccountId!) ?? ''} → ${accountName.get(t.accountId) ?? ''}`
       : (accountName.get(t.accountId) ?? ''),
     kind: TX_KIND_LABEL[t.kind],
-    amount: view && touchesAccount(t, view) ? amountOn(t, view) : t.amount,
+    amount: rowAmount(t, view),
     // An income's parts are its members' money (D81), not categories.
     category: t.kind === 'income' ? '' : t.splits.length ? t.splits.map((s) => cats.label(s.categoryId)).join(' + ') : cats.label(t.categoryId),
     counterparty: t.counterparty,
@@ -103,9 +110,14 @@ export function operationRowsOf(
     note: [t.note, ...t.splits.filter((s) => s.note.trim()).map((s) => (cats.label(s.categoryId) ? `${cats.label(s.categoryId)}: ${s.note.trim()}` : s.note.trim()))]
       .filter((x) => x.trim())
       .join(' · '),
-    tags: tagsText(t)
+    tags: tagsText(t),
+    foreign: t.foreign ? (rowAmount(t, view) < 0 ? -t.foreign.amount : t.foreign.amount) : null,
+    currency: t.foreign?.currency ?? ''
   }))
 }
+
+/** The money of a row: on the list's account (a transfer's side – F18), else the operation's amount. */
+const rowAmount = (t: Transaction, view: string | null): number => (view && touchesAccount(t, view) ? amountOn(t, view) : t.amount)
 
 /** Whose an operation is (D80, D81): who finances a purchase, whose money an income is (its parts' members too). */
 function whose(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>>): string {
@@ -116,12 +128,13 @@ function whose(t: Transaction, members: ReadonlyArray<Pick<HouseholdMember, 'id'
   return financersText(t, members)
 }
 
-const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Finansuje', 'Dziennik', 'Notatka', 'Tagi'] as const
+// AP-48: the amount in a currency last – the columns before it as they were (a spreadsheet reading them by place).
+const OPERATION_HEADER = ['Data', 'Godzina', 'Konto', 'Rodzaj', 'Kwota (zł)', 'Kategoria', 'Kontrahent', 'Tytuł', 'Finansuje', 'Dziennik', 'Notatka', 'Tagi', 'Kwota w walucie', 'Waluta'] as const
 
 export function operationsCsv(rows: readonly OperationRow[]): string {
   return toCsv(
     OPERATION_HEADER,
-    rows.map((r) => [r.date, r.time, r.account, r.kind, plnCell(r.amount), r.category, r.counterparty, r.title, r.financed, r.log, r.note, r.tags])
+    rows.map((r) => [r.date, r.time, r.account, r.kind, plnCell(r.amount), r.category, r.counterparty, r.title, r.financed, r.log, r.note, r.tags, r.foreign == null ? '' : plnCell(r.foreign), r.currency])
   )
 }
 
@@ -142,9 +155,11 @@ export function operationsSheet(rows: readonly OperationRow[]): XlsxSheet {
       { header: 'Finansuje', kind: 'text', width: 14 },
       { header: 'Dziennik', kind: 'text', width: 9 },
       { header: 'Notatka', kind: 'text', width: 30 },
-      { header: 'Tagi', kind: 'text', width: 22 }
+      { header: 'Tagi', kind: 'text', width: 22 },
+      { header: 'Kwota w walucie', kind: 'money', width: 14 },
+      { header: 'Waluta', kind: 'text', width: 8 }
     ],
-    rows: rows.map((r) => [r.date, r.time, r.account, r.kind, r.amount / 100, r.category, r.counterparty, r.title, r.financed, r.log, r.note, r.tags])
+    rows: rows.map((r) => [r.date, r.time, r.account, r.kind, r.amount / 100, r.category, r.counterparty, r.title, r.financed, r.log, r.note, r.tags, r.foreign == null ? null : r.foreign / 100, r.currency])
   }
 }
 

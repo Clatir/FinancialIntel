@@ -194,7 +194,9 @@ export function takeUserData(keep: Transaction, copies: readonly Transaction[], 
       time: out.time ?? c.time,
       containerId: out.containerId ?? c.containerId,
       goalId: out.goalId ?? c.goalId,
-      loanId: out.loanId ?? c.loanId
+      loanId: out.loanId ?? c.loanId,
+      // The amount in a currency typed on the copy (AP-48 – a quick entry abroad, the bank's row kept).
+      ...((out.foreign ?? c.foreign) ? { foreign: out.foreign ?? c.foreign } : {})
     }
   }
   return { ...out, updatedAt: now }

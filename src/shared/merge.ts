@@ -478,6 +478,10 @@ const LABELS: Record<string, string> = {
   'awaitReturn.amount': 'Czeka na zwrot – kwota',
   'awaitReturn.until': 'Czeka na zwrot – do',
   'awaitReturn.closedAt': 'Czeka na zwrot – zamknięty',
+  // AP-48 (T492): an amount in another currency – its hundredths written as the field writes them, never raw.
+  foreign: 'Kwota w walucie',
+  'foreign.amount': 'Kwota w walucie – kwota',
+  'foreign.currency': 'Kwota w walucie – waluta',
   inflowKind: 'Rodzaj wpływu',
   coversOpeningMembers: 'Spłaca saldo na start – domownicy',
   priceIgnored: 'Nowa cena pominięta',
@@ -618,6 +622,12 @@ export function isAmountPath(path: Path): boolean {
   return AMOUNT_FIELDS.some((f) => f.length === named.length && f.every((k, i) => k === '*' || k === named[i]))
 }
 
+/** The amount of an operation in another currency (AP-48): hundredths of its unit, never złoty. */
+export const isForeignAmountPath = (path: Path): boolean => {
+  const named = path.filter((p) => !p.startsWith('#') && !/^\[\d+\]$/.test(p))
+  return named.length === 2 && named[0] === 'foreign' && named[1] === 'amount'
+}
+
 /** The same for a flat key („splits[0].amount”, „settings.budget.initial.hull”) – the conflicts' list. */
 export const isAmountKey = (key: string): boolean => isAmountPath(key.replace(/\[\d+\]/g, '').split('.').filter(Boolean))
 
@@ -627,6 +637,8 @@ export interface ValueText {
   path?: Path
   /** An amount in grosze as the window writes it (masked with the amounts); default `formatPln` + „ zł”. */
   amount?: (grosze: number) => string
+  /** An amount in a currency's hundredths (AP-48 – `foreign.amount`) as the window writes it (masked); default `formatPln`. */
+  foreign?: (hundredths: number) => string
   names?: ReadonlyMap<string, string>
 }
 
@@ -655,6 +667,7 @@ export function formatValue(v: unknown, max = 80, opts: ValueText = {}): string 
   if (v === undefined) return '—'
   if (v === null || v === '') return 'puste'
   if (typeof v === 'number' && opts.path && isAmountPath(opts.path)) return opts.amount ? opts.amount(v) : `${formatPln(v)} zł`
+  if (typeof v === 'number' && opts.path && isForeignAmountPath(opts.path)) return opts.foreign ? opts.foreign(v) : formatPln(v)
   if (typeof v === 'string') return opts.names?.get(v) ?? valueLabel(opts.path, v) ?? dateValueText(v) ?? cut(v)
   // As written, never rounded: the comma and the typographic minus (AP-23).
   if (typeof v === 'number') return String(v).replace(/^-/, '−').replace('.', ',')

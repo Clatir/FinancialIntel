@@ -45,6 +45,8 @@ paths:
   decyzja albo pieniądze tych samych domowników – `takesCovers`), a kopia, której zakupów operacja tutaj nie przejmie,
   nie jest zaznaczona (`coversOtherwise`, `dropsCovers`; T321, T333).
 - Pliki z banku w Pobranych: `main/bankFiles.ts` + `shared/import/bankFiles.ts`.
+- Kwota w walucie (AP-48, T494): import jej nie pisze – znane pliki mBanku jej nie mają (wiersz w innej walucie pominięty);
+  usuwana kopia oddaje ją zostającej operacji (`takeUserData`), jak notatkę.
 
 ## Rozpoznanie
 - Kolejność: reguła (`findRule`: marka → cała nazwa → „zawiera” → słowo użytkownika; tryb `amount` z `maxAmount`) →

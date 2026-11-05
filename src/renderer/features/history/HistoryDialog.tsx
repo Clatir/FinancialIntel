@@ -58,7 +58,7 @@ export function displayValue(v: unknown, names: Map<string, string>, path?: Path
   // An amount in grosze (B7): in złoty, hidden with the amounts (Ctrl+$).
   if (path && typeof v === 'number' && isAmountPath(path)) return `${plnText(v)} zł`
   // Ids by their names, dates as dd.mm.rrrr, an object by its fields – never JSON (AP-27).
-  return formatValue(v, 80, { path, names, amount: (g) => `${plnText(g)} zł` })
+  return formatValue(v, 80, { path, names, amount: (g) => `${plnText(g)} zł`, foreign: (h) => plnText(h) })
 }
 
 /** Field-by-field list of changes: label, value before, value after. */

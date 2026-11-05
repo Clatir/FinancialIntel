@@ -4001,3 +4001,28 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wyboru debriefingu, widok przełącznikiem (domyślnie „Przychód i koszty”, wybór do zmiany ekranu). PDF debriefingu –
   oba widoki po „Wyniku wobec planu”, jasne barwy druku, prawdziwe kwoty (D73; `ReportSection.svg`). Okno węższe niż
   640 px przewija wykres w bok; Raporty nie są na telefonie (D92).
+- **T492** Kwota w walucie – dane (1.17.0, R2 – AP-48; „kwoty tylko w PLN” bez zmian): pole operacji `foreign`
+  (`{ amount, currency }`, addytywnie, bez podbijania `SCHEMA_VERSION`; starsza wersja je zachowuje – `looseObject`) –
+  tylko informacja dla użytkownika (wyjazd). `amount` – setne części jednostki waluty dla każdej waluty (jak grosze:
+  45,00 EUR = 4500, także waluty bez groszy – 1 500 JPY = 150000; waluty z trzema miejscami zaokrąglane do setnych),
+  zawsze powyżej zera – kierunek daje kwota operacji; `currency` – kod ISO 4217 (trzy wielkie litery); wartość, która
+  nimi nie jest, jest pomijana (`catch`), operacja zostaje. Silnik, warstwy, sumy, raporty i kwoty w złotych eksportów
+  go nie czytają (test: ten sam stan silnika z polem i bez). Kurs = złote ÷ kwota w walucie, tylko pokazywany (cztery
+  miejsca, „kurs 4,3000 zł za 1 EUR”), nigdzie nie zapisywany. Historia i konflikty: polskie nazwy pól, kwota jak pole
+  ją pisze („45,00”, ukryta z kwotami – `ValueText.foreign`), nigdy setne ani złote. Duplikat usunięty przy imporcie oddaje
+  ją zostającej operacji (`takeUserData`), jak notatkę.
+- **T493** Kwota w walucie – okno (1.17.0, R2 – AP-48): edytor operacji (każdy rodzaj) i szybki wpis (także na
+  telefonie) – przy kwocie zwinięte „+ kwota w walucie” (klik; poza kolejnością Tab – od kwoty do kontrahenta dalej
+  jeden Tab, AP-20, AP-34); rozwinięte: kwota (wpisywana jak złote), kod waluty (lista częstych, dowolne trzy litery;
+  małe litery – wielkimi; PLN albo nie-kod – odmowa jak przy kwocie, zostaje poprzedni – AP-15), kurs i „×” (bez kwoty
+  w walucie). Nowa kwota zaczyna od waluty ostatniej operacji z kwotą w walucie (wyjazd trwa), bez
+  niej – EUR; rozwinięte bez kwoty – szkic okna (AP-8), w szybkim wpisie „Zapisz i następny” zostawia walutę rozwiniętą.
+  Lista Operacji – plakietka „45,00 EUR” w oznaczeniach (dymek z kursem), na telefonie dopisek w drugiej linii karty.
+  Wyszukiwanie – po kodzie waluty i po kwocie w walucie („45,00”). Eksport CSV i Excel „Operacje” – kolumny „Kwota
+  w walucie” (ze znakiem kwoty w złotych) i „Waluta” na końcu (wcześniejsze kolumny na swoich miejscach); „Części” bez
+  zmian. Ukryte kwoty (Ctrl+$) maskują też kwotę w walucie.
+- **T494** Import z mBanku a kwota w walucie (1.17.0, R2 – AP-48): znane formaty (`tests/fixtures/mbank`, `parseMbank`)
+  nie mają kwoty w walucie oryginalnej przy płatności kartą za granicą z rachunku w złotych – kolumna kwoty jest w walucie
+  rachunku; wiersz w innej walucie (rachunek walutowy) jest pomijany jak dotąd („kwota w EUR – FI prowadzi tylko PLN”).
+  Import nic nie zapisuje w `foreign` i nie zgaduje kwoty z opisu – do zrobienia, gdy pojawi się zanonimizowany plik
+  z taką płatnością, w którym bank ją podaje.

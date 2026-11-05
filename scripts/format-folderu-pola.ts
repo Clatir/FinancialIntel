@@ -237,6 +237,9 @@ export const FIELD_WORDS: Record<string, string> = {
   'transactions:awaitReturn.closedAt': 'Zamknięty ręcznie; `null` – otwarty.',
   'transactions:tags': 'Tagi (wyprawa, projekt).',
   'transactions:explained': 'Korekta salda wyjaśniona przez użytkownika.',
+  'transactions:foreign': 'Kwota w walucie, w której zapłacono (wyjazd) – tylko informacja; budżet liczy złote z `amount`.',
+  'transactions:foreign.amount': 'W setnych częściach jednostki waluty (jak grosze: 45,00 EUR = 4500), zawsze dodatnia – kierunek daje `amount`.',
+  'transactions:foreign.currency': 'Kod waluty ISO 4217 – trzy wielkie litery, np. `EUR`.',
 
   // ------------------------------------------------------------------ containers
   'containers:name': 'Nazwa.',
