@@ -2,6 +2,7 @@ import { addDays, monthOf, warsawNow } from '@shared/calc/dates'
 import { pastAfterChange } from '@shared/calc/cargoWatch'
 import { linkFromOf, unlinkedPayments, type RecurringPayment } from '@shared/calc/plan'
 import { newId } from '@shared/ids'
+import { sameContentAs } from '@shared/merge'
 import { containerSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Container, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
 import { toast } from '../../store/ui'
@@ -125,10 +126,16 @@ export const patchContainer = (id: string, p: Partial<Container>) =>
 /** What a change of a container's amount writes (F9) – its „Cofnij” puts these back. */
 const AMOUNT_FIELDS = ['amount', 'past', 'priceIgnored', 'amountAt'] as const
 
-function amountUndo(c: Container): () => void {
+const undoChanged = () => toast('Nie cofnięto – wpis został w międzyczasie zmieniony.', 'info', 6000)
+
+function amountUndo(c: Container, after: Container | undefined): () => void {
   const before: Partial<Container> = {}
   for (const k of AMOUNT_FIELDS) (before as Record<string, unknown>)[k] = c[k]
-  return () => updateRecord('containers', c.id, (x) => ({ ...x, ...before }))
+  return () => {
+    const cur = useData.getState().records.containers[c.id]?.record
+    if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+    updateRecord('containers', c.id, (x) => ({ ...x, ...before }))
+  }
 }
 
 /**
@@ -137,24 +144,46 @@ function amountUndo(c: Container): () => void {
  */
 export function updatePrice(c: Container, to: number): void {
   if (!canWrite()) return
-  const undo = amountUndo(c)
+  const before = useData.getState().records.containers[c.id]?.record ?? c
   const { month } = warsawNow()
   patchContainer(c.id, { amount: to, priceIgnored: null })
-  toast(`${c.name}: ${plnText(to)} zł od ${monthGenLabel(month)} – wcześniejsze miesiące liczą się kwotą ${plnText(c.amount)} zł.`, 'success', 8000, { label: 'Cofnij', run: undo })
+  const after = useData.getState().records.containers[c.id]?.record
+  toast(`${c.name}: ${plnText(to)} zł od ${monthGenLabel(month)} – wcześniejsze miesiące liczą się kwotą ${plnText(c.amount)} zł.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: amountUndo(before, after)
+  })
 }
 
 /** „To nie zmiana ceny” (F9): this price is not proposed again (another one would be). */
 export function ignorePrice(c: Container, to: number): void {
   if (!canWrite()) return
+  const before = c.priceIgnored
   patchContainer(c.id, { priceIgnored: to })
-  toast(`${c.name}: kwota ${plnText(to)} zł nie będzie proponowana.`, 'info', 6000, { label: 'Cofnij', run: () => patchContainer(c.id, { priceIgnored: c.priceIgnored }) })
+  const after = useData.getState().records.containers[c.id]?.record
+  toast(`${c.name}: kwota ${plnText(to)} zł nie będzie proponowana.`, 'info', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.containers[c.id]?.record
+      if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+      patchContainer(c.id, { priceIgnored: before })
+    }
+  })
 }
 
 /** The amount for every month (F9 – a typo set right, not a raise): the history of amounts goes. */
 export function clearPast(c: Container): void {
   if (!canWrite() || !c.past.length) return
+  const before = useData.getState().records.containers[c.id]?.record ?? c
   patchContainer(c.id, { past: [] })
-  toast(`${c.name}: ${plnText(c.amount)} zł we wszystkich miesiącach.`, 'success', 8000, { label: 'Cofnij', run: () => patchContainer(c.id, { past: c.past }) })
+  const after = useData.getState().records.containers[c.id]?.record
+  toast(`${c.name}: ${plnText(c.amount)} zł we wszystkich miesiącach.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.containers[c.id]?.record
+      if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+      updateRecord('containers', c.id, (r) => ({ ...r, past: before.past, amountAt: before.amountAt }))
+    }
+  })
 }
 
 /**
@@ -163,16 +192,34 @@ export function clearPast(c: Container): void {
  */
 export function settleDue(c: Container, due: string): void {
   if (!canWrite()) return
-  const after = addDays(due, 1)
-  patchContainer(c.id, { aliveAt: c.aliveAt && c.aliveAt > after ? c.aliveAt : after })
-  toast(`${c.name}: termin ${plDate(due)} zapłacony poza budżetem.`, 'info', 6000, { label: 'Cofnij', run: () => patchContainer(c.id, { aliveAt: c.aliveAt }) })
+  const before = c.aliveAt
+  const nextAlive = addDays(due, 1)
+  patchContainer(c.id, { aliveAt: c.aliveAt && c.aliveAt > nextAlive ? c.aliveAt : nextAlive })
+  const after = useData.getState().records.containers[c.id]?.record
+  toast(`${c.name}: termin ${plDate(due)} zapłacony poza budżetem.`, 'info', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.containers[c.id]?.record
+      if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+      patchContainer(c.id, { aliveAt: before })
+    }
+  })
 }
 
 /** „Nadal płacę” (F9): the payments missing so far never make it look cancelled. */
 export function keepContainer(c: Container): void {
   if (!canWrite()) return
+  const before = c.aliveAt
   patchContainer(c.id, { aliveAt: warsawNow().date })
-  toast(`${c.name} zostaje w ładowni.`, 'info', 6000, { label: 'Cofnij', run: () => patchContainer(c.id, { aliveAt: c.aliveAt }) })
+  const after = useData.getState().records.containers[c.id]?.record
+  toast(`${c.name} zostaje w ładowni.`, 'info', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.containers[c.id]?.record
+      if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+      patchContainer(c.id, { aliveAt: before })
+    }
+  })
 }
 
 /** „Nie proponuj” (F23): the payee's recurring payments are not proposed for the hold any more. */
@@ -184,7 +231,13 @@ export function ignoreProposal(p: Pick<RecurringPayment, 'key' | 'label'>): void
       return { ...f, settings: { ...f.settings, cargo: { ...f.settings.cargo, ignored: on ? [...list, p.key] : list } } }
     })
   set(true)
-  toast(`„${p.label}” nie będzie proponowany do ładowni.`, 'info', 6000, { label: 'Cofnij', run: () => set(false) })
+  toast(`„${p.label}” nie będzie proponowany do ładowni.`, 'info', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      if (!useData.getState().fi?.settings.cargo.ignored.includes(p.key)) return undoChanged()
+      set(false)
+    }
+  })
 }
 
 /** „Proponuj znowu” (F23): the payees said „nie proponuj” to – back among the proposals. */
@@ -196,12 +249,18 @@ export function unignoreProposals(keys: readonly string[]): void {
 /** Dropped from the hold (or brought back): it still counts until this month's end – the months before stay as they were (B56). */
 export function archiveContainer(c: Container, archived: boolean): void {
   if (!canWrite()) return
+  const before = useData.getState().records.containers[c.id]?.record ?? c
   patchContainer(c.id, { archived, archivedAt: archived ? new Date().toISOString() : null })
+  const after = useData.getState().records.containers[c.id]?.record
   // The dump with „Cofnij” (AP-22, AF-77), and the mass said (LA sp. 7, T136): this month it still counts.
   if (archived)
     toast(`„${c.name}” zrzucony z ładowni – w masie liczy się do końca miesiąca.`, 'info', 8000, {
       label: 'Cofnij',
-      run: () => void patchContainer(c.id, { archived: c.archived, archivedAt: c.archivedAt ?? null })
+      run: () => {
+        const cur = useData.getState().records.containers[c.id]?.record
+        if (!cur || !after || !sameContentAs(cur, after)) return undoChanged()
+        updateRecord('containers', c.id, (r) => ({ ...r, archived: before.archived, archivedAt: before.archivedAt ?? null, amountAt: before.amountAt }))
+      }
     })
 }
 
@@ -249,7 +308,14 @@ export function payContainer(c: Container, amount: number = c.amount): string | 
     containerId: c.id
   })
   addRecord('transactions', record)
-  toast(`Zapisano płatność: ${c.name} ${plnText(amount)} zł (dziś).`, 'success', 6000, { label: 'Cofnij', run: () => deleteOrSay('transactions', record.id) })
+  toast(`Zapisano płatność: ${c.name} ${plnText(amount)} zł (dziś).`, 'success', 6000, {
+    label: 'Cofnij',
+    run: () => {
+      const cur = useData.getState().records.transactions[record.id]?.record
+      if (!cur || !sameContentAs(cur, record)) return undoChanged()
+      void deleteOrSay('transactions', record.id)
+    }
+  })
   return record.id
 }
 
@@ -278,6 +344,9 @@ export function setInitialTank(containerId: string, name: string, amount: number
   apply(amount)
   toast(`Zbiornik „${name}” zasilony na starcie budżetu kwotą ${plnText(amount)} zł (z osłon).`, 'success', 7000, {
     label: 'Cofnij',
-    run: () => apply(prev)
+    run: () => {
+      if ((useData.getState().fi?.settings.budget.initial?.tanks?.[containerId] ?? 0) !== amount) return undoChanged()
+      apply(prev)
+    }
   })
 }

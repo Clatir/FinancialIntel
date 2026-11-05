@@ -102,15 +102,26 @@ export class AtomicWriteError extends Error {
 
   constructor(
     readonly step: AtomicStep,
-    override readonly cause: unknown
+    override readonly cause: unknown,
+    message?: string,
+    readonly readOnlyTarget?: boolean
   ) {
-    super(cause instanceof Error ? cause.message : String(cause))
+    super(message ?? (cause instanceof Error ? cause.message : String(cause)))
     this.name = 'AtomicWriteError'
     const fsError = (typeof cause === 'object' && cause !== null ? cause : {}) as NodeJS.ErrnoException
     this.code = fsError.code
     this.errno = fsError.errno
     this.syscall = fsError.syscall
     this.path = fsError.path
+  }
+}
+
+async function isTargetReadOnly(target: string): Promise<boolean> {
+  try {
+    const st = await fs.stat(target)
+    return st.isFile() && (st.mode & 0o200) === 0
+  } catch {
+    return false
   }
 }
 
@@ -160,7 +171,31 @@ export async function writeFileAtomic(target: string, data: string | Uint8Array,
         await handle.close()
       }
     })
-    await step('replace', () => withRetry(() => fs.rename(tmp, target), attempts))
+    await step('replace', async () => {
+      if (await isTargetReadOnly(target)) {
+        const err = Object.assign(new Error(`EPERM: operation not permitted, rename -> '${target}'`), { code: 'EPERM', path: target })
+        throw new AtomicWriteError(
+          'replace',
+          err,
+          `Plik ${basename(target)} ma atrybut „tylko do odczytu” – zdejmij blokadę w Synchronizacji („Zdejmij blokadę”).`,
+          true
+        )
+      }
+      try {
+        await withRetry(() => fs.rename(tmp, target), attempts)
+      } catch (e) {
+        const code = errCode(e)
+        if ((code === 'EPERM' || code === 'EACCES') && (await isTargetReadOnly(target))) {
+          throw new AtomicWriteError(
+            'replace',
+            e,
+            `Plik ${basename(target)} ma atrybut „tylko do odczytu” – zdejmij blokadę w Synchronizacji („Zdejmij blokadę”).`,
+            true
+          )
+        }
+        throw e
+      }
+    })
   } catch (e) {
     // e.g. disk full or the target locked for too long: never leave a half-written temp file behind.
     await fs.rm(tmp, { force: true }).catch(() => undefined)

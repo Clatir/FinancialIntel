@@ -54,6 +54,7 @@ export function accountAmounts(t: Transaction): readonly AccountSide[] {
 }
 
 type PartsSource = Pick<Transaction, 'amount' | 'categoryId' | 'refundable' | 'splits'> & {
+  kind?: Transaction['kind']
   memberId?: string | null
   gift?: boolean
   containerId?: string | null
@@ -71,18 +72,19 @@ const partsMemo = new WeakMap<PartsSource, readonly Part[]>()
 export function partsOf(t: PartsSource): readonly Part[] {
   const known = partsMemo.get(t)
   if (known) return known
+  const expense = (t.kind ?? 'expense') === 'expense'
   const own = {
     refundable: t.refundable,
     memberId: t.refundable ? (t.memberId ?? null) : null,
     gift: t.refundable && !!t.gift,
-    ...(t.containerId ? { containerId: t.containerId } : {}),
+    ...(expense && t.containerId ? { containerId: t.containerId } : {}),
     ...(t.goalId ? { goalId: t.goalId } : {})
   }
   let parts: Part[]
   if (!t.splits.length) parts = [{ amount: t.amount, categoryId: t.categoryId, ...own }]
   else {
     parts = t.splits.map((s) => {
-      const containerId = s.containerId ?? t.containerId ?? null
+      const containerId = expense ? (s.containerId ?? t.containerId ?? null) : null
       const goalId = s.goalId ?? t.goalId ?? null
       return {
         amount: s.amount,
@@ -209,10 +211,12 @@ export function ownSpent(t: Transaction): number {
 }
 
 /**
- * A payment of the cargo (B58): linked to a container that exists. A payment of a container deleted (on another
- * computer, or before 1.5.2) is an ordinary expense – the engine takes it from the energy, so the envelopes count it.
+ * A payment of the cargo (B58, T393, T499): an expense linked to a container that exists. A payment of a container
+ * deleted (on another computer, or before 1.5.2) is an ordinary expense – the engine takes it from the energy, so the
+ * envelopes count it; another kind with a hidden container link is never a cargo payment.
  */
-export const isCargoPayment = (t: { containerId?: string | null }, containerIds: ReadonlySet<string>): boolean => t.containerId != null && containerIds.has(t.containerId)
+export const isCargoPayment = (t: { kind?: Transaction['kind']; containerId?: string | null }, containerIds: ReadonlySet<string>): boolean =>
+  (t.kind == null || t.kind === 'expense') && t.containerId != null && containerIds.has(t.containerId)
 
 /**
  * What an operation is (1.11.0, D89): its note, then its receipt lines' – the list's „Notatka” as a whole (the hint), the
@@ -241,7 +245,7 @@ export function isConfirmedNight(
   orders: Pick<Orders, 'quietHours'>
 ): boolean {
   if (!isNight(t, orders) || t.logNote.trim() === '') return false
-  if (t.impulse === 'plan' || t.explained || t.containerId != null) return false
+  if (t.impulse === 'plan' || t.explained || (t.kind === 'expense' && t.containerId != null)) return false
   return true
 }
 
@@ -251,7 +255,7 @@ export function isConfirmedNight(
  * no violation) or the serious violation.
  */
 export function nightVerdict(t: Transaction): 'justified' | 'member' | 'violation' {
-  if (t.impulse === 'plan' || t.explained || t.containerId != null) return 'justified'
+  if (t.impulse === 'plan' || t.explained || (t.kind === 'expense' && t.containerId != null)) return 'justified'
   return ownSpent(t) > 0 ? 'violation' : 'member'
 }
 

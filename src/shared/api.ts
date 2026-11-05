@@ -50,6 +50,8 @@ export interface FolderStatus {
   available: boolean
   readOnly: boolean
   readOnlyReason: string | null
+  /** Number of `.json` files in `dataDir` that have the OS read-only attribute set (`(mode & 0o200) === 0`). */
+  readOnlyFiles?: number
   folderSchemaVersion: number
   appSchemaVersion: number
   /** Other machines that used this folder within the last few minutes. */
@@ -371,6 +373,8 @@ export interface FiApi {
   trayPrefs(): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null; loginDisabled?: boolean }>
   setTrayPrefs(patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin' | 'autostartAsked'>>): Promise<TrayPrefs & { loginSupported: boolean; loginEntry?: boolean | null; loginDisabled?: boolean }>
   rescan(): Promise<void>
+  /** Clear the OS read-only attribute (`chmod 0o666`) on `.json` files in the budget folder; returns the count of unlocked files. */
+  unlockReadOnlyFiles(): Promise<number>
   /** ZIP of the whole data folder (without backups). */
   exportZip(): Promise<string | null>
   /** A text file (CSV) saved where the user says; its path, or null when cancelled (E8). */

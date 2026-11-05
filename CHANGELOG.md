@@ -1,5 +1,16 @@
 # Financial Intel – zmiany
 
+## 1.17.1
+
+Poprawki silnika i ochrony danych:
+
+- **Terminy naprzód i zmiana cen w Ładowni:** opłata okresowa z dniem wypadającym po końcu danego miesiąca poprawnie przesuwa się na kolejny miesiąc; zmiana ceny kontenera filtruje przyszłe spłaty po dacie.
+- **Kurs na 12 miesięcy i prognoza:** boja roczna nie dubluje kwot przy uśrednionych 12-miesięcznych wydatkach; zrealizowane cele nie obciążają niepotrzebnie prognozy; ukryty `containerId` jest filtrowany wyłącznie do operacji kosztowych.
+- **Pliki tylko do odczytu i ochrona zapisu:** wykrywanie atrybutu „tylko do odczytu” na plikach JSON bazy danych z jasnym komunikatem ostrzegawczym oraz możliwością zdjęcia blokady bezpośrednio w aplikacji (Synchronizacja / Ustawienia).
+- **Bezpieczne „Cofnij” w całym systemie:** cofnięcie operacji w Ładowni, Radarze, terminach, kategoriach czy widokach operacji odmawia nadpisania, jeśli wpis został w międzyczasie zmodyfikowany przez użytkownika.
+- **Import bankowy i dopasowania:** automatyczne czyszczenie nieaktualnych numerów rachunków, precyzyjne wykrywanie duplikatów między kontami w różnych formatach bankowych oraz zachowywanie linii „w tym za” i spłat przy zmianie decyzji zbiorczej dla tej samej osoby.
+
+
 ## 1.17.0
 
 Rozwojowe 2 – plan spłaty pożyczek, prognoza wieloletnia, wykres „Skąd i dokąd” i kwota w walucie:
