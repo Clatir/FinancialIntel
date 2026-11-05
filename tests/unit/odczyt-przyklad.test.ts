@@ -9,6 +9,11 @@ import { join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { seedFolder, zl } from '../e2e/seed'
+import { partsOf } from '../../src/shared/calc/operations'
+import { createDefaultSettings } from '../../src/shared/defaults'
+import { SCHEMA_VERSION, transactionSchema } from '../../src/shared/schema'
+
+const NOW = '2026-11-05T09:00:00.000Z'
 
 const SCRIPT = join(__dirname, '../../docs/przyklady/odczyt.mjs')
 const MBANK = '01KDEFACC00000000000000001'
@@ -82,6 +87,32 @@ describe('AP-47: przykładowy skrypt odczytu (docs/przyklady/odczyt.mjs)', () =>
     // Another month – its own; a year without operations – nothing.
     expect(Object.fromEntries(await sumMonth(dir, '2026-10'))).toEqual({ Jedzenie: zl(99) })
     expect((await sumMonth(dir, '2025-01')).size).toBe(0)
+  })
+
+  it('przegląd R1 8: część kwoty, której linie paragonu nie pokrywają, liczy się pod kategorią operacji – jak w silniku (`partsOf`)', async () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'fi-odczyt-parts-')), 'FinancialIntel')
+    const ops = [
+      { date: '2026-11-06', accountId: MBANK, amount: -zl(100), categoryId: FUN, counterparty: 'Leroy', splits: [{ id: '01KSPXT0000000000000000003', amount: -zl(60), categoryId: HOME }] },
+      // The rest a member finances: their money, not my cost.
+      { date: '2026-11-07', accountId: MBANK, amount: -zl(50), categoryId: FUN, refundable: true, counterparty: 'Kino', splits: [{ id: '01KSPXT0000000000000000004', amount: -zl(20), categoryId: GROCERIES }] }
+    ]
+    seedFolder(dir, { records: { transactions: ops } })
+    const { sumMonth } = await load()
+    const sums = Object.fromEntries(await sumMonth(dir, '2026-11'))
+    // Dawniej: Rozrywka 0 zł (linie tylko) – skrypt 40 zł mniej niż aplikacja.
+    expect(sums).toEqual({ Dom: zl(60), 'Rozrywka i hobby': zl(40), Jedzenie: zl(20) })
+    // The engine's own parts of the same records, by main category (mine only).
+    const fi = createDefaultSettings('2026-01-01T00:00:00.000Z')
+    const main = (id: string | null) => {
+      const c = fi.settings.categories.find((x) => x.id === id)
+      const top = c?.parentId ? fi.settings.categories.find((x) => x.id === c.parentId) : c
+      return top?.name ?? 'bez kategorii'
+    }
+    const engine: Record<string, number> = {}
+    for (const o of ops) for (const p of partsOf(transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: '01KSPXT00000000000000000TX', createdAt: NOW, updatedAt: NOW, ...o }))) {
+      if (!p.refundable) engine[main(p.categoryId)] = (engine[main(p.categoryId)] ?? 0) - p.amount
+    }
+    expect(sums).toEqual(engine)
   })
 
   it('z wiersza poleceń: raport z kwotami jak w aplikacji, folder bez zmian (tylko odczyt)', () => {

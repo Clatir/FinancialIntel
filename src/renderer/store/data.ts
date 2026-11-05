@@ -864,6 +864,13 @@ const folderReadOnly = () => !!get().status?.readOnly || get().switching
 export const useFolderLocked = (): boolean => useData((s) => !!s.status?.readOnly || s.switching)
 
 /**
+ * Why fields and buttons that change data are off (AP-15: a disabled button says why beside it) – the folder's own reason
+ * of being read only, another one opening; null – they are on.
+ */
+export const useLockedReason = (): string | null =>
+  useData((s) => (s.switching ? SWITCHING_MESSAGE : s.status?.readOnly ? (s.status.readOnlyReason ?? READ_ONLY_MESSAGE) : null))
+
+/**
  * Writes the app makes on its own – the game's days frozen, ICTTJ's goals followed, the settlements' start (D86: on a
  * computer in use only): in a writable folder shown in full, never while changes are being written (T301) – a write
  * started then would keep the flush going or reach the disk after its answer („zapis jeszcze trwa” at the window's close) –

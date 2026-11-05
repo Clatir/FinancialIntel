@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
@@ -165,3 +165,55 @@ test('AP-45: „także dla wpisów ręcznych” w edytorze reguły marki i na li
     await app.close()
   }
 })
+
+test('przegląd R1 13 (AP-15): folder tylko do odczytu – wyłączone przyciski reguł mówią obok dlaczego, także „Zapisz” otwartego edytora', async () => {
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-ap45-ro-')), 'FinancialIntel')
+  const AT = new Date().toISOString()
+  const cafe = { id: seedId(), match: 'kawiarnia', mode: 'keyword', direction: 'out', label: 'kawiarnia', kind: 'expense', categoryId: '01KDEFCAT00000000000000103', refundable: false, household: false, memberId: null, counterAccountId: null, learned: false, hits: 0, updatedAt: AT }
+  seedFolder(dataDir, { settings: (s) => ({ ...s, import: { ...s.import, rules: [cafe] as typeof s.import.rules } }) })
+  const { app, page } = await launch({ dataDir, env: { FI_FOLDER_CHECK_MS: '400' } })
+  const away = `${dataDir}-gdzie-indziej`
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-import').click()
+    await page.getByTestId('import-rule-new').click()
+    const editor = page.getByTestId('import-rule-conditions')
+    await expect(editor.getByTestId('import-rule-conditions-save')).toBeEnabled()
+    await expect(page.getByTestId('import-rules-locked')).toHaveCount(0)
+    // The folder gone meanwhile (AP-1): read only until it is back, with its reason.
+    await renameRetrying(dataDir, away)
+    await expect(page.getByTestId('banner-ro')).toBeVisible({ timeout: 10_000 })
+    await expect(editor.getByTestId('import-rule-conditions-save')).toBeDisabled()
+    await expect(editor.getByTestId('import-rule-conditions-locked')).not.toBeEmpty()
+    await expect(page.getByTestId('import-rule-new')).toBeDisabled()
+    await expect(page.getByTestId('import-rules-locked')).not.toBeEmpty()
+    await expect(page.getByTestId('keyword-rule-manual')).toBeDisabled()
+    await expect(page.getByTestId('keyword-rules-locked')).not.toBeEmpty()
+    // Back: the buttons on, no reason; the app closes with nothing waiting.
+    await renameRetrying(away, dataDir)
+    await expect(page.getByTestId('banner-ro')).toHaveCount(0, { timeout: 10_000 })
+    await expect(page.getByTestId('import-rules-locked')).toHaveCount(0)
+    await expect(editor.getByTestId('import-rule-conditions-save')).toBeEnabled()
+  } finally {
+    // A failed step leaves the folder away: back, and seen back, before closing (the app would wait on its pending write).
+    if (existsSync(away) && !existsSync(dataDir)) {
+      await renameRetrying(away, dataDir)
+      await expect(page.getByTestId('banner-ro')).toHaveCount(0, { timeout: 10_000 }).catch(() => undefined)
+    }
+    await app.close()
+  }
+})
+
+/** A folder renamed from outside; Windows may hold it a moment (an antivirus, the indexer). */
+async function renameRetrying(from: string, to: string): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (e) {
+      if (i >= 20) throw e
+      await new Promise((r) => setTimeout(r, 250))
+    }
+  }
+}

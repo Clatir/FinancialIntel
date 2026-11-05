@@ -5,9 +5,9 @@
  * ręcznych” (T470); tags. A draft (AP-8): leaving the screen keeps what was typed until „Zapisz” or „Anuluj”.
  */
 import { useMemo, useState } from 'react'
-import { MAX_RULE_CONDITIONS, type ImportRule, type Loan, type RuleCondition } from '@shared/schema'
+import { combineOf, conditionsOf, MAX_RULE_CONDITIONS, type ImportRule, type Loan, type RuleCondition } from '@shared/schema'
 import type { RecordEntry } from '@shared/api'
-import { listOf, useData, useFolderLocked } from '../../store/data'
+import { listOf, useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { useDraft } from '../../store/drafts'
 import { AmountField, plnText } from '../../components/fields'
 import { TextField } from '../../components/ui'
@@ -46,8 +46,8 @@ const blankDraft = (): ConditionsDraft => ({
 const draftOf = (r: ImportRule): ConditionsDraft => ({
   label: r.label,
   direction: r.direction === 'in' ? 'in' : r.direction === 'out' ? 'out' : null,
-  conditions: (r.conditions ?? []).map((c) => ({ ...c })),
-  combine: r.combine === 'any' ? 'any' : 'all',
+  conditions: (conditionsOf(r) ?? []).map((c) => ({ ...c })),
+  combine: combineOf(r) === 'any' ? 'any' : 'all',
   choice: choiceOfRule(r),
   manual: !!r.manual,
   tags: [...(r.tags ?? [])]
@@ -64,6 +64,7 @@ const notForRule = (o: string, direction: 'in' | 'out' | null, repayable: Readon
 export function ConditionsEditor({ rule, onDone }: { rule?: ImportRule; onDone: () => void }) {
   const [d, setD, clear] = useDraft<ConditionsDraft>(`import-rule-conditions:${rule?.id ?? 'new'}`, () => (rule ? draftOf(rule) : blankDraft()))
   const readOnly = useFolderLocked()
+  const locked = useLockedReason()
   const accounts = useAccounts()
   const members = useMembers()
   const known = useKnownTags()
@@ -217,6 +218,12 @@ export function ConditionsEditor({ rule, onDone }: { rule?: ImportRule; onDone: 
         <button type="button" className="btn h-[24px]" onClick={done} data-testid="import-rule-conditions-cancel">
           Anuluj
         </button>
+        {/* AP-15: „Zapisz” off – why, beside it (the folder became read only while the editor was open). */}
+        {locked && (
+          <span className="text-[11.5px] text-dim" data-testid="import-rule-conditions-locked">
+            {locked}
+          </span>
+        )}
         {error && (
           <span className="text-[11.5px] text-down" data-testid="import-rule-conditions-error">
             {error}

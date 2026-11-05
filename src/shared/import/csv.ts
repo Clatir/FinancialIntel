@@ -5,7 +5,7 @@
  * Pure; the main process only reads the file's bytes.
  */
 import { fold } from '../fold'
-import { CSV_DATE_FORMATS, CSV_SEPARATORS, csvMappingSchema, type CsvMapping } from '../schema/budget'
+import { CSV_DATE_FORMATS, CSV_SEPARATORS, csvMappingSchema, readCsvMapping, type Account, type CsvMapping } from '../schema/budget'
 import { cleanBankName } from './names'
 import { PROGRESS_EVERY, type MbankFile, type MbankRow, type Progress } from './mbank'
 import { decodeText, parseCsv, type Rows } from './text'
@@ -298,11 +298,12 @@ export function columnsFor(d: CsvDraft, rows: Rows): CsvDraft['columns'] {
   return out
 }
 
-/** A mapping of an account as this version reads it (`csvMappingSchema`) – a value it cannot read is none (przegląd R1 9). */
+/**
+ * A mapping of an account as this version reads it – a value it cannot read is none (przegląd R1 9): the one rule of
+ * `readCsvMapping` (schema), here for the import's callers.
+ */
 export function accountMapping(a: { csvMapping?: unknown }): CsvMapping | null {
-  if (a.csvMapping == null) return null
-  const r = csvMappingSchema.safeParse(a.csvMapping)
-  return r.success ? r.data : null
+  return readCsvMapping(a as Pick<Account, 'csvMapping'>)
 }
 
 /** The draft of a saved mapping (the wizard opened again – „Zmień kolumny”): its columns this version knows. */

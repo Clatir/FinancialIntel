@@ -185,3 +185,15 @@ describe('AP-45: „Zastosuj do historii” reguły z warunkami (T469)', () => {
     expect(tx('01K6TX00000000000000000001').categoryId).toBe(FUN)
   })
 })
+
+describe('przegląd R1 6: reguła operacji w edytorze („Zapamiętaj”) – z kwotą i kontem operacji', () => {
+  it('reguła [konto i kontrahent] operacji z banku na tym koncie jest jej regułą – „Zapamiętaj” nie dokłada reguły marki (dawniej: nie znaleziona)', () => {
+    const acc = '01KDEFACC00000000000000001'
+    const t = transactionSchema.parse({ schemaVersion: SCHEMA_VERSION, id: '01K6TX00000000000000000009', createdAt: AT, updatedAt: AT, date: '2026-10-20', accountId: acc, amount: -1500, counterparty: 'ORLEN', categoryId: COFFEE, bank: { key: 'k9', importedAt: AT, source: 'lista', counterparty: 'ORLEN STACJA 12', operation: 'ZAKUP PRZY UŻYCIU KARTY', description: 'ORLEN STACJA 12' } })
+    open({ transactions: [t] })
+    rules.saveConditionsRule(null, draft({ conditions: [{ field: 'counterparty', value: 'orlen' }, { field: 'account', value: acc }] }))
+    const r = ruleList()[0]!
+    expect(rules.ruleFor(t)?.id).toBe(r.id)
+    expect(rules.ruleFor({ ...t, accountId: '01KDEFACC00000000000000002' })).toBeNull()
+  })
+})

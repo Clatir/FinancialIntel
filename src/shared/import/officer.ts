@@ -9,6 +9,7 @@ import type { BrandAliases } from './aliases'
 import { findRule, ruleTargetOf } from './classify'
 import { operationName, readableName } from './names'
 import { defaultCategoryId, HOUSE_MEMBER_ID, type ImportRule, type Share, type Transaction } from '../schema'
+import { shareOf } from '../calc/share'
 
 export interface OfficerData {
   /** The category used last with each brand key (and each name's key), expenses only. */
@@ -88,7 +89,7 @@ export const OFFICER_SOURCE_LABEL: Record<OfficerSource, string> = { history: 'o
  * offers (not archived). null = the officer knows nothing.
  */
 export function officerHint(
-  o: { counterparty: string; title?: string; operation?: string; bankName?: string },
+  o: { counterparty: string; title?: string; operation?: string; bankName?: string; amount?: number | null; accountId?: string | null },
   data: Pick<OfficerData, 'lastByBrand'>,
   ctx: { rules: readonly ImportRule[]; aliases: BrandAliases; usable: (categoryId: string) => boolean }
 ): { categoryId: string; source: OfficerSource } | null {
@@ -98,7 +99,8 @@ export function officerHint(
     const last = k ? data.lastByBrand[k] : undefined
     if (last && ctx.usable(last)) return { categoryId: last, source: 'history' }
   }
-  const rule = findRule(ctx.rules, target, 'out')
+  // The entry's amount and account (AP-45): a rule's conditions of them (unknown – 0 zł not typed yet – do not hold).
+  const rule = findRule(ctx.rules, target, 'out', o.amount || undefined, o.accountId)
   if (rule?.kind === 'expense' && rule.categoryId && ctx.usable(rule.categoryId)) return { categoryId: rule.categoryId, source: 'rule' }
   const place = brand.brand?.category
   const chain = place ? defaultCategoryId(place[0], place[1]) : null
@@ -175,6 +177,14 @@ export interface HintedDecision {
   memberId: string | null
   gift: boolean
   share: Share | null
+}
+
+/**
+ * An operation's decision as a hint compares it (przegląd R1 12): a member's purchase of `memberId` null is the first
+ * member's („Dom” – `HOUSE_MEMBER_ID`), as a rule's of `memberId` null.
+ */
+export function hintedOf(t: Pick<Transaction, 'kind' | 'amount' | 'categoryId' | 'splits' | 'share' | 'refundable' | 'memberId' | 'gift'>): HintedDecision {
+  return { categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? (t.memberId ?? HOUSE_MEMBER_ID) : null, gift: t.refundable && !!t.gift, share: shareOf(t) }
 }
 
 /** The same split of a shared purchase: its mode and its people's lines, whatever else a record keeps. */

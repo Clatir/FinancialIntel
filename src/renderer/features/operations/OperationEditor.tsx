@@ -23,7 +23,7 @@ import { AccountSelect, CategorySelect, useAccounts } from './pickers'
 import { changeKind as changeOperationKind, deleteOperation, openOperation, rememberAccount, showBrand, updateOperation } from './state'
 import { addOtherSide, joinTransfers, transferEdits, transferIssuesOf, type JoinIssue } from './transfers'
 import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
-import { hintChanges, manualRuleHint, OFFICER_SOURCE_LABEL, officerHint, ruleHintText, type RuleHint } from '@shared/import/officer'
+import { hintChanges, hintedOf, manualRuleHint, OFFICER_SOURCE_LABEL, officerHint, ruleHintText, type RuleHint } from '@shared/import/officer'
 import { memberName } from '@shared/calc/household'
 import { officerNow } from '../../store/officer'
 import { useCategories } from './pickers'
@@ -112,7 +112,7 @@ export function OperationEditor({ id }: { id: string }) {
   // F8: an expense without a category – what the officer knows of its brand (history, the import's rule, the chain).
   const officer =
     t.kind === 'expense' && !t.categoryId && !t.splits.length && rules && !readOnly
-      ? officerHint({ counterparty: t.bank ? t.bank.counterparty : t.counterparty, title: t.title, operation: t.bank?.operation, bankName: t.bank?.bankName }, officerNow(), {
+      ? officerHint({ counterparty: t.bank ? t.bank.counterparty : t.counterparty, title: t.title, operation: t.bank?.operation, bankName: t.bank?.bankName, amount: t.amount, accountId: t.accountId }, officerNow(), {
           rules,
           aliases: aliases ?? {},
           usable: (c) => !!cats.byId.get(c) && !cats.byId.get(c)!.archived
@@ -127,7 +127,7 @@ export function OperationEditor({ id }: { id: string }) {
           { rules, aliases: aliases ?? {}, usable: (c) => !!cats.byId.get(c) && !cats.byId.get(c)!.archived, members: members.filter((m) => !m.archived) }
         )
       : null
-  const ruleHint = hint && hintChanges({ categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, gift: !!t.gift, share: shareOf(t) ?? null }, hint) ? hint : null
+  const ruleHint = hint && hintChanges(hintedOf(t), hint) ? hint : null
   const takeHint = (h: RuleHint) =>
     update((r) => {
       const categoryId = h.categoryId ?? r.categoryId

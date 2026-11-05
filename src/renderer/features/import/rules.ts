@@ -6,6 +6,8 @@ import { cleanBankName, counterpartyKey } from '@shared/import/names'
 import { compileRule } from '@shared/import/conditions'
 import { newId } from '@shared/ids'
 import {
+  combineOf,
+  conditionsOf,
   HOUSE_MEMBER_ID,
   importRuleSchema,
   inflowOf,
@@ -49,7 +51,8 @@ export const bankNameOf = (t: Pick<Transaction, 'bank' | 'counterparty'>): strin
 export function ruleFor(t: Transaction): ImportRule | null {
   const rules = useData.getState().fi?.settings.import.rules ?? []
   const { target } = targetOf(t)
-  return target.key ? findRule(rules, target, t.amount < 0 ? 'out' : 'in', t.amount) : null
+  // Its amount and account (przegląd R1 6): a rule's conditions of them – as the import read its row.
+  return target.key ? findRule(rules, target, t.amount < 0 ? 'out' : 'in', t.amount, t.accountId) : null
 }
 
 /**
@@ -361,7 +364,7 @@ export function conditionsText(
       return c.min != null && c.max != null ? `kwota ${plnText(c.min)}–${plnText(c.max)} zł` : c.min != null ? `kwota od ${plnText(c.min)} zł` : `kwota do ${plnText(c.max ?? 0)} zł`
     return 'warunek nowszej wersji'
   }
-  return (r.conditions ?? []).map(one).join(r.combine === 'any' ? ' lub ' : ' i ')
+  return (conditionsOf(r) ?? []).map(one).join(combineOf(r) === 'any' ? ' lub ' : ' i ')
 }
 
 /** A rule of an advance for the future kept so (AP-4): never to review again – with „Cofnij”. */

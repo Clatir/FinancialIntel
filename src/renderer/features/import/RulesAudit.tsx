@@ -10,8 +10,8 @@ import { fold } from '@shared/fold'
 import type { Choice } from '@shared/import/reconcile'
 import type { BrandAliases } from '@shared/import/aliases'
 import type { RecordEntry } from '@shared/api'
-import type { ImportRule, Loan } from '@shared/schema'
-import { listOf, useData, useFolderLocked } from '../../store/data'
+import { conditionsOf, type ImportRule, type Loan } from '@shared/schema'
+import { listOf, useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { AmountField, plnText, signedPln } from '../../components/fields'
 import { Panel, ShowMore, TextField, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
@@ -32,6 +32,12 @@ const NO_LOANS: Record<string, RecordEntry<Loan>> = {}
 /** Operations audited per step: a large folder never stops the screen. */
 const STEP = 2000
 const SHOWN = 20
+/**
+ * A rule of conditions whose conditions this version cannot read (a newer version's, more than it reads – przegląd R1 9):
+ * kept in the file, not applied, not edited here (the editor would write them over) – only deleted.
+ */
+const unreadable = (r: ImportRule): boolean => r.mode === 'conditions' && !conditionsOf(r)
+const UNREADABLE_TEXT = 'Warunki zapisane przez nowszą wersję aplikacji – ta wersja tej reguły nie stosuje ani nie zmienia (możesz ją usunąć).'
 /** The rules list's page (W35). */
 const RULES_PAGE = 100
 
@@ -216,6 +222,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
 export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progress: number }) {
   const rules = useData((s) => s.fi?.settings.import.rules ?? NO_RULES)
   const readOnly = useFolderLocked()
+  const locked = useLockedReason()
   const cats = useCategories()
   const members = useMembers()
   const [query, setQuery] = useState('')
@@ -263,6 +270,12 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
         <button type="button" className="btn h-[22px] px-2 text-[11px]" disabled={readOnly} onClick={() => setAdding(!adding)} data-testid="import-rule-new">
           + Nowa reguła z warunkami
         </button>
+        {/* AP-15: why the rules' buttons are off – once for the list. */}
+        {locked && (
+          <span className="text-[11px] text-dim" data-testid="import-rules-locked">
+            {locked}
+          </span>
+        )}
       </div>
       {adding && (
         <div className="mb-2">
@@ -327,7 +340,14 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
                     inny rodzaj
                   </button>
                 )}
-                <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px]" disabled={readOnly} onClick={() => setEditing(editing === r.id ? null : r.id)} data-testid="import-rule-edit">
+                <button
+                  type="button"
+                  className="btn btn-ghost h-[22px] px-1.5 text-[11px]"
+                  disabled={readOnly || unreadable(r)}
+                  title={unreadable(r) ? UNREADABLE_TEXT : undefined}
+                  onClick={() => setEditing(editing === r.id ? null : r.id)}
+                  data-testid="import-rule-edit"
+                >
                   zmień
                 </button>
                 <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" disabled={readOnly} onClick={() => removeRule(r.id)} data-testid="import-rule-delete">
@@ -337,7 +357,7 @@ export function RulesPanel({ audit, progress }: { audit: RuleAudit | null; progr
             </div>
             {r.mode === 'conditions' && (
               <span className="truncate pl-2 text-[11px] text-muted" data-testid="import-rule-conditions-text">
-                {inactiveConditions(r) ? 'Warunek nowszej wersji aplikacji – ta wersja tej reguły nie stosuje. ' : ''}
+                {unreadable(r) ? UNREADABLE_TEXT : inactiveConditions(r) ? 'Warunek nowszej wersji aplikacji – ta wersja tej reguły nie stosuje. ' : ''}
                 {conditionsText(r, accountName)}
               </span>
             )}
