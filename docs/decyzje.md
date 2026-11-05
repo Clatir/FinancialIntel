@@ -3893,3 +3893,19 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   dnia jako widok (zapisany filtr zostaje – B88); bez klika – dziś. Ukryte kwoty (Ctrl+$) – maska w komórkach i w dniu
   (`plnText`). Telefon: ta sama siatka (7 kolumn mieści się w szerokości iPhone'a), w komórce dzień, przydział i znaczniki
   płatności / wpływów, reszta pod siatką.
+- **T475** Opis formatu folderu (1.16.0, R1 – AP-47, bez AI – D74): `docs/format-folderu.md` generowany ze schematów
+  (`scripts/format-folderu.ts` – `SCHEMAS`, typy po kontrolach wspólnych typów z `schema/common.ts`: ULID, data, miesiąc,
+  godzina, grosze; obecność – wymagane / opcjonalne / domyślnie …) i polskich słów pól (`scripts/format-folderu-pola.ts`,
+  klucz `rodzaj:ścieżka`); plik to migawka Vitest (`toMatchFileSnapshot`), `npm run docs:format` zapisuje go od nowa.
+  `tests/unit/format-folderu.test.ts` pada na pole schematu bez słów, na słowa pola, którego nie ma, i na plik
+  nieaktualny. Części wspólne (wiersz z banku, wspólny zakup, ustawienia importu przed / po) opisane raz, operacja
+  w paczce importu – odsyłacz do `transactions/`; mapy z `lenientRecord` mają typ „dowolna wartość” (wartość sprawdza
+  transformacja) – jej postać w słowach. Przykładowy skrypt `docs/przyklady/odczyt.mjs` (Node 18+, bez zależności, tylko
+  odczyt): wydatki (`kind` = `expense`) miesiąca po kategoriach głównych, linie paragonu osobno, bez linii finansowanych
+  przez domowników, tylko pliki o kanonicznej nazwie (kopie konfliktów i pliki tymczasowe pominięte); test na folderze
+  zapisanym schematami aplikacji (`seedFolder`) z kopią konfliktu, plikiem tymczasowym i historią – sumy, wiersz
+  poleceń i folder bez zmian po odczycie.
+- **T476** Link do opisu formatu (1.16.0, R1 – AP-47): Ustawienia → Folder i kopie, panel „Bieżący folder danych” –
+  zdanie o zasadzie „tylko do odczytu, nie zapisuj, gdy aplikacja działa” i „Opis formatu folderu i przykładowy skrypt ›”,
+  otwiera w przeglądarce `FOLDER_FORMAT_PAGE` (plik w publicznym repozytorium – D61; `shared/update.ts`). Opisu nie ma
+  w aplikacji (bez sieci link się nie otworzy) – w Ustawieniach, nie w F1, bo dotyczy folderu.

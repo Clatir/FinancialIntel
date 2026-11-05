@@ -9,7 +9,8 @@ import { saveFirst, switchFolder, unsavedReport, updateSettings, useData, useFol
 import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
 import { autostartOf, refreshTrayPrefs, setTrayPrefs, useTray } from '../../store/tray'
-import { UpdatesTab } from './UpdatesTab'
+import { openExternalSafe, UpdatesTab } from './UpdatesTab'
+import { FOLDER_FORMAT_PAGE } from '@shared/update'
 import { AccountsTab } from './AccountsTab'
 import { CategoriesTab } from './CategoriesTab'
 import { ImportTab } from './ImportTab'
@@ -310,6 +311,13 @@ function FolderTab() {
           <p className="text-[11.5px] text-muted">
             Żeby przenieść dane, zamknij aplikację, przenieś cały folder w Eksploratorze i wskaż go tutaj. Wszystkie ścieżki w plikach są względne, więc
             folder działa w nowym miejscu bez zmian.
+          </p>
+          {/* The folder's format for one's own tools (AP-47, T476): the description in the public repository. */}
+          <p className="text-[11.5px] text-muted">
+            Własne narzędzia (skrypt, arkusz) mogą czytać pliki folderu – tylko do odczytu, nie zapisuj do niego, gdy aplikacja działa.{' '}
+            <button type="button" className="text-accent hover:underline" onClick={() => openExternalSafe(FOLDER_FORMAT_PAGE)} data-testid="settings-folder-format">
+              Opis formatu folderu i przykładowy skrypt ›
+            </button>
           </p>
         </div>
       </Panel>
