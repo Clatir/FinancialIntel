@@ -1,6 +1,5 @@
-// 1.19.0 (D102): the surplus of one transfer repaying two household members. Step 0: today's editor – the split works,
-// but nothing says how big the surplus is nor lets it be given to a person „as” something. `test.fail` until step 2 (the
-// „Nadwyżka” panel) makes it pass – then `test.fail` becomes `test`.
+// 1.19.0 (D102): the surplus of one transfer repaying two household members – the editor's „Nadwyżka” panel (step 2):
+// how big the surplus is, split „po równo” (debts first), each person's share given „as” income or advance.
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,7 +23,7 @@ async function typeAmount(page: Page, target: string | Locator, text: string) {
 
 type Op = { amount: number; memberId: string | null; advance: boolean; splits: Array<{ memberId: string | null; amount: number; advance: boolean; inflowKind?: string; loanId?: string }> }
 
-test.fail('D102: edytor – „Nadwyżka” przy przelewie Taty za siebie i Mamę: kwota, podział na osoby, „jako”', async () => {
+test('D102: edytor – „Nadwyżka” przy przelewie Taty za siebie i Mamę: kwota, podział na osoby, „jako”', async () => {
   const { date: today, month } = warsawNow()
   const start = `${addMonths(month, -1)}-01`
   const person = (id: string, name: string, inflow: string, via: string | null = null) => ({ id, name, bankNames: [], inflow, archived: false, via, opening: { owed: 0, deposit: 0 } })
@@ -53,7 +52,7 @@ test.fail('D102: edytor – „Nadwyżka” przy przelewie Taty za siebie i Mam�
     await page.getByTestId('operation-also-for').click()
     await expect(page.getByTestId('income-split-amount')).toHaveValue('100,00')
 
-    // Wanted (step 2): the surplus said and split – 150 zł beyond both debts; half to Mama as her advance.
+    // The surplus said and split – 150 zł beyond both debts; half to Mama as her advance.
     const panel = page.getByTestId('surplus-panel')
     await expect(panel.getByTestId('surplus-summary')).toHaveText(/Spłaca: Tata 150,00 zł · Mama 100,00 zł · nadwyżka 150,00 zł/)
     await panel.getByTestId('surplus-even').click()

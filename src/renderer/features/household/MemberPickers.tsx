@@ -15,6 +15,7 @@ import { Segmented, cx } from '../../components/ui'
 import { rememberInflows, sureCoversOf, useMembers } from './actions'
 import { RepaymentPicker, useLedgerBefore } from './Repayments'
 import { loanToName, useLoanChoices } from '../radar/loanChoices'
+import { SurplusPanel, surplusInputOf } from './SurplusPanel'
 
 /** The members offered: the active ones and the one already chosen (archived or unknown – it stays as it was). */
 function useOffered(current: string | null) {
@@ -171,6 +172,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
   const addLoanPart = () => {
     if (toName) setParts([...parts, { id: newId(), amount: Math.max(0, Math.min(toName.open, rest)), categoryId: null, refundable: false, memberId: null, advance: false, loanId: toName.id, note: '' }])
   }
+  // The surplus of a transfer for several members (D102) – a „spłata” only (an explicit kind repays nothing).
+  const surplus = surplusInputOf(t, payer, before, members)
   // A line's „whose”: mine, a member's, a loan's (D100 – no member's money).
   const setWhose = (x: Split, value: string) => {
     if (value.startsWith('loan:')) return setPart(x.id, { memberId: null, advance: false, inflowKind: undefined, loanId: value.slice('loan:'.length) })
@@ -351,6 +354,8 @@ export function MemberIncome({ t, patch }: { t: Transaction; patch: (p: Partial<
           </div>
         </div>
       )}
+      {/* D102: one transfer repaying several members – the surplus beyond all the debts, whose „as” what. */}
+      {surplus && rest >= 0 && <SurplusPanel input={surplus} members={members} loanToName={toName} setParts={setParts} patch={patch} />}
       {flows.length > 0 && (
         <div className="flex flex-col text-[11.5px] text-muted" data-testid="operation-member-flow">
           {flows.map((f) => (

@@ -5,7 +5,7 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.19.0 w toku** – grupa „nadwyżka” (D102), krok 0 zakończony, następny krok 2 (blok I, Opus 5.5 · xhigh).
+**Stan:** **1.19.0 w toku** – grupa „nadwyżka” (D102), kroki 0 i 2 zakończone, następny krok 4 (blok I, Opus 5.5 · high).
 **1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
 **Gotowe do odbioru zbiorczego:**
 - Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
@@ -19,7 +19,7 @@ blok II (1 → 3), blok III (6). Model zmieniany tylko między blokami, z `/clea
 | Blok | Krok | Co obejmuje | Model i thinking (z górką) | Szacunek | Stan |
 | --- | --- | --- | --- | --- | --- |
 | I | 0 | Gałąź, testy kontraktu i luk | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
-| I | 2 | Edytor: panel „Nadwyżka” (osoba, kwota, „jako”: przychód / zaliczka / spłata pożyczki), domyślnie nadawca według jego ustawienia („pytaj” pyta), „po równo” i „proporcjonalnie do długów”; wspólna funkcja podziału `features/household/surplus.ts` | Opus 5.5 · xhigh (min. high) | 0,5–0,75 h | ⏳ |
+| I | 2 | Edytor: panel „Nadwyżka” (osoba, kwota, „jako”: przychód / zaliczka / spłata pożyczki), domyślnie nadawca według jego ustawienia („pytaj” pyta), „po równo” i „proporcjonalnie do długów”; wspólna funkcja podziału `features/household/surplus.ts` | Opus 5.5 · xhigh (min. high) | 0,5–0,75 h | ✅ (06.11, ok. 0,5 h) |
 | I | 4 | Szybki wpis: „W tym za” z celem i nadwyżką, ta sama funkcja | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ⏳ |
 | II | 1 | Silnik: funkcja podziału do `calc/household.ts`, testy z przykładami, edytor i szybki wpis na niej | Opus 5.5 · max (min. xhigh) | 0,5–1 h | ⏳ |
 | II | 3 | Import: cel przy „w tym za”, nadwyżka w wierszu / grupie / temacie, „pytaj” części pyta; reguły pamiętają, kogo spłacają i jak dzielić górkę (bez stałych kwot, „najpierw dług” zawsze) | Opus 5.5 · max (min. xhigh) | 1,5–2 h | ⏳ |
@@ -39,9 +39,19 @@ albo osobna linia z `inflowKind`; pożyczka – linia `loanId`). Testy:
   bez pytania (**potwierdzony błąd**); linia grupy ucięta do długu (AF-27, zgodnie z zamysłem – górka idzie do nadawcy);
   jawna druga linia „zaliczka” działa. 2 `it.fails` – cel kroku 3 (temat „do zrobienia” przy „pytaj” części) i kroku 4
   (szybki wpis zapisuje `inflowKind` części); w swoim kroku `it.fails` → `it`.
-- `tests/e2e/surplus.spec.ts` – `test.fail`: panel „Nadwyżka” w edytorze (cel kroku 2).
+- `tests/e2e/surplus.spec.ts` – cel kroku 2 (panel „Nadwyżka” w edytorze).
 - Szybki wpis: „pytaj” pilnowane tylko u nadawcy (`restToChoose`), część „w tym za” bierze `advance` z ustawienia osoby
   (pytaj → przychód bez pytania) – do kroku 4.
+
+**Krok 2 – wynik.** Panel „Nadwyżka” w edytorze operacji (`SurplusPanel.tsx`) podpięty w `MemberPickers.tsx`:
+- Czysta funkcja podziału i widoku `src/renderer/features/household/surplus.ts`: `surplusView`, `evenShares`, `debtShares`,
+  `fitShares`, `writeSurplus`, `loanPart`.
+- Przeliczanie: najpierw pełne spłaty długów (D102), górka dzielona ręcznie, „po równo” lub „proporcjonalnie do długów”.
+  Grosze reszty zostają u nadawcy (T3). Nadwyżka osoby może spłacić otwartą pożyczkę z Radaru (D100).
+- Zapis do `splits`: linia spłaty długu (`advance: false`) + linia nadwyżki z jawnym `inflowKind` (`income` / `advance`)
+  albo pozostawiona na linii spłaty dla domownika z ustawieniem „pytaj” (do momentu wyboru traktowana jako przychód).
+- Testy: `tests/unit/surplus-split.test.ts` (19 testów jednostkowych podziału i zapisu – przechodzą), `tests/e2e/surplus.spec.ts`
+  (przejście z `test.fail` do `test` – zielone E2E z zapisem i weryfikacją w plikach JSON).
 
 
 
