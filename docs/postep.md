@@ -5,11 +5,45 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
+**Stan:** **1.19.0 w toku** – grupa „nadwyżka” (D102), krok 0 zakończony, następny krok 2 (blok I, Opus 5.5 · xhigh).
+**1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
 **Gotowe do odbioru zbiorczego:**
 - Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
 - Pakiet odbioru GD przygotowany: tabela „Do potwierdzenia” uzupełniona o decyzje GA, GB i GC; lista „Tylko Ty” (`docs/audyt/ty.md`) i instrukcja maszyny wirtualnej (`docs/audyt/maszyna.md`) zaktualizowane.
 Otwarte poza ciągiem: odbiór w maszynie wirtualnej przez Cowork (48 punktów) oraz sesje Ty (`docs/audyt/ty.md`); iPhone (iD, iE) wstrzymany (D98). Odrzucone (D88): F32, F38, F39, F41, F43.
+## Grupa 1.19.0 – nadwyżka przelewu za kilku domowników (D102) – stan (06.11.2026)
+
+Gałąź `claude/1.19.0-nadwyzka`. Kolejność kroków na prośbę użytkownika – kroki z Opus max na końcu: blok I (0 → 2 → 4),
+blok II (1 → 3), blok III (6). Model zmieniany tylko między blokami, z `/clear`.
+
+| Blok | Krok | Co obejmuje | Model i thinking (z górką) | Szacunek | Stan |
+| --- | --- | --- | --- | --- | --- |
+| I | 0 | Gałąź, testy kontraktu i luk | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
+| I | 2 | Edytor: panel „Nadwyżka” (osoba, kwota, „jako”: przychód / zaliczka / spłata pożyczki), domyślnie nadawca według jego ustawienia („pytaj” pyta), „po równo” i „proporcjonalnie do długów”; wspólna funkcja podziału `features/household/surplus.ts` | Opus 5.5 · xhigh (min. high) | 0,5–0,75 h | ⏳ |
+| I | 4 | Szybki wpis: „W tym za” z celem i nadwyżką, ta sama funkcja | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ⏳ |
+| II | 1 | Silnik: funkcja podziału do `calc/household.ts`, testy z przykładami, edytor i szybki wpis na niej | Opus 5.5 · max (min. xhigh) | 0,5–1 h | ⏳ |
+| II | 3 | Import: cel przy „w tym za”, nadwyżka w wierszu / grupie / temacie, „pytaj” części pyta; reguły pamiętają, kogo spłacają i jak dzielić górkę (bez stałych kwot, „najpierw dług” zawsze) | Opus 5.5 · max (min. xhigh) | 1,5–2 h | ⏳ |
+| III | 6 | E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0 | Sonnet 5.5 + Opus 5.5 · xhigh | 0,5–0,75 h | ⏳ |
+
+**Decyzje użytkownika (06.11.2026, do zapisania jako D102 w kroku 6):** górka domyślnie nadawcy, według jego ustawienia
+(„pytaj” naprawdę pyta), z przyciskami „po równo” i „proporcjonalnie do długów”; „spłata innej pożyczki” = tylko pożyczka
+udzielona z Radaru (D100), bez długów między domownikami; reguły importu pamiętają podział (kogo spłaca, jak dzielić
+górkę – bez stałych kwot poza częścią pożyczki, „najpierw dług” zawsze); poprawiane wszystkie trzy miejsca (import,
+edytor, szybki wpis).
+
+**Krok 0 – wynik.** Format zapisu bez zmian: górka to linie `splits` (część osoby = dług + jej część nadwyżki z `advance`
+albo osobna linia z `inflowKind`; pożyczka – linia `loanId`). Testy:
+- `tests/unit/surplus-baseline.test.ts` (5, przechodzą) – kontrakt: księga i silnik liczą taki zapis dobrze (dwie linie
+  osoby w dowolnej kolejności, linia pożyczki, depozyt = suma przy osobach, warstwy = salda).
+- `tests/unit/surplus-gaps-store.test.ts` – 3 opisują dziś: import zapisuje nadwyżkę części osoby „pytaj” jako przychód
+  bez pytania (**potwierdzony błąd**); linia grupy ucięta do długu (AF-27, zgodnie z zamysłem – górka idzie do nadawcy);
+  jawna druga linia „zaliczka” działa. 2 `it.fails` – cel kroku 3 (temat „do zrobienia” przy „pytaj” części) i kroku 4
+  (szybki wpis zapisuje `inflowKind` części); w swoim kroku `it.fails` → `it`.
+- `tests/e2e/surplus.spec.ts` – `test.fail`: panel „Nadwyżka” w edytorze (cel kroku 2).
+- Szybki wpis: „pytaj” pilnowane tylko u nadawcy (`restToChoose`), część „w tym za” bierze `advance` z ustawienia osoby
+  (pytaj → przychód bez pytania) – do kroku 4.
+
+
 
 ## Ciąg G0–GD – stan (05.11.2026)
 
