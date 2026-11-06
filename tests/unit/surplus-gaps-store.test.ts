@@ -22,14 +22,15 @@ const api = {
   historyKeep: vi.fn(async () => undefined),
   historyDeleted: vi.fn(async (): Promise<unknown[]> => []),
   importBackup: vi.fn(async () => 'C:\\dane\\backups\\pre-import\\2026-11-04.zip'),
-  folderShown: vi.fn(async () => undefined)
+  folderShown: vi.fn(async () => undefined),
+  quickResult: vi.fn(async () => undefined)
 }
 const storage = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => void storage.set(k, v), removeItem: (k: string) => void storage.delete(k) })
 vi.stubGlobal('window', { fi: api })
 const data = await import('../../src/renderer/store/data')
 const state = await import('../../src/renderer/features/import/state')
-const { quickTransaction } = await import('../../src/renderer/store/quickHost')
+const { quickAdd, quickTransaction } = await import('../../src/renderer/store/quickHost')
 
 const AT = '2026-09-01T10:00:00.000Z'
 const TATA = '01KN9GTATA0000000000000001'
@@ -131,13 +132,54 @@ describe('D102 krok 0 – dziś: szybki wpis „W tym za” bez celu części', 
   })
 
   // Wanted (step 4): a part's purpose (D102 – „jako”: zaliczka / przychód) kept on its line, as the editor and the import.
-  it.fails('CEL kroku 4: część Mamy z celem „zaliczka” zapisana z `inflowKind` na linii', () => {
+  it('CEL kroku 4: część Mamy z celem „zaliczka” zapisana z `inflowKind` na linii', () => {
     const t = quickTransaction(draft([{ memberId: MAMA, amount: 10000, advance: false }, { memberId: MAMA, amount: 7500, advance: true, inflowKind: 'advance' }]))
     if (typeof t === 'string') throw new Error(t)
     expect(t.splits.map((s) => [s.memberId, s.amount, s.inflowKind ?? 'repay'])).toEqual([
       [MAMA, 10000, 'repay'],
       [MAMA, 7500, 'advance']
     ])
+  })
+
+  it('krok 4: część Mamy z celem „przychód” zapisana z `inflowKind` na linii', () => {
+    const t = quickTransaction(draft([{ memberId: MAMA, amount: 10000, advance: false }, { memberId: MAMA, amount: 7500, advance: false, inflowKind: 'income' }]))
+    if (typeof t === 'string') throw new Error(t)
+    expect(t.splits.map((s) => [s.memberId, s.amount, s.inflowKind ?? 'repay'])).toEqual([
+      [MAMA, 10000, 'repay'],
+      [MAMA, 7500, 'income']
+    ])
+  })
+
+  it('krok 4: quickAdd z jawnym wyborem „zaliczka” w części zapamiętuje wybór w fi.json (D80 b, D102)', async () => {
+    open()
+    expect(data.useData.getState().fi!.settings.household.members.find((m) => m.id === MAMA)?.inflow).toBe('ask')
+    await quickAdd({
+      id: '01KN9SP00000000000000001',
+      kind: 'income',
+      amount: 40000,
+      categoryId: null,
+      accountId: MBANK_ACCOUNT_ID,
+      date: '2026-11-01',
+      time: '12:00',
+      counterparty: 'Tata',
+      note: '',
+      impulse: null,
+      logNote: '',
+      household: true,
+      memberId: TATA,
+      advance: false,
+      splits: [],
+      shares: [
+        { memberId: MAMA, amount: 10000, advance: false },
+        { memberId: MAMA, amount: 7500, advance: true, inflowKind: 'advance', advanceChosen: true }
+      ]
+    })
+    expect(data.useData.getState().fi!.settings.household.members.find((m) => m.id === MAMA)?.inflow).toBe('advance')
+  })
+
+  it('krok 4: części sumujące się powyżej kwoty wpłaty są odrzucane z błędem', () => {
+    const r = quickTransaction({ ...draft([{ memberId: MAMA, amount: 30000, advance: false }, { memberId: MAMA, amount: 15000, advance: true, inflowKind: 'advance' }]), amount: 40000 })
+    expect(r).toBe('Części innych osób przekraczają kwotę wpłaty.')
   })
 })
 

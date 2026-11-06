@@ -303,10 +303,16 @@ export function Segmented<T extends string>({
   className?: string
   size?: 'sm' | 'md'
   'aria-label'?: string
+  'data-testid'?: string
 }) {
   const isFull = className?.includes('w-full')
   return (
-    <div role="radiogroup" aria-label={rest['aria-label']} className={cx('border border-line-strong', isFull ? 'flex w-full' : 'inline-flex', className)}>
+    <div
+      role="radiogroup"
+      aria-label={rest['aria-label']}
+      data-testid={rest['data-testid']}
+      className={cx('border border-line-strong', isFull ? 'flex w-full' : 'inline-flex', className)}
+    >
       {options.map((o, i) => {
         const active = o.value === value
         return (

@@ -5,7 +5,7 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.19.0 w toku** – grupa „nadwyżka” (D102), kroki 0 i 2 zakończone, następny krok 4 (blok I, Opus 5.5 · high).
+**Stan:** **1.19.0 w toku** – blok I (kroki 0, 2, 4) zakończony. Następny blok II: krok 1 (silnik) i krok 3 (import) (Opus 5.5 · max).
 **1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
 **Gotowe do odbioru zbiorczego:**
 - Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
@@ -20,7 +20,7 @@ blok II (1 → 3), blok III (6). Model zmieniany tylko między blokami, z `/clea
 | --- | --- | --- | --- | --- | --- |
 | I | 0 | Gałąź, testy kontraktu i luk | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
 | I | 2 | Edytor: panel „Nadwyżka” (osoba, kwota, „jako”: przychód / zaliczka / spłata pożyczki), domyślnie nadawca według jego ustawienia („pytaj” pyta), „po równo” i „proporcjonalnie do długów”; wspólna funkcja podziału `features/household/surplus.ts` | Opus 5.5 · xhigh (min. high) | 0,5–0,75 h | ✅ (06.11, ok. 0,5 h) |
-| I | 4 | Szybki wpis: „W tym za” z celem i nadwyżką, ta sama funkcja | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ⏳ |
+| I | 4 | Szybki wpis: „W tym za” z celem i nadwyżką, ta sama funkcja | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
 | II | 1 | Silnik: funkcja podziału do `calc/household.ts`, testy z przykładami, edytor i szybki wpis na niej | Opus 5.5 · max (min. xhigh) | 0,5–1 h | ⏳ |
 | II | 3 | Import: cel przy „w tym za”, nadwyżka w wierszu / grupie / temacie, „pytaj” części pyta; reguły pamiętają, kogo spłacają i jak dzielić górkę (bez stałych kwot, „najpierw dług” zawsze) | Opus 5.5 · max (min. xhigh) | 1,5–2 h | ⏳ |
 | III | 6 | E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0 | Sonnet 5.5 + Opus 5.5 · xhigh | 0,5–0,75 h | ⏳ |
@@ -52,6 +52,13 @@ albo osobna linia z `inflowKind`; pożyczka – linia `loanId`). Testy:
   albo pozostawiona na linii spłaty dla domownika z ustawieniem „pytaj” (do momentu wyboru traktowana jako przychód).
 - Testy: `tests/unit/surplus-split.test.ts` (19 testów jednostkowych podziału i zapisu – przechodzą), `tests/e2e/surplus.spec.ts`
   (przejście z `test.fail` do `test` – zielone E2E z zapisem i weryfikacją w plikach JSON).
+
+**Krok 4 – wynik.** Szybki wpis („W tym za” – `QuickApp.tsx` i `quickHost.ts`):
+- Obsługa celu nadwyżki (`inflowKind`: `income` / `advance`) dla domowników w „W tym za” z blokadą zapisu i komunikatem, gdy domownik ma ustawienie „pytaj” (`m.inflow === 'ask'`) a cel nie został wybrany.
+- Przyciski „po równo” i „proporcjonalnie do długów” korzystające ze wspólnych czystych funkcji `features/household/surplus.ts` (`evenShares`, `debtShares`, `surplusView`).
+- Podgląd wpisu (`preview`) ostrzega przed niezdefiniowanym celem nadwyżki (`przychód czy zaliczka? Wybierz wyżej.`) i wskazuje wybrany cel.
+- `quickTransaction` zachowuje pole `inflowKind` na liniach `splits`, a `quickAdd` wywołuje `rememberInflows` dla domowników z jawnym wyborem (`advanceChosen: true`).
+- Testy: `tests/unit/surplus-gaps-store.test.ts` (przekształcenie `it.fails` w przechodzący `it`, testy dla przychodu, fi.json i sumy części > kwoty), nowy test E2E w `tests/e2e/surplus.spec.ts` (weryfikacja blokady, wyboru zaliczki, podziału „po równo” i zapisu w plikach JSON).
 
 
 

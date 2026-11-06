@@ -123,7 +123,7 @@ export interface QuickDraft {
   /** A purchase financed by several people (D83, „Wspólnie”): its lines made from it. */
   share?: Share | null
   /** A household member's money carrying others' (D81, „w tym za …”): their parts, the rest the sender's. */
-  shares?: Array<{ memberId: string; amount: number; advance: boolean }>
+  shares?: Array<{ memberId: string; amount: number; advance: boolean; inflowKind?: 'income' | 'advance'; advanceChosen?: boolean }>
   /**
    * The part of an income repaying a loan given (D100, T359 – whoever sent it): its loan and amount (the whole amount –
    * all of it); the rest as the income says (a member's money, income).
@@ -157,7 +157,16 @@ export function quickTransaction(d: QuickDraft, now = new Date().toISOString()):
   const share = parsedShare?.success ? parsedShare.data : null
   const splits = income
     ? [
-        ...shares.map((x) => ({ id: newId(), amount: x.amount, categoryId: null, refundable: false, memberId: x.memberId, advance: x.advance, note: '' })),
+        ...shares.map((x) => ({
+          id: newId(),
+          amount: x.amount,
+          categoryId: null,
+          refundable: false,
+          memberId: x.memberId,
+          advance: x.advance,
+          ...(x.inflowKind ? { inflowKind: x.inflowKind } : {}),
+          note: ''
+        })),
         // No member's money: the loan's (T355).
         ...(loanPart ? [{ id: newId(), amount: loanPart.amount, categoryId: null, refundable: false, memberId: null, advance: false, loanId: loanPart.loanId, note: '' }] : [])
       ]
@@ -290,6 +299,10 @@ export async function quickAdd(draft: QuickDraft): Promise<void> {
   if (!addRecord('transactions', { ...t, ...sureCoversOf(t) })) return answer({ ok: false, message: 'Folder jest tylko do odczytu.' })
   // A household member's money with the rest chosen here – by the user (N39): asked once, remembered for them (D80 b).
   if (t.kind === 'income' && t.memberId && draft.advanceChosen) rememberInflows([t])
+  if (t.kind === 'income' && draft.shares) {
+    const chosenShares = draft.shares.filter((s) => s.advanceChosen && s.inflowKind).map((s) => ({ kind: 'income' as const, memberId: s.memberId, advance: s.advance }))
+    if (chosenShares.length) rememberInflows(chosenShares)
+  }
   try {
     localStorage.setItem(ACCOUNT_KEY, t.accountId)
   } catch {
