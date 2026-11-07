@@ -3,7 +3,7 @@
  * purchase – D83, a loan of the Radar – B34) and the category.
  */
 import { useMemo } from 'react'
-import { balanceOf, memberName } from '@shared/calc/household'
+import { balanceOf, debtShares, evenShares, memberName, memberPartLines, surplusView } from '@shared/calc/household'
 import type { LoanChoice } from '@shared/calc/loans'
 import { startShare } from '@shared/calc/share'
 import { dm } from '@shared/format'
@@ -110,21 +110,46 @@ export function IncomeSharesEditor({
   const memberIds = [...new Set(shares.filter((s) => !s.loanId && s.memberId && s.memberId !== senderId).map((s) => s.memberId))]
   const senderOwed = Math.max(0, owedOf?.(senderId) ?? 0)
   const othersOwed = memberIds.reduce((sum, id) => sum + Math.max(0, owedOf?.(id) ?? 0), 0)
-  const loansSum = shares.filter((s) => s.loanId).reduce((sum, s) => sum + Math.max(0, s.amount), 0)
-  const free = totalAmount != null ? totalAmount - loansSum - senderOwed - othersOwed : 0
-  const totalOwed = senderOwed + othersOwed
+  const sv =
+    totalAmount != null && memberIds.length > 0
+      ? surplusView({
+          amount: totalAmount,
+          payerId: senderId,
+          payerAdvance: choice.advance,
+          splits: shares.map((s) => ({
+            id: '',
+            amount: s.each && !s.loanId && s.amount === 0 ? Math.max(0, owedOf?.(s.memberId) ?? 0) : Math.max(0, s.amount),
+            categoryId: null,
+            refundable: false,
+            memberId: s.loanId ? null : s.memberId || null,
+            advance: s.advance,
+            inflowKind: s.inflowKind,
+            loanId: s.loanId,
+            note: ''
+          })),
+          owed: (id) => Math.max(0, owedOf?.(id) ?? 0),
+          defaultAs: (id) => {
+            const m = others.find((x) => x.id === id)
+            const def = m ? inflowOf(m) : 'income'
+            return def === 'ask' ? null : def
+          }
+        })
+      : null
+  const free = sv?.free ?? 0
+  const totalOwed = sv ? sv.people.reduce((sum, p) => sum + p.owed, 0) : senderOwed + othersOwed
+  const ruleSurplusShares =
+    sv && (choice.surplusSplit === 'even' || choice.surplusSplit === 'debts')
+      ? choice.surplusSplit === 'even'
+        ? evenShares(sv)
+        : debtShares(sv)
+      : null
   const applySurplus = (mode: 'sender' | 'even' | 'debts') => {
+    const targetShares = sv ? (mode === 'even' ? evenShares(sv) : mode === 'debts' ? debtShares(sv) : null) : null
     const loanLines = shares.filter((s) => s.loanId)
     const nextMemberLines: SharePart[] = []
-    const n = 1 + memberIds.length
     for (const id of memberIds) {
       const d = Math.max(0, owedOf?.(id) ?? 0)
-      const surplusAmount =
-        mode === 'even'
-          ? Math.floor(Math.max(0, free) / n)
-          : mode === 'debts' && totalOwed > 0
-            ? Math.floor((Math.max(0, free) * d) / totalOwed)
-            : 0
+      const surplusAmount = targetShares?.get(id)?.amount ?? 0
       const existing = shares.filter((s) => !s.loanId && s.memberId === id)
       const exp = existing.find((s) => s.inflowKind === 'income' || s.inflowKind === 'advance')
       const rep = existing.find((s) => !s.surplus && (!s.inflowKind || s.inflowKind === 'repay'))
@@ -140,15 +165,20 @@ export function IncomeSharesEditor({
             : def === 'ask'
               ? null
               : def
-      if (d > 0 || surplusAmount <= 0) {
-        nextMemberLines.push({ memberId: id, amount: d, advance: chosenAs === 'advance' })
-      }
-      if (surplusAmount > 0) {
-        nextMemberLines.push(
-          chosenAs === null
-            ? { memberId: id, amount: surplusAmount, advance: false, surplus: true as const }
-            : { memberId: id, amount: surplusAmount, advance: chosenAs === 'advance', inflowKind: chosenAs }
-        )
+      if (chosenAs === null && surplusAmount > 0) {
+        if (d > 0) nextMemberLines.push({ memberId: id, amount: d, advance: false })
+        nextMemberLines.push({ memberId: id, amount: surplusAmount, advance: false, surplus: true as const })
+      } else if (surplusAmount > 0) {
+        for (const l of memberPartLines(d + surplusAmount, d, chosenAs)) {
+          nextMemberLines.push({ memberId: id, ...l })
+        }
+      } else {
+        nextMemberLines.push({
+          memberId: id,
+          amount: d,
+          advance: chosenAs === 'advance',
+          ...(def === 'ask' && chosenAs !== null ? { advanceChosen: true as const } : {})
+        })
       }
     }
     setShares([...loanLines, ...nextMemberLines], mode === 'sender' ? undefined : mode)
@@ -246,9 +276,11 @@ export function IncomeSharesEditor({
                         shares.map((x, j) =>
                           j === i
                             ? changedLine(x, {
+                                ...(x.each && x.amount === 0 ? { amount: Math.max(0, owedOf?.(x.memberId) ?? 0) } : {}),
                                 inflowKind: v === 'repay' ? undefined : v,
                                 advance: v === 'advance' ? true : v === 'income' ? false : x.advance,
-                                surplus: undefined
+                                surplus: undefined,
+                                ask: undefined
                               })
                             : x
                         )
@@ -275,7 +307,11 @@ export function IncomeSharesEditor({
                 {(() => {
                   const m = others.find((x) => x.id === s.memberId)
                   const memberOwed = Math.max(0, owedOf?.(s.memberId) ?? 0)
-                  const hasSurplusOnLine = s.surplus || ((!s.inflowKind || s.inflowKind === 'repay') && s.amount > memberOwed)
+                  const ruleSurplus =
+                    s.each && !shares.some((x) => !x.loanId && x.memberId === s.memberId && (x.surplus || x.inflowKind === 'income' || x.inflowKind === 'advance'))
+                      ? (ruleSurplusShares?.get(s.memberId)?.amount ?? 0)
+                      : 0
+                  const hasSurplusOnLine = s.surplus || ((!s.inflowKind || s.inflowKind === 'repay') && (s.amount > memberOwed || ruleSurplus > 0))
                   if (!hasSurplusOnLine) return null
                   const unanswered = !!m && inflowOf(m) === 'ask' && (s.surplus ? !s.inflowKind : !s.advance && !s.advanceChosen)
                   const currentAs = s.surplus ? s.inflowKind : unanswered ? undefined : s.advance ? 'advance' : 'income'
@@ -285,7 +321,9 @@ export function IncomeSharesEditor({
                         j === i
                           ? s.surplus
                             ? changedLine(x, { inflowKind: as, advance: as === 'advance', surplus: undefined })
-                            : changedLine(x, { advance: as === 'advance', advanceChosen: true })
+                            : s.each
+                              ? { ...x, advance: as === 'advance', advanceChosen: true, ask: undefined }
+                              : changedLine(x, { advance: as === 'advance', advanceChosen: true, ask: undefined })
                           : x
                       )
                     )

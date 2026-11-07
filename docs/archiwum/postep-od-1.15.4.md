@@ -296,3 +296,18 @@ dziennik i mapa kodu w `docs/archiwum/`. Punkt odniesienia do porównania: ok. 1
   zostaje w pieniądzach; `ap20.spec.ts:53` – obserwować, przy drugim razie poprawić czekanie na okno.
 - **Czas:** ok. 02:40–06:45 strumienie i dwie rundy przeglądu, 10:50–13:31 scalenie z 1.16.0, wersja, PR, CI (dwa
   czerwone runy) – plan 3–5 h pracy.
+
+## 1.19.0 – Nadwyżka przelewu za kilku domowników (D102, 06–07.11.2026)
+- **Zakres:** D102 – nadwyżka przelewu od domownika spłacającego także innych domowników („w tym za”): najpierw pełna spłata
+  długów wszystkich objętych osób, potem podział wolnej górki (domyślnie nadawcy, „po równo” z resztą groszy dla nadawcy,
+  „proporcjonalnie do długów”), jawny cel nadwyżki (`przychód`, `zaliczka`, a w edytorze także `spłata pożyczki` udzielonej
+  z Radaru – D100), wymuszenie odpowiedzi przy ustawieniu „pytaj” (`inflow: 'ask'`) oraz nauka i stosowanie reguł importu
+  z `alsoFor` i `surplusSplit` bez stałych kwot PLN („najpierw dług” zawsze). Wdrożone spójnie w silniku (`calc/household.ts`,
+  `calc/quick.ts`), edytorze operacji (`SurplusPanel.tsx`), szybkim wpisie (`QuickApp.tsx`, `quickHost.ts`) i imporcie CSV
+  (`DecisionFields.tsx`, `state.ts`, `rules.ts`, `classify.ts`, `reconcile.ts`, `budget.ts`) – T519–T526.
+- **Przegląd:** `/code-review` na całym diffie `main...HEAD` – poprawione T526 (bezpośrednie użycie `surplusView` /
+  `evenShares` / `debtShares` / `memberPartLines` w `DecisionFields.tsx` i `reconcile.ts`, przyciski `pytaj` na linii
+  reguły z `each: true` i `surplusSplit`, porównanie z `owedLeftOfRow` w `hasUnansweredAskSurplus`).
+- **Testy:** `npm run typecheck`, `npm test` (208 plików, 1937 testów), `npm run build`, E2E `tests/e2e/surplus.spec.ts` (3/3),
+  `check-context.mjs`, `release-notes.mjs`.
+- **Czas:** 6 kroków w 3 blokach (0 → 2 → 4, 1 → 3, 6) – łącznie ok. 2,75 h (plan 3,5–5,5 h).

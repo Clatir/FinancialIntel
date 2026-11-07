@@ -1129,11 +1129,17 @@ function hasUnansweredAskSurplus(t: ImportTheme, c: ImportChoices): boolean {
       if (c.skip[p.key]) continue
       const parts = view.parts.get(p.key)
       if (!parts?.length) continue
+      const rowOwed = new Map<string, number>()
+      const rowRepay = new Map<string, number>()
       for (const x of parts) {
         if (x.loanId || !askIds.has(x.memberId)) continue
         if (x.surplus && !x.inflowKind) return true
-        if ((!x.inflowKind || x.inflowKind === 'repay') && !x.advance && !x.advanceChosen && (view.total.get(x.memberId) ?? 0) > (view.owed.get(x.memberId) ?? 0))
-          return true
+        if (!x.inflowKind || x.inflowKind === 'repay') {
+          if (!rowOwed.has(x.memberId)) rowOwed.set(x.memberId, owedLeftOfRow(view, p.key, p.row.amount, x.memberId))
+          const next = (rowRepay.get(x.memberId) ?? 0) + x.amount
+          rowRepay.set(x.memberId, next)
+          if (!x.advance && !x.advanceChosen && next > (rowOwed.get(x.memberId) ?? 0)) return true
+        }
       }
     }
   return false
@@ -1350,7 +1356,7 @@ export function inflowVotes(groups: readonly ImportGroup[], c: ImportChoices): A
         // Other members' surplus answers in „w tym za” (D102): one per member per operation.
         const voted = new Set<string>([senderId])
         for (const x of own.shares ?? []) {
-          if (x.loanId || !x.memberId || voted.has(x.memberId) || x.amount <= 0) continue
+          if (x.loanId || !x.memberId || voted.has(x.memberId) || (x.amount <= 0 && !x.each)) continue
           if (x.inflowKind === 'income' || x.inflowKind === 'advance') {
             voted.add(x.memberId)
             out.push({ kind: 'income', memberId: x.memberId, advance: x.inflowKind === 'advance' })

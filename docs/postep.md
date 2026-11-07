@@ -5,7 +5,7 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.19.0 w toku** – blok I (kroki 0, 2, 4) oraz blok II (kroki 1, 3) zakończone. Następny: blok III, krok 6 (E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0) (Sonnet 5.5 + Opus 5.5 · xhigh).
+**Stan:** **1.19.0 gotowe do wydania** – bloki I, II i III (kroki 0, 2, 4, 1, 3, 6) zakończone (07.11.2026).
 **1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
 **Gotowe do odbioru zbiorczego:**
 - Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
@@ -23,7 +23,7 @@ blok II (1 → 3), blok III (6). Model zmieniany tylko między blokami, z `/clea
 | I | 4 | Szybki wpis: „W tym za” z celem i nadwyżką, ta sama funkcja | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
 | II | 1 | Silnik: funkcja podziału do `calc/household.ts`, testy z przykładami, edytor i szybki wpis na niej | Opus 5.5 · max (min. xhigh) | 0,5–1 h | ✅ (07.11, ok. 0,25 h) |
 | II | 3 | Import: cel przy „w tym za”, nadwyżka w wierszu / grupie / temacie, „pytaj” części pyta; reguły pamiętają, kogo spłacają i jak dzielić górkę (bez stałych kwot, „najpierw dług” zawsze) | Opus 5.5 · max (min. xhigh) | 1,5–2 h | ✅ (07.11, ok. 0,5 h) |
-| III | 6 | E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0 | Sonnet 5.5 + Opus 5.5 · xhigh | 0,5–0,75 h | ⏳ |
+| III | 6 | E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0 | Sonnet 5.5 + Opus 5.5 · xhigh | 0,5–0,75 h | ✅ (07.11, ok. 0,5 h) |
 
 **Decyzje użytkownika (06.11.2026, do zapisania jako D102 w kroku 6):** górka domyślnie nadawcy, według jego ustawienia
 („pytaj” naprawdę pyta), z przyciskami „po równo” i „proporcjonalnie do długów”; „spłata innej pożyczki” = tylko pożyczka
@@ -75,6 +75,13 @@ albo osobna linia z `inflowKind`; pożyczka – linia `loanId`). Testy:
 - T523–T524: reguły importu (`ImportRule`) pamiętają listę spłacanych osób (`alsoFor`) oraz sposób podziału nadwyżki (`surplusSplit`: `'even' | 'debts'`) bez stałych kwot PLN („najpierw dług” zawsze – `each: true`), edytowalne także w Ustawienia → Import (`RuleShares`, `ConditionsEditor`, `RulesAudit`) i udokumentowane w `docs/format-folderu.md`.
 - T525: rozkład nadwyżki w `rowShares` (`reconcile.ts`) uwzględnia zakupy z tego samego pliku CSV (`owedWithFile`), najpierw spłacając długi nadawcy i osób z `alsoFor`, a dopiero wolną górkę dzieląc po równo lub proporcjonalnie do długów.
 - Testy: `tests/unit/surplus-gaps-store.test.ts` (12 testów, w tym `it.fails` kroku 3 przekształcony w przechodzący `it` oraz T522–T525), `tests/e2e/surplus.spec.ts` (3 testy E2E: edytor, szybki wpis, import z nauką reguły – przechodzą), pełny zestaw Vitest (208 plików, 1937 testów) zielony.
+
+**Krok 6 – wynik.** Przegląd `/code-review` całości diffu `main...HEAD`, dokumentacja i wydanie `1.19.0`:
+- Poprawki po przeglądzie (T526):
+  - `src/renderer/features/import/DecisionFields.tsx` i `src/shared/import/reconcile.ts` przepięte bezpośrednio na `surplusView`, `evenShares`, `debtShares` i `memberPartLines` z `src/shared/calc/household.ts` (usunięcie powielonych wzorów zaokrągleń).
+  - Na linii reguły z `each: true` i `surplusSplit` (`'even' | 'debts'`) w `IncomeSharesEditor` pokazywane są przyciski `pytaj: [przychód] [zaliczka]`, gdy wyliczona nadwyżka z reguły > 0; kliknięcie zachowuje `each: true` (`advanceChosen: true`, `ask: undefined`), w `rowShares` tworzy część nadwyżki z `inflowKind: 'income' | 'advance'`, odblokowuje temat (`'done'`) i dopisuje głos w `inflowVotes` (test T526 w `tests/unit/surplus-gaps-store.test.ts`).
+  - W `hasUnansweredAskSurplus` (`state.ts`) spłata bez `advanceChosen` porównywana z `owedLeftOfRow` dla danego wiersza zamiast globalnej sumy `view.total > view.owed` (brak fałszywego `'todo'` między niezależnymi tematami).
+- Dokumentacja i wersja: `package.json` (`1.19.0`), `CHANGELOG.md` (`## 1.19.0`), `docs/decyzje.md` (`D102`, `T519`–`T526`), `.claude/rules/silnik.md` i `.claude/rules/import.md`.
 
 
 

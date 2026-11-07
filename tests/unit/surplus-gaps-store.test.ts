@@ -212,6 +212,23 @@ describe('D102 krok 3: reguły pamiętają „w tym za” (bez stałych kwot, na
     await state.loadImportFile('lista-surplus.csv', bytes(listaCsv([], PERIOD, null, [{ date: '2026-11-01', amount: 250, name: 'PIOTR TESTOWY', title: 'PRZELEW' }])))
     const themeSurplus = importThemes(groups()).find((x) => x.groups.some((y) => y.label === 'PIOTR TESTOWY'))!
     expect(state.themeStatus(themeSurplus, state.useImport.getState().choices)).toBe('todo')
+
+    // 3) T526: User answers „zaliczka” on the rule's `each: true` line on the group/theme -> theme becomes 'done',
+    // import writes [MAMA, 10000, 'repay'] + [MAMA, 15000, 'advance'] and remembers Mama's inflow = 'advance' in fi.json.
+    const g = tataGroup()
+    state.decideGroup(g.group, {
+      ...g.proposed,
+      shares: [{ memberId: MAMA, amount: 0, each: true, advance: true, advanceChosen: true }]
+    })
+    expect(state.themeStatus(themeSurplus, state.useImport.getState().choices)).toBe('done')
+    await state.runImport()
+    expect(data.useData.getState().fi!.settings.household.members.find((m) => m.id === MAMA)?.inflow).toBe('advance')
+    const ops = data.listOf(data.useData.getState().records.transactions)
+    const t = ops.find((x) => x.counterparty === 'PIOTR TESTOWY')!
+    expect(t.splits.map((s) => [s.memberId, s.amount, s.inflowKind ?? 'repay'])).toEqual([
+      [MAMA, 10000, 'repay'],
+      [MAMA, 15000, 'advance']
+    ])
   })
 
   it('T525: `choiceOfRule`, `ruleDecisionText` i edycja reguły zachowują `alsoFor` i `surplusSplit` (bez stałych kwot)', async () => {

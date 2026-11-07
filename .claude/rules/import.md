@@ -78,6 +78,12 @@ paths:
   **Pułapka:** kwota tematu jest dla wszystkich jego wierszy razem, kwota marki – dla jej wierszy: nie składaj linii marek
   w jedną decyzję tematu (przeglądy N1 2–4: raz o połowę mniej, raz więcej, raz zgubiona kwota). **Pułapka:** `sameChoice`
   pomija linie 0 zł – do „czy wiersz ma własną decyzję” nie wystarcza (`rowSharesChoice`, T327).
+  Nadwyżka w „w tym za” i regułach (D102, T522–T526, od 1.19.0): reguła pamięta `alsoFor` i `surplusSplit` (`'even' |
+  'debts'`) bez stałych kwot PLN dla domowników (`each: true`, `amount: 0` – najpierw aktualny dług z `owedWithFile`, potem
+  wolna nadwyżka przez `surplusView` + `evenShares` / `debtShares`). Nadwyżka dla osoby z `inflow: 'ask'` (linia
+  `surplus: true` bez `inflowKind` albo spłata na wierszu > `owedLeftOfRow` bez `advanceChosen`) trzyma temat jako `'todo'`
+  (`hasUnansweredAskSurplus`); odpowiedź na linii reguły zostawia `each: true` (`advanceChosen: true`, `ask: undefined`) i
+  zapisuje głos w `inflowVotes`.
 - Wpłata domownika (AP-4, T351): opcje `household:<osoba>:income|advance|all-income|all-advance`, jedna nazwa wyboru
   (`MEMBER_MONEY_TEXT` – lista, temat, podgląd, reguła). „spłata, reszta jako …” = `inflowKind: 'repay'` + `advance`.
   Reguła reszty nie zapamiętuje – „spłata” bierze ją z ustawienia osoby (D80 b, `restNotOfRule` w edytorze reguły).

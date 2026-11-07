@@ -15,6 +15,7 @@
  *   for removal – never ticked by themselves: a filtered list lacks rows too.
  */
 import { addDays, daysBetween } from '../calc/dates'
+import { debtShares, evenShares, surplusView } from '../calc/household'
 import { isTwoSided } from '../calc/operations'
 import { shareAmounts, shareSplits, withBankAmount } from '../calc/share'
 import { fold } from '../fold'
@@ -1507,15 +1508,27 @@ export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: Reado
       })
       const totalFree = freeByRow.reduce((s, r) => s + r.free, 0)
       if (totalFree <= 0) continue
-      const n = 1 + others.length
-      const totalOwed = Math.max(0, owed.get(senderId) ?? 0) + others.reduce((s, x) => s + Math.max(0, owed.get(x.memberId) ?? 0), 0)
+      const senderOwed = Math.max(0, owed.get(senderId) ?? 0)
+      const othersOwed = others.reduce((s, x) => s + Math.max(0, owed.get(x.memberId) ?? 0), 0)
+      const sv = surplusView({
+        amount: totalFree + senderOwed + othersOwed,
+        payerId: senderId,
+        payerAdvance: c.advance,
+        splits: others.map((x) => ({
+          id: '',
+          amount: Math.max(0, owed.get(x.memberId) ?? 0),
+          categoryId: null,
+          refundable: false,
+          memberId: x.memberId,
+          advance: x.advance,
+          note: ''
+        })),
+        owed: (id) => Math.max(0, owed.get(id) ?? 0),
+        defaultAs: () => 'income'
+      })
+      const targetShares = sv ? (c.surplusSplit === 'even' ? evenShares(sv) : debtShares(sv)) : null
       for (const other of others) {
-        let need =
-          c.surplusSplit === 'even'
-            ? Math.floor(totalFree / n)
-            : totalOwed > 0
-              ? Math.floor((totalFree * Math.max(0, owed.get(other.memberId) ?? 0)) / totalOwed)
-              : 0
+        let need = targetShares?.get(other.memberId)?.amount ?? 0
         if (need <= 0) continue
         for (const r of freeByRow) {
           if (need <= 0 || r.free <= 0) continue
@@ -1527,7 +1540,7 @@ export function rowShares(plan: ImportPlan, choices: ImportChoices, owed?: Reado
             memberId: other.memberId,
             amount: take,
             advance: other.advance,
-            ...(other.ask ? { surplus: true as const } : { inflowKind: other.advance ? ('advance' as const) : ('income' as const) })
+            ...(other.ask && !other.advanceChosen ? { surplus: true as const } : { inflowKind: other.advance ? ('advance' as const) : ('income' as const) })
           })
           if (repaysOwn(c)) {
             add(paid, senderId, -take)
