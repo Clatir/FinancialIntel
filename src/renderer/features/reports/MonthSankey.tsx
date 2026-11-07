@@ -9,7 +9,8 @@ import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'rea
 import type { Flows } from '@shared/calc/sankey'
 import { fitLabel, headingRoomOf, layoutOf, roomOf, sankeySvg, type LaidNode } from '@shared/sankeyLayout'
 import { percentText } from '@shared/format'
-import { plnText } from '../../components/fields'
+import { monthLabel } from '../../lib/format'
+import { AMOUNT_MASK, amountsHidden, plnText } from '../../components/fields'
 import { Segmented } from '../../components/ui'
 
 export type SankeyView = 'money' | 'energy'
@@ -41,7 +42,21 @@ export function sankeyPdfSvg(flows: Flows, money: (g: number) => string): string
 
 type Hover = { kind: 'node'; id: string; x: number; y: number } | { kind: 'link'; index: number; x: number; y: number } | null
 
-export function MonthSankey({ money, energy, empty, view, onView }: { money: Flows; energy: Flows | null; empty: string; view: SankeyView; onView: (v: SankeyView) => void }) {
+export function MonthSankey({
+  money,
+  energy,
+  empty,
+  view,
+  onView,
+  month
+}: {
+  money: Flows
+  energy: Flows | null
+  empty: string
+  view: SankeyView
+  onView: (v: SankeyView) => void
+  month?: string
+}) {
   const box = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(MIN_WIDTH)
   const [hover, setHover] = useState<Hover>(null)
@@ -78,10 +93,13 @@ export function MonthSankey({ money, energy, empty, view, onView }: { money: Flo
   })()
   const lit = (from: string, to: string, i: number) =>
     hover?.kind === 'link' ? hover.index === i : hover?.kind === 'node' ? hover.id === from || hover.id === to : false
+  const monthText = month ? (/^\d{4}-\d{2}$/.test(month) ? monthLabel(month) : month) : null
   return (
     <div className="flex flex-col gap-1.5 border-t border-line pt-1.5" data-testid="reports-sankey" data-view={view}>
       <div className="flex items-center gap-2">
-        <span className="label">Skąd i dokąd</span>
+        <span className="label" data-testid="reports-sankey-title">
+          {monthText ? `Skąd i dokąd – ${monthText}` : 'Skąd i dokąd'}
+        </span>
         <span className="flex-1" />
         <Segmented size="sm" value={view} onChange={onView} options={VIEWS} aria-label="Widok przepływów" />
       </div>
@@ -162,7 +180,11 @@ export function MonthSankey({ money, energy, empty, view, onView }: { money: Flo
             <span>
               <span className="num">{zl(tip.value)}</span> · <span className="num">{share(tip.value, shown.total)}</span> wszystkich przepływów na wykresie
             </span>
-            {tip.detail?.length ? <span className="text-muted">{tip.detail.join(', ')}</span> : null}
+            {tip.detail?.length ? (
+              <span className="text-muted">
+                {(amountsHidden() ? tip.detail.map((s) => s.replace(/\d[\d\u00a0]*,\d{2}(?=\szł)/g, AMOUNT_MASK)) : tip.detail).join(', ')}
+              </span>
+            ) : null}
           </div>
         )}
       </div>

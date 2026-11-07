@@ -5,12 +5,44 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.19.0 gotowe do wydania** – bloki I, II i III (kroki 0, 2, 4, 1, 3, 6) zakończone (07.11.2026).
-**1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
+**Stan:** **1.19.1 gotowe do wydania** – Sankey („Skąd i dokąd”): kroki 1, 2 i 3 zakończone (07.11.2026).
+**1.19.0 wydane** (07.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
 **Gotowe do odbioru zbiorczego:**
 - Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
 - Pakiet odbioru GD przygotowany: tabela „Do potwierdzenia” uzupełniona o decyzje GA, GB i GC; lista „Tylko Ty” (`docs/audyt/ty.md`) i instrukcja maszyny wirtualnej (`docs/audyt/maszyna.md`) zaktualizowane.
 Otwarte poza ciągiem: odbiór w maszynie wirtualnej przez Cowork (48 punktów) oraz sesje Ty (`docs/audyt/ty.md`); iPhone (iD, iE) wstrzymany (D98). Odrzucone (D88): F32, F38, F39, F41, F43.
+
+## Do zrobienia – Sankey („Skąd i dokąd”): kontekst miesiąca i składniki przychodów (07.11.2026)
+
+**Kontekst dochodzenia (07.11.2026):**
+Wykres Sankeya w `Plan miesiąca` (`MonthPage.tsx`) oraz w `Raporty → Debriefing` (`ReportsPage.tsx`) korzysta z tej samej funkcji `monthFlows` (`src/shared/calc/sankey.ts`) i `fuelSummary` (`src/shared/calc/fuel.ts` → `incomeParts` w `src/shared/calc/income.ts`). Pozorna różnica wartości „Przychody z pracy” wynikała z tego, że:
+1. `Plan miesiąca` domyślnie otwiera miesiąc **bieżący** (`current = today.slice(0, 7)`),
+2. `Raporty → Debriefing` domyślnie otwiera miesiąc **poprzedni** (`months[1] ?? months[0]`),
+3. Nagłówek wykresu (`Skąd i dokąd`) nie wyświetla nazwy aktywnego miesiąca, przez co po przewinięciu strony nie widać, którego okresu dotyczą kwoty.
+
+| Krok | Co obejmuje | Pliki | Model i thinking | Szacunek | Stan |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **Nagłówek wykresu z nazwą miesiąca (UX):** przekazanie `month` (lub sformatowanej etykiety `monthLabel(month)`) do `MonthSankey` / nagłówka panelu, aby wyraźnie pokazywał analizowany miesiąc (np. `Skąd i dokąd – Październik 2026` / `Skąd i dokąd – Listopad 2026`) zarówno w Planie miesiąca, jak i w Debriefingu | `src/renderer/features/reports/MonthSankey.tsx`, `src/renderer/features/month/MonthPage.tsx`, `src/renderer/features/reports/ReportsPage.tsx`, `tests/e2e/r2-sankey.spec.ts` | Gemini 3.8 Flash · Medium (lub Gemini 4 Argon · Medium) | 0,15 h | ✅ (07.11, ok. 0,1 h) |
+| 2 | **Tooltip ze składnikami „Przychodów z pracy”:** rozbudowa węzła `work` (`Przychody z pracy`) w `monthFlows` o pole `detail` zawierające listę transakcji tworzących przychód z pracy danego miesiąca (z ich kwotą `incomeParts(t, ctx).work` i tytułem/kontrahentem), analogicznie do węzłów `Pozostałe` i `Zwroty ponad zakupy` + test jednostkowy | `src/shared/calc/sankey.ts`, `src/renderer/features/reports/MonthSankey.tsx`, `tests/unit/sankey-ap46.test.ts` | Gemini 4 Argon · Medium (lub Claude Sonnet 5.5 · Medium) | 0,25 h | ✅ (07.11, ok. 0,1 h) |
+| 3 | **Spójność / synchronizacja wybranego miesiąca (opcjonalnie):** czytelne oznaczenie przy selektorze Debriefingu, gdy wyświetla miesiąc poprzedni vs bieżący, lub opcjonalne współdzielenie wybranego miesiąca w obrębie sesji (z zachowaniem kompatybilności testów E2E oczekujących `months[1]` na starcie Debriefingu) | `src/renderer/features/reports/ReportsPage.tsx`, `src/renderer/features/reports/state.ts`, `tests/e2e/r2-sankey.spec.ts` | Gemini 4 Argon · Medium / High | 0,25 h | ✅ (07.11, ok. 0,1 h) |
+| **Razem** | Rekomendacja na jedno konwo (kroki 1–3 ciągiem): **Gemini 4 Argon · Medium** | | | **ok. 0,5–0,65 h** | ✅ (07.11, ok. 0,3 h) |
+
+**Krok 1 – wynik.** Nagłówek wykresu Sankeya z nazwą miesiąca (`MonthSankey.tsx`, `MonthPage.tsx`, `ReportsPage.tsx`, testy `gc-ui-fixes.test.ts` i `r2-sankey.spec.ts`):
+- `MonthSankey` przyjmuje opcjonalny prop `month?: string` i wyświetla w nagłówku wykresu `Skąd i dokąd – ${monthLabel(month)}` (lub `Skąd i dokąd`, jeśli brak miesiąca) z atrybutem `data-testid="reports-sankey-title"`.
+- `MonthPage` przekazuje aktywny `month` do `MonthSankey` oraz w tytule panelu `Przepływ miesiąca – ${monthLabel(month)} (Sankey)`.
+- `ReportsPage` (Debriefing) przekazuje aktywny `month` z selektora do `MonthSankey`.
+- Testy: test jednostkowy w `tests/unit/gc-ui-fixes.test.ts` oraz asercje E2E w `tests/e2e/r2-sankey.spec.ts` dla Debriefingu i Planu miesiąca; typecheck i testy jednostkowe zielone.
+
+**Krok 2 – wynik.** Tooltip ze składnikami „Przychodów z pracy” (`src/shared/calc/sankey.ts`, `src/renderer/features/reports/MonthSankey.tsx`, `tests/unit/sankey-ap46.test.ts`):
+- `outsideMoney` zbiera w `workDetail` operacje tworzące przychód z pracy danego miesiąca (`incomeParts(t, ctx).work > 0` – zarówno wpływy `income`, jak i odsetki ponad spłacony dług pożyczki udzielonej `loan`, T70) w formacie `${kontrahent / tytuł} · ${formatPln(work)} zł`, a `monthFlows` przypisuje `detail: o.workDetail` do węzła `work` (`Przychody z pracy`).
+- `MonthSankey` maskuje kwoty w `tip.detail` (`AMOUNT_MASK`) przy ukrytych kwotach (`Ctrl+$`).
+- Testy: test jednostkowy w `tests/unit/sankey-ap46.test.ts` (wpływ z kontrahentem, kontrahentem i tytułem, samym tytułem, nadwyżka wpłaty domownika oraz odsetki spłaty pożyczki) i asercje E2E w `tests/e2e/r2-sankey.spec.ts`.
+
+**Krok 3 – wynik.** Czytelne oznaczenie wybranego miesiąca i pamięć sesji w Debriefingu (`src/renderer/features/reports/state.ts`, `src/renderer/features/reports/ReportsPage.tsx`, `tests/unit/gc-ui-fixes.test.ts`, `tests/e2e/r2-sankey.spec.ts`):
+- `useReportsUi` przechowuje wybór miesiąca Debriefingu w obrębie sesji (`debrief: DebriefChoice | null`, `setDebriefMonth`, `debriefMonthOf`) z zachowaniem domyślnego `months[1] ?? months[0]` na starcie oraz wygaszaniem wyboru po zmianie bieżącego miesiąca.
+- Obok selektora `reports-debrief-month` wyświetlana jest czytelna adnotacja `data-testid="reports-debrief-month-note"` (`ostatni zamknięty miesiąc` / `miesiąc bieżący (w toku – do dziś)` / `miesiąc zamknięty`) oraz szybkie przyciski przełączania `bieżący` (`reports-debrief-current`) i `ostatni zamknięty` (`reports-debrief-last-closed`).
+- Testy: test jednostkowy w `tests/unit/gc-ui-fixes.test.ts` oraz asercje E2E w `tests/e2e/r2-sankey.spec.ts`.
+
 ## Grupa 1.19.0 – nadwyżka przelewu za kilku domowników (D102) – stan (06.11.2026)
 
 Gałąź `claude/1.19.0-nadwyzka`. Kolejność kroków na prośbę użytkownika – kroki z Opus max na końcu: blok I (0 → 2 → 4),

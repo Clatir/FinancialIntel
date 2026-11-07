@@ -8,7 +8,7 @@ import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { addDays, addMonths, isoWeekOf, monthOf, monthRange, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { missionStatus, missionText, missionTitle, sundayOf, ACHIEVEMENT_INFO, ACHIEVEMENTS, type AchievementId } from '@shared/calc/game'
 import { defaultWatchMonday, goalsReachedIn, killzoneGrid, logAccuracy, nextWeekEnvelopes, weekCovers, weekNumbers, yearNumbers, yearSpan, yearWealth } from '@shared/calc/intel'
-import { readExportPeriod, setReportTab, setWatchMonday, storeExportPeriod, useReportsUi, watchMondayOf, type ReportTab } from './state'
+import { debriefMonthOf, readExportPeriod, setDebriefMonth, setReportTab, setWatchMonday, storeExportPeriod, useReportsUi, watchMondayOf, type ReportTab } from './state'
 import { debriefing, lootApplied, lootChange, planFor, transactionsOfMonth } from '@shared/calc/plan'
 import { energyFlows, monthFlows, outsideMoney } from '@shared/calc/sankey'
 import { memberName } from '@shared/calc/household'
@@ -290,7 +290,8 @@ function DebriefReport() {
   const cats = useCategories()
   const first = fleet.start ? monthOf(fleet.start) : fleet.month
   const months = monthRange(first, fleet.month).reverse()
-  const [month, setMonth] = useState(() => (months[1] ?? months[0])!)
+  const month = debriefMonthOf(useReportsUi((s) => s.debrief), months, fleet.month)
+  const setMonth = (m: string) => setDebriefMonth(m, fleet.month)
   const [view, setView] = useState<SankeyView>('money')
   const d = useDebrief(month)
   const b = d.brief
@@ -408,17 +409,32 @@ function DebriefReport() {
         }
       >
         <div className="flex flex-col gap-2 text-[12px]">
-          <select className="input h-[24px] self-start" value={month} onChange={(e) => setMonth(e.currentTarget.value)} aria-label="Miesiąc debriefingu" data-testid="reports-debrief-month">
-            {months.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select className="input h-[24px] self-start" value={month} onChange={(e) => setMonth(e.currentTarget.value)} aria-label="Miesiąc debriefingu" data-testid="reports-debrief-month">
+              {months.map((m) => (
+                <option key={m} value={m}>
+                  {monthLabel(m)}
+                </option>
+              ))}
+            </select>
+            <span className="text-[11.5px] text-muted" data-testid="reports-debrief-month-note" data-state={month === fleet.month ? 'current' : month === months[1] ? 'last-closed' : 'closed'}>
+              {month === fleet.month ? 'miesiąc bieżący (w toku – do dziś)' : month === months[1] ? 'ostatni zamknięty miesiąc' : 'miesiąc zamknięty'}
+            </span>
+            {month !== fleet.month && (
+              <button className="btn btn-ghost h-[22px]" onClick={() => setMonth(fleet.month)} data-testid="reports-debrief-current">
+                bieżący
+              </button>
+            )}
+            {month === fleet.month && months[1] && (
+              <button className="btn btn-ghost h-[22px]" onClick={() => setMonth(months[1]!)} data-testid="reports-debrief-last-closed">
+                ostatni zamknięty
+              </button>
+            )}
+          </div>
           {sections(zl, cats.label).map((s, i) => (
             <Fragment key={s.title}>
               <SectionView s={s} />
-              {i === 0 && <MonthSankey money={d.flows.money} energy={d.flows.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={view} onView={setView} />}
+              {i === 0 && <MonthSankey month={month} money={d.flows.money} energy={d.flows.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={view} onView={setView} />}
             </Fragment>
           ))}
         </div>

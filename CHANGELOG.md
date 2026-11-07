@@ -1,5 +1,14 @@
 # Financial Intel – zmiany
 
+## 1.19.1
+
+Wykres Sankey – kontekst miesiąca i składniki przychodów z pracy:
+
+- **Nagłówek wykresu z nazwą miesiąca:** nagłówek wykresu „Skąd i dokąd” oraz tytuł panelu w Planie miesiąca i Debriefingu wyraźnie wskazują analizowany miesiąc (np. `Skąd i dokąd – Październik 2026`), co zapobiega pomyłkom po przewinięciu strony.
+- **Składniki przychodów z pracy w dymku:** najechanie na węzeł „Przychody z pracy” wyświetla szczegółowy podgląd transakcji tworzących ten przychód w danym miesiącu (kwota oraz kontrahent lub tytuł wpływu; maskowane przy ukryciu kwot skrótem `Ctrl+$`).
+- **Nawigacja i pamięć wybranego miesiąca w Debriefingu:** obok selektora miesiąca w Debriefingu wyświetlane jest czytelne oznaczenie okresu (miesiąc bieżący w toku vs ostatni zamknięty) wraz z szybkimi przyciskami przełączania; wybór miesiąca jest zapamiętywany w obrębie sesji.
+
+
 ## 1.19.0
 
 Nadwyżka przelewu za kilku domowników:
