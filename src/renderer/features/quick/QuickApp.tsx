@@ -11,8 +11,8 @@ import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
 import { TagsField } from '../../components/TagsField'
 import { hashTags, tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
-import { restToChoose, senderOwn } from '@shared/calc/quick'
-import { debtShares, evenShares, surplusView, type SurplusAs, type SurplusShare, type SurplusView } from '../household/surplus'
+import { quickPartLines, quickShareAs, quickSurplusInput, restToChoose, senderOwn } from '@shared/calc/quick'
+import { debtShares, evenShares, surplusView, type SurplusAs, type SurplusShare, type SurplusView } from '@shared/calc/household'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -350,64 +350,32 @@ export function QuickApp() {
   }, [d.counterparty, d.note, d.tags])
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
 
+  // The split of 1.19.0 (D102, `calc/household.ts`) over „W tym za”: the members' parts, a loan's part typed.
   const currentSurplusView = useMemo((): SurplusView | null => {
-    if (d.kind !== 'income' || !d.household || !d.memberId || !data || !through.length || d.amount <= 0) return null
-    const splits = through.map((m) => ({
-      id: m.id,
-      amount: shares[m.id] ?? Math.max(0, m.owed),
-      memberId: m.id,
-      advance: false,
-      categoryId: null,
-      refundable: false,
-      note: ''
-    }))
-    return surplusView({
-      amount: d.amount,
-      payerId: d.memberId,
-      payerAdvance: d.advance,
-      splits,
-      owed: (id) => data.members.find((m) => m.id === id)?.owed ?? 0,
-      defaultAs: (id) => {
-        const s = shareAs[id]?.as
-        if (s) return s
-        const inf = data.members.find((m) => m.id === id)?.inflow
-        return inf === 'ask' ? null : inf ?? 'income'
-      }
-    })
-  }, [d.kind, d.household, d.memberId, d.advance, d.amount, data, through, shares, shareAs])
+    if (d.kind !== 'income' || !d.household || !data) return null
+    const typedLoan = loan?.amount != null && loanNow ? { id: loanNow.loan.id, amount: loanNow.amount } : null
+    const input = quickSurplusInput({ amount: d.amount, payerId: d.memberId, payerAdvance: d.advance, loan: typedLoan }, through, data.members, shares, shareAs)
+    return input && surplusView(input)
+  }, [d.kind, d.household, d.memberId, d.advance, d.amount, data, through, shares, shareAs, loan, loanNow])
 
   const canByDebts = !!currentSurplusView && !!debtShares(currentSurplusView)
 
-  const applyEven = useCallback(() => {
-    if (!currentSurplusView || currentSurplusView.free < 0 || !data) return
-    const sharesMap = evenShares(currentSurplusView)
-    const nextShares: Record<string, number> = { ...shares }
-    const nextShareAs: Record<string, { as: SurplusAs; chosen: boolean }> = { ...shareAs }
-    for (const [id, s] of sharesMap) {
-      const m = data.members.find((x) => x.id === id)
-      const mOwed = Math.max(0, m?.owed ?? 0)
-      nextShares[id] = mOwed + s.amount
-      if (s.as) nextShareAs[id] = { as: s.as, chosen: true }
-    }
-    setShares(nextShares)
-    setShareAs(nextShareAs)
-  }, [currentSurplusView, data, shares, shareAs])
-
-  const applyDebts = useCallback(() => {
-    if (!currentSurplusView || !data) return
-    const sharesMap = debtShares(currentSurplusView)
-    if (!sharesMap) return
-    const nextShares: Record<string, number> = { ...shares }
-    const nextShareAs: Record<string, { as: SurplusAs; chosen: boolean }> = { ...shareAs }
-    for (const [id, s] of sharesMap) {
-      const m = data.members.find((x) => x.id === id)
-      const mOwed = Math.max(0, m?.owed ?? 0)
-      nextShares[id] = mOwed + s.amount
-      if (s.as) nextShareAs[id] = { as: s.as, chosen: true }
-    }
-    setShares(nextShares)
-    setShareAs(nextShareAs)
-  }, [currentSurplusView, data, shares, shareAs])
+  // „Po równo” / „proporcjonalnie do długów”: each member's part = their whole debt + their share (debts first); their
+  // „as” stays as it is – chosen in the window or their setting (a member „pytaj” still asked before saving).
+  const applyShares = useCallback(
+    (sharesMap: ReadonlyMap<string, SurplusShare> | null) => {
+      if (!currentSurplusView || currentSurplusView.free < 0 || !sharesMap) return
+      const nextShares: Record<string, number> = { ...shares }
+      for (const p of currentSurplusView.people) {
+        const s = sharesMap.get(p.memberId)
+        if (!p.payer && s) nextShares[p.memberId] = p.owed + s.amount
+      }
+      setShares(nextShares)
+    },
+    [currentSurplusView, shares]
+  )
+  const applyEven = useCallback(() => currentSurplusView && applyShares(evenShares(currentSurplusView)), [currentSurplusView, applyShares])
+  const applyDebts = useCallback(() => currentSurplusView && applyShares(debtShares(currentSurplusView)), [currentSurplusView, applyShares])
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
@@ -440,19 +408,17 @@ export function QuickApp() {
         const as = advance == null ? '– przychód czy zaliczka? Wybierz wyżej' : advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'
         return `${who.name}${back ? ` – wyrównuje ${money(back)} (ma oddać ${money(who.owed)})` : ''}${rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${as}` : ''}.`
       }
-      const shareAdvance = (id: string, who: { owed: number; inflow: string }, sh: number): boolean | null => {
-        const rest = Math.max(0, sh - Math.max(0, who.owed))
-        if (rest <= 0) return false
-        if (shareAs[id]) return shareAs[id].as === 'advance'
-        if (who.inflow === 'ask') return null
-        return who.inflow === 'advance'
+      const shareAdvance = (who: { id: string; owed: number; inflow: string }, sh: number): boolean | null => {
+        if (sh <= Math.max(0, who.owed)) return false
+        const as = quickShareAs(who, shareAs)
+        return as === null ? null : as === 'advance'
       }
       return (
         <div className="flex flex-col">
           {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : own > 0 || !toLoan ? <span data-testid="quick-preview-member">Od: {line(m, own, restOpen ? null : d.advance)}</span> : null}
           {others.map((x) => (
             <span key={x.id} data-testid="quick-preview-share">
-              W tym za: {line(x, shares[x.id]!, shareAdvance(x.id, x, shares[x.id]!))}
+              W tym za: {line(x, shares[x.id]!, shareAdvance(x, shares[x.id]!))}
             </span>
           ))}
           {own >= 0 && loanLine}
@@ -563,37 +529,15 @@ export function QuickApp() {
     // A member „pytaj” (D80 b, AP-19): the rest beyond what they owe is chosen – never saved as income unasked.
     if (askRest > 0) return refuse(`Wybierz, czym jest reszta ${money(askRest)} ponad to, co ${payer!.name} ma oddać: przychód czy zaliczka.`)
     for (const m of through) {
-      const sh = shares[m.id] ?? 0
-      const mOwed = Math.max(0, m.owed)
-      const beyond = sh - mOwed
-      const as = shareAs[m.id]?.as ?? (m.inflow === 'ask' ? null : m.inflow)
-      if (beyond > 0 && as === null) {
+      const beyond = (shares[m.id] ?? 0) - Math.max(0, m.owed)
+      if (beyond > 0 && quickShareAs(m, shareAs) === null) {
         return refuse(`Wybierz, czym jest reszta ${money(beyond)} ponad to, co ${m.name} ma oddać: przychód czy zaliczka.`)
       }
     }
     if (share && !shareComplete(share, d.amount)) return refuse(share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.')
     if (night && (!nightOk || !d.logNote.trim())) return refuse('Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.')
-    // Others' money in a member's transfer (D81, D102): debts first, surplus with its chosen kind.
-    const parts =
-      d.kind === 'income' && d.household
-        ? through.flatMap((m) => {
-            const sh = shares[m.id] ?? 0
-            if (sh <= 0) return []
-            const mOwed = Math.max(0, m.owed)
-            const beyond = Math.max(0, sh - mOwed)
-            const repaid = Math.min(sh, mOwed)
-            const as = shareAs[m.id]?.as ?? (m.inflow === 'advance' ? 'advance' : 'income')
-            const chosen = !!shareAs[m.id]?.chosen
-            const out: Array<{ memberId: string; amount: number; advance: boolean; inflowKind?: 'income' | 'advance'; advanceChosen?: boolean }> = []
-            if (repaid > 0 || beyond === 0) {
-              out.push({ memberId: m.id, amount: repaid > 0 ? repaid : sh, advance: false, advanceChosen: chosen })
-            }
-            if (beyond > 0) {
-              out.push({ memberId: m.id, amount: beyond, advance: as === 'advance', inflowKind: as, advanceChosen: chosen })
-            }
-            return out
-          })
-        : []
+    // Others' money in a member's transfer (D81, D102 – `quickPartLines`): debts first, surplus with its chosen kind.
+    const parts = d.kind === 'income' && d.household ? quickPartLines(through, shares, shareAs) : []
     // A loan's part (D100): with an amount, within the inflow beside the others' parts.
     if (d.kind === 'income' && loan && (loanNow?.amount ?? 0) <= 0) return refuse('Wpisz kwotę spłaty pożyczki.')
     if (loanNow && parts.reduce((a, x) => a + x.amount, 0) + loanNow.amount > d.amount) return refuse('Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.')
@@ -1013,8 +957,7 @@ export function QuickApp() {
               const sh = shares[m.id] ?? 0
               const mOwed = Math.max(0, m.owed)
               const surplus = Math.max(0, sh - mOwed)
-              const currentAs = shareAs[m.id]?.as ?? (m.inflow === 'ask' ? null : m.inflow)
-              const askOpen = m.inflow === 'ask' && !shareAs[m.id]?.chosen
+              const currentAs = quickShareAs(m, shareAs)
               return (
                 <Row key={m.id} label={`W tym za ${m.name}`}>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1032,7 +975,7 @@ export function QuickApp() {
                     {surplus > 0 && (
                       <Segmented
                         size="sm"
-                        value={askOpen ? null : currentAs}
+                        value={currentAs}
                         onChange={(v) => setShareAs((x) => ({ ...x, [m.id]: { as: v as SurplusAs, chosen: true } }))}
                         options={[
                           { value: 'income', label: 'przychód' },
@@ -1042,7 +985,7 @@ export function QuickApp() {
                         data-testid="quick-share-as"
                       />
                     )}
-                    {surplus > 0 && askOpen && (
+                    {surplus > 0 && currentAs === null && (
                       <span className="text-accent text-[11px]" data-testid="quick-share-ask">
                         pytaj: wybierz
                       </span>

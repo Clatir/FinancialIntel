@@ -2,16 +2,30 @@
  * „Nadwyżka” (1.19.0, D102) in the editor of an inflow repaying several household members: what each repays, how big
  * the surplus beyond all the debts is, and whose it is „as” what – their income, their advance, or a loan given repaid
  * (D100). The sender's share is the rest (as his setting says – „pytaj” asks); „po równo” and „proporcjonalnie do
- * długów” split it, each repaying every debt in full first. The lines are written by `surplus.ts`.
+ * długów” split it, each repaying every debt in full first. The lines are written by `calc/household.ts` (`writeSurplus`).
  */
-import { balanceOf, memberName, type HouseholdLedger } from '@shared/calc/household'
+import {
+  balanceOf,
+  debtShares,
+  evenShares,
+  fitShares,
+  loanPart,
+  memberName,
+  surplusView,
+  writeSurplus,
+  type HouseholdLedger,
+  type SurplusAs,
+  type SurplusInput,
+  type SurplusPerson,
+  type SurplusShare,
+  type SurplusView
+} from '@shared/calc/household'
 import type { LoanChoice } from '@shared/calc/loans'
 import { inflowOf, type HouseholdMember, type Split, type Transaction } from '@shared/schema'
 import { AmountField, plnText } from '../../components/fields'
 import { Segmented, cx } from '../../components/ui'
 import { toast } from '../../store/ui'
 import { rememberInflows } from './actions'
-import { debtShares, evenShares, fitShares, loanPart, surplusView, writeSurplus, type SurplusAs, type SurplusInput, type SurplusPerson, type SurplusShare, type SurplusView } from './surplus'
 
 type As = SurplusAs | 'loan'
 

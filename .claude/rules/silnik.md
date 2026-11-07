@@ -11,6 +11,7 @@ paths:
   - "tests/unit/household.test.ts"
   - "tests/unit/household-n2-*.test.ts"
   - "tests/unit/repayments.test.ts"
+  - "tests/unit/surplus-*.test.ts"
   - "tests/unit/share.test.ts"
   - "tests/unit/plan*.test.ts"
   - "tests/unit/goals.test.ts"

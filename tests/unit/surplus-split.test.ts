@@ -1,13 +1,27 @@
 /**
- * 1.19.0, step 2 (D102): the „Nadwyżka” panel's split (`features/household/surplus.ts`) – the surplus of one transfer
- * repaying several household members: said, split „po równo” / „proporcjonalnie do długów” (debts first, always), given
- * „as” income / advance / a loan's repayment, a member „pytaj” asked. Each written record read back by the ledger
- * (`settleHousehold`) – the contract of step 0 (`surplus-baseline.test.ts`).
+ * 1.19.0, steps 2 and 1 (D102): the surplus split in `calc/household.ts` and `calc/quick.ts` – the surplus of one
+ * transfer repaying several household members: said, split „po równo” / „proporcjonalnie do długów” (debts first,
+ * always), given „as” income / advance / a loan's repayment, a member „pytaj” asked. Each written record read back by
+ * the ledger (`settleHousehold`) – the contract of step 0 (`surplus-baseline.test.ts`).
  */
 import { describe, expect, it } from 'vitest'
-import { balanceOf, settleHousehold } from '@shared/calc/household'
+import {
+  balanceOf,
+  debtShares,
+  evenShares,
+  fitShares,
+  loanPart,
+  memberPartLines,
+  settleHousehold,
+  shareMax,
+  sharesOf,
+  surplusView,
+  writeSurplus,
+  type SurplusAs,
+  type SurplusInput
+} from '@shared/calc/household'
+import { quickPartLines, quickShareAs, quickSurplusInput } from '@shared/calc/quick'
 import { defaultCategoryId, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Split, type Transaction } from '@shared/schema'
-import { debtShares, evenShares, loanPart, shareMax, sharesOf, surplusView, writeSurplus, type SurplusAs, type SurplusInput } from '../../src/renderer/features/household/surplus'
 
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-01-01T00:00:00.000Z'
@@ -206,5 +220,106 @@ describe('D102 krok 2: „jako” – przychód, zaliczka, pytaj, pożyczka', ()
     const r = loanPart(input, surplusView(input)!, TATA, { id: LOAN, open: zl(500) })
     expect(r.moved).toBe(0)
     expect(r.splits).toEqual(input.splits)
+  })
+})
+
+describe('D102 krok 1: silnik w calc/household.ts i calc/quick.ts (T519–T521)', () => {
+  it('T519: osoba bez długu (owed = 0) zachowuje id i notatkę swojej linii na linii nadwyżki oraz z powrotem przy 0', () => {
+    const babcia = line(BABCIA, 0, { note: 'od Babci' })
+    const input = setup({ splits: [line(MAMA, 100), babcia] })
+    const withSurplus = writeSurplus(input, new Map([[BABCIA, { amount: zl(50), as: 'advance' }]]))
+    const babciaExtra = withSurplus.find((s) => s.memberId === BABCIA)!
+    expect(babciaExtra).toMatchObject({ id: babcia.id, amount: zl(50), inflowKind: 'advance', advance: true, note: 'od Babci' })
+    const backToZero = writeSurplus({ ...input, splits: withSurplus }, new Map([[BABCIA, { amount: 0, as: 'advance' }]]))
+    const babciaZero = backToZero.find((s) => s.memberId === BABCIA)!
+    expect(babciaZero).toMatchObject({ id: babcia.id, amount: 0, advance: false, note: 'od Babci' })
+    expect(babciaZero).not.toHaveProperty('inflowKind')
+  })
+
+  it('T520: przekazanie nadwyżki jednej osoby na pożyczkę zmienia tylko jej linie – zaniżona część innej osoby nie rośnie po cichu', () => {
+    // Babcia owes 80 zł, her line is only 30 zł; Mama owes 100 zł, her lines are 100 + 75 advance.
+    const babcia = line(BABCIA, 30)
+    const input = setup({
+      owed: { [MAMA]: zl(100), [TATA]: zl(150), [BABCIA]: zl(80) },
+      splits: [line(MAMA, 100), line(MAMA, 75, { inflowKind: 'advance', advance: true }), babcia]
+    })
+    const { splits, moved } = loanPart(input, surplusView(input)!, MAMA, { id: LOAN, open: zl(40) })
+    expect(moved).toBe(zl(40))
+    expect(splits.find((s) => s.memberId === BABCIA)).toEqual(babcia)
+    expect(flat(splits.filter((s) => s.memberId === MAMA))).toEqual([
+      [MAMA, zl(100), 'repay', false, null],
+      [MAMA, zl(35), 'advance', true, null]
+    ])
+  })
+
+  it('fitShares przycina nadwyżkę ponad wolną pulę i wskazuje osobę, której część podniesiono do całego długu', () => {
+    const input = setup({ splits: [line(MAMA, 60), line(BABCIA, 0)] })
+    const v = surplusView(input)!
+    const { shares, cut, raised } = fitShares(
+      v,
+      new Map([
+        [MAMA, { amount: zl(120), as: 'income' }],
+        [BABCIA, { amount: zl(80), as: 'advance' }]
+      ])
+    )
+    expect(shares.get(MAMA)?.amount).toBe(zl(120))
+    expect(shares.get(BABCIA)?.amount).toBe(zl(30))
+    expect(cut).toEqual([{ memberId: BABCIA, from: zl(80), to: zl(30) }])
+    expect(raised).toEqual([MAMA])
+  })
+
+  it('osoba z ustawieniem „zaliczka” przy zerowej nadwyżce zachowuje cel „zaliczka” w widoku (po wyzerowaniu nadwyżki)', () => {
+    const base = setup({ splits: [line(MAMA, 100)] })
+    const input: SurplusInput = { ...base, defaultAs: (id) => (id === MAMA ? 'advance' : 'income') }
+    const v = surplusView(input)!
+    expect(v.people.find((p) => p.memberId === MAMA)).toMatchObject({ amount: 0, as: 'advance' })
+    expect(evenShares(v).get(MAMA)).toEqual({ amount: zl(75), as: 'advance' })
+  })
+
+  it('memberPartLines: dług najpierw, nadwyżka z celem, „pytaj” zostaje na linii spłaty, 0 zwraca pustą listę', () => {
+    expect(memberPartLines(0, zl(100), 'advance')).toEqual([])
+    expect(memberPartLines(zl(60), zl(100), 'advance')).toEqual([{ amount: zl(60), advance: false }])
+    expect(memberPartLines(zl(175), zl(100), null)).toEqual([{ amount: zl(175), advance: false }])
+    expect(memberPartLines(zl(175), zl(100), 'advance')).toEqual([
+      { amount: zl(100), advance: false },
+      { amount: zl(75), advance: true, inflowKind: 'advance' }
+    ])
+    expect(memberPartLines(zl(50), 0, 'income')).toEqual([{ amount: zl(50), advance: false, inflowKind: 'income' }])
+  })
+
+  it('T521 (calc/quick.ts): quickSurplusInput i quickPartLines zachowują „zaliczka” z ustawienia osoby i odejmują wpisaną spłatę pożyczki', () => {
+    const members = [
+      { id: TATA, owed: zl(150), inflow: 'income' },
+      { id: MAMA, owed: zl(100), inflow: 'advance' },
+      { id: BABCIA, owed: 0, inflow: 'ask' }
+    ]
+    const through = [members[1]!, members[2]!]
+    expect(quickShareAs(members[1]!, {})).toBe('advance')
+    expect(quickShareAs(members[2]!, {})).toBeNull()
+    expect(quickShareAs(members[2]!, { [BABCIA]: { as: 'income', chosen: true } })).toBe('income')
+
+    const qInput = quickSurplusInput(
+      { amount: zl(400), payerId: TATA, payerAdvance: false, loan: { id: LOAN, amount: zl(30) } },
+      through,
+      members,
+      {},
+      {}
+    )!
+    const v = surplusView(qInput)!
+    expect([v.loans, v.free]).toEqual([zl(30), zl(120)])
+    const even = evenShares(v)
+    expect(even.get(MAMA)).toEqual({ amount: zl(40), as: 'advance' })
+    expect(even.get(BABCIA)).toEqual({ amount: zl(40), as: null })
+
+    const lines = quickPartLines(
+      through,
+      { [MAMA]: zl(140), [BABCIA]: zl(40) },
+      { [BABCIA]: { as: 'income', chosen: true } }
+    )
+    expect(lines).toEqual([
+      { memberId: MAMA, amount: zl(100), advance: false, advanceChosen: false },
+      { memberId: MAMA, amount: zl(40), advance: true, inflowKind: 'advance', advanceChosen: false },
+      { memberId: BABCIA, amount: zl(40), advance: false, inflowKind: 'income', advanceChosen: true }
+    ])
   })
 })
