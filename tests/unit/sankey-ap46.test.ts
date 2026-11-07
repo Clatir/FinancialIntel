@@ -117,6 +117,7 @@ describe('AP-46: Sankey miesiąca – liczby debriefingu i Bilansu paliwa (T490)
     // The income: the work and ICTTJ as Bilans paliwa.
     expect(value(flows, 'work', MONTH_NODE) + value(flows, 'trading', MONTH_NODE)).toBe(fuel.income)
     expect(value(flows, 'work', MONTH_NODE)).toBe(fuel.work)
+    expect(node(flows, 'work')!.detail).toEqual(['FIRMA · 9 000,00 zł'])
     expect(value(flows, 'trading', MONTH_NODE)).toBe(fuel.trading)
     // The costs: the envelopes' categories and the cargo less the returns beyond the purchases = the debriefing's.
     const out = flows.links.filter((l) => l.from === MONTH_NODE && l.to !== 'ship').reduce((a, l) => a + l.value, 0)
@@ -204,6 +205,28 @@ describe('AP-46: Sankey miesiąca – liczby debriefingu i Bilansu paliwa (T490)
     expect(value(over, 'energy', 'left')).toBe(0)
     // No salary paid by the engine – no energy view.
     expect(energyFlows({ ...brief, energy: null })).toBeNull()
+  })
+
+  it('składniki „Przychodów z pracy” (detail węzła work): lista transakcji z kwotą incomeParts.work i kontrahentem/tytułem', () => {
+    const extra = [
+      tx('2026-09-12', zl(1500), { kind: 'income', counterparty: 'ACME', title: 'Premia' }),
+      tx('2026-09-14', zl(800), { kind: 'income', counterparty: '', title: 'Zlecenie' }),
+      // Member inflow: 250 zł earlier + 250 zł now = 500 zł; 300 zł repays the purchase, 200 zł surplus is work income.
+      tx('2026-09-24', zl(250), { kind: 'income', memberId: HOUSE_MEMBER_ID, counterparty: 'MAMA', title: 'Dopłata' }),
+      // Loan repayment beyond the remaining 700 zł debt: 700 zł repays the loan, 50 zł interest is work income (T70).
+      tx('2026-09-25', zl(750), { kind: 'loan', loanId: loan.id, counterparty: 'Marek' })
+    ]
+    const { flows, fuel } = flowsOf(world('2026-10-10T12:00:00+02:00', extra), '2026-09')
+    balanced(flows)
+    expect(fuel.work).toBe(zl(9000 + 1500 + 800 + 200 + 50))
+    expect(value(flows, 'work', MONTH_NODE)).toBe(fuel.work)
+    expect(node(flows, 'work')!.detail).toEqual([
+      'FIRMA · 9 000,00 zł',
+      'ACME (Premia) · 1 500,00 zł',
+      'Zlecenie · 800,00 zł',
+      'MAMA (Dopłata) · 200,00 zł',
+      'Marek · 50,00 zł'
+    ])
   })
 })
 

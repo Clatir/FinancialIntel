@@ -44,6 +44,36 @@ describe('GC (T512–T518): interfejs, telefon, eksport i drobne', () => {
     expect(monthPage).toContain('w dniu 1. miesiąca osłony lub kadłub nie były pełne')
   })
 
+  it('Sankey UX (krok 1): nagłówek wykresu „Skąd i dokąd” oraz panel w Planie miesiąca i Debriefingu przekazują i wyświetlają aktywny miesiąc', () => {
+    const monthPage = read('src/renderer/features/month/MonthPage.tsx')
+    const reportsPage = read('src/renderer/features/reports/ReportsPage.tsx')
+    const sankeyComponent = read('src/renderer/features/reports/MonthSankey.tsx')
+    expect(monthPage).toContain('MonthSankey month={month}')
+    expect(reportsPage).toContain('MonthSankey month={month}')
+    expect(sankeyComponent).toContain('reports-sankey-title')
+    expect(sankeyComponent).toContain('monthLabel(month)')
+  })
+
+  it('Sankey UX (krok 3): Debriefing oznacza miesiąc poprzedni vs bieżący i pamięta wybór miesiąca w sesji (z domyślnym months[1])', async () => {
+    const reportsState = (await loadModule('@renderer/features/reports/state')) as {
+      debriefMonthOf: (d: { month: string; base: string } | null, months: readonly string[], current: string) => string
+      setDebriefMonth: (month: string, base?: string) => void
+      useReportsUi: { getState: () => { debrief: { month: string; base: string } | null } }
+    }
+    const months = ['2026-11', '2026-10', '2026-09']
+    expect(reportsState.debriefMonthOf(null, months, '2026-11')).toBe('2026-10')
+    expect(reportsState.debriefMonthOf(null, ['2026-11'], '2026-11')).toBe('2026-11')
+    reportsState.setDebriefMonth('2026-11', '2026-11')
+    expect(reportsState.debriefMonthOf(reportsState.useReportsUi.getState().debrief, months, '2026-11')).toBe('2026-11')
+    // A choice from a previous current month expires once a new month starts.
+    expect(reportsState.debriefMonthOf(reportsState.useReportsUi.getState().debrief, ['2026-12', ...months], '2026-12')).toBe('2026-11')
+
+    const reportsPage = read('src/renderer/features/reports/ReportsPage.tsx')
+    expect(reportsPage).toContain('reports-debrief-month-note')
+    expect(reportsPage).toContain('reports-debrief-current')
+    expect(reportsPage).toContain('reports-debrief-last-closed')
+  })
+
   it('T513: Telefon – lista operacji przekazuje pożyczki do operationRowText, a ustawienia mają wybór godziny odprawy', () => {
     const loan = loanSchema.parse({
       ...base(),

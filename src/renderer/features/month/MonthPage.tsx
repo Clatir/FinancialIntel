@@ -158,8 +158,8 @@ export function MonthPage() {
             {month === current && <DailyPanel fleet={fleet} />}
             <EnvelopesPanel month={month} current={current} fleet={fleet} brief={shownBrief} readOnly={readOnly} />
             {sankey && (
-              <Panel title="Przepływ miesiąca (Sankey)" testId="month-plan-sankey">
-                <MonthSankey money={sankey.money} energy={sankey.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={sankeyView} onView={setSankeyView} />
+              <Panel title={`Przepływ miesiąca – ${monthLabel(month)} (Sankey)`} testId="month-plan-sankey">
+                <MonthSankey month={month} money={sankey.money} energy={sankey.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={sankeyView} onView={setSankeyView} />
               </Panel>
             )}
             {brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? (

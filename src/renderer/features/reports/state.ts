@@ -16,7 +16,17 @@ export interface WatchChoice {
   base: string
 }
 
-export const useReportsUi = create<{ tab: ReportTab; watch: WatchChoice | null }>(() => ({ tab: 'watch', watch: null }))
+/** A month chosen in the debriefing with the budget's current month when it was chosen: once a new month starts, the default returns. */
+export interface DebriefChoice {
+  month: string
+  base: string
+}
+
+export const useReportsUi = create<{ tab: ReportTab; watch: WatchChoice | null; debrief: DebriefChoice | null }>(() => ({
+  tab: 'watch',
+  watch: null,
+  debrief: null
+}))
 
 export const setReportTab = (tab: ReportTab): void => useReportsUi.setState({ tab })
 
@@ -30,6 +40,13 @@ export const setWatchMonday = (monday: string): void => useReportsUi.setState({ 
 
 /** The week shown: the one chosen while it is still the same week due, else the week due now. */
 export const watchMondayOf = (watch: WatchChoice | null, due: string): string => (watch && watch.base === due ? watch.monday : due)
+
+export const setDebriefMonth = (month: string, base: string = warsawNow().month): void =>
+  useReportsUi.setState({ debrief: { month, base } })
+
+/** The month shown in the debriefing: the one chosen in this session while `current` is the same and in `months`, else the last closed month (`months[1] ?? months[0]`). */
+export const debriefMonthOf = (debrief: DebriefChoice | null, months: readonly string[], current: string): string =>
+  debrief && debrief.base === current && months.includes(debrief.month) ? debrief.month : (months[1] ?? months[0] ?? current)
 
 /** The year's review (the January notification's click – AP-24): in January the year just closed is its default. */
 export function openYearReview(): void {

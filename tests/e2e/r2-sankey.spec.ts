@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
+import { monthLabel } from '../../src/renderer/lib/format'
 import { launch } from './app'
 import { seedFolder, zl } from './seed'
 
@@ -43,9 +44,12 @@ test('Debriefing (AP-46): Sankey miesiąca – przychód i koszty, pensja i ener
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await page.keyboard.press('Control+0')
     await page.getByRole('radio', { name: 'Debriefing' }).click()
-    await page.getByTestId('reports-debrief-month').selectOption(last)
+    await expect(page.getByTestId('reports-debrief-month')).toHaveValue(last)
+    await expect(page.getByTestId('reports-debrief-month-note')).toHaveAttribute('data-state', 'last-closed')
+    await expect(page.getByTestId('reports-debrief-month-note')).toHaveText('ostatni zamknięty miesiąc')
     const sankey = page.getByTestId('reports-sankey')
     await expect(sankey).toHaveAttribute('data-view', 'money')
+    await expect(sankey.getByTestId('reports-sankey-title')).toHaveText(`Skąd i dokąd – ${monthLabel(last)}`)
     const label = (id: string) => sankey.locator(`[data-testid="reports-sankey-label"][data-id="${id}"]`)
     // The income, the costs by envelope's category, what the month added to the ship: 5 000 − 1 050 = 3 950 zł.
     await expect(label('work')).toHaveText('Przychody z pracy · 5 000,00 zł')
@@ -55,7 +59,10 @@ test('Debriefing (AP-46): Sankey miesiąca – przychód i koszty, pensja i ener
     await expect(label('cat:none')).toHaveText('Bez kategorii · 50,00 zł')
     await expect(label('ship')).toHaveText('Dołożone do okrętu · 3 950,00 zł')
     await expect(sankey.getByTestId('reports-sankey-heading')).toHaveText(['Koperty codzienne · 650,00 zł', 'Koperty planowe · 400,00 zł'])
-    // The tooltip: the amount and its percent of the chart.
+    // The tooltip: the amount and its percent of the chart, plus the work node's transaction details.
+    await sankey.locator('[data-testid="reports-sankey-node"][data-id="work"]').hover()
+    await expect(sankey.getByTestId('reports-sankey-tip')).toContainText('Przychody z pracy')
+    await expect(sankey.getByTestId('reports-sankey-tip')).toContainText('Firma · 5 000,00 zł')
     await sankey.locator('[data-testid="reports-sankey-link"][data-from="month"][data-to="ship"]').hover()
     await expect(sankey.getByTestId('reports-sankey-tip')).toContainText('Miesiąc → Dołożone do okrętu')
     await expect(sankey.getByTestId('reports-sankey-tip')).toContainText('3 950,00 zł · 79,0% wszystkich przepływów na wykresie')
@@ -66,6 +73,8 @@ test('Debriefing (AP-46): Sankey miesiąca – przychód i koszty, pensja i ener
     await page.keyboard.press('Control+Shift+Digit4')
     await expect(label('ship')).toHaveText('Dołożone do okrętu · ••• zł')
     expect(await bar.getAttribute('height')).toBe(height)
+    await sankey.locator('[data-testid="reports-sankey-node"][data-id="work"]').hover()
+    await expect(sankey.getByTestId('reports-sankey-tip')).toContainText('Firma · ••• zł')
     await page.keyboard.press('Control+Shift+Digit4')
     await expect(label('ship')).toHaveText('Dołożone do okrętu · 3 950,00 zł')
 
@@ -86,10 +95,24 @@ test('Debriefing (AP-46): Sankey miesiąca – przychód i koszty, pensja i ener
     await page.getByTestId('reports-debrief-pdf').click()
     await expect.poll(async () => (await readFile(pdf).catch(() => Buffer.alloc(0))).subarray(0, 4).toString()).toBe('%PDF')
 
-    // The month in progress: up to today.
+    // The month in progress: up to today, via quick button „bieżący”.
     await sankey.getByRole('radio', { name: 'Przychód i koszty' }).click()
-    await page.getByTestId('reports-debrief-month').selectOption(month)
+    await page.getByTestId('reports-debrief-current').click()
+    await expect(page.getByTestId('reports-debrief-month')).toHaveValue(month)
+    await expect(page.getByTestId('reports-debrief-month-note')).toHaveAttribute('data-state', 'current')
+    await expect(page.getByTestId('reports-debrief-month-note')).toHaveText('miesiąc bieżący (w toku – do dziś)')
+    await expect(sankey.getByTestId('reports-sankey-title')).toHaveText(`Skąd i dokąd – ${monthLabel(month)}`)
     await expect(sankey.locator('[data-testid="reports-sankey-label"][data-id="month"], [data-testid="reports-sankey-empty"]')).toBeVisible()
+
+    // Plan miesiąca also shows the analyzed month in the Sankey header, and Debriefing remembers the selected month in the session.
+    await page.keyboard.press('Control+4')
+    await page.getByTestId('month-prev').click()
+    const monthSankey = page.getByTestId('month-plan-sankey').getByTestId('reports-sankey')
+    await expect(monthSankey.getByTestId('reports-sankey-title')).toHaveText(`Skąd i dokąd – ${monthLabel(last)}`)
+    await page.keyboard.press('Control+0')
+    await expect(page.getByTestId('reports-debrief-month')).toHaveValue(month)
+    await page.getByTestId('reports-debrief-last-closed').click()
+    await expect(page.getByTestId('reports-debrief-month')).toHaveValue(last)
     expect(errors).toEqual([])
   } finally {
     await app.close()

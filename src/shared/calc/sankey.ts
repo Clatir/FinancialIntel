@@ -15,6 +15,7 @@
  *
  * The month in progress counts up to the budget's day (AP-36), as the debriefing does.
  */
+import { formatPln } from '../format'
 import type { Transaction } from '../schema/records'
 import { incomeByMonth, incomeParts, type IncomeContext } from './income'
 import { isTwoSided, partsOf, sum } from './operations'
@@ -78,6 +79,15 @@ export interface OutsideMoney {
   topUps: number
   /** The month's XTB top-ups whole (the tax pool's money not – `incomeParts`): the deliveries are their net. */
   topUpsGross: number
+  /** The operations that make up the month's work income (`incomeParts(t, ctx).work > 0`), with their amount and counterparty/title, for the `work` node's tooltip. */
+  workDetail?: readonly string[]
+}
+
+function workItemText(t: Pick<Transaction, 'counterparty' | 'title'>, work: number): string {
+  const who = t.counterparty.trim()
+  const what = t.title.trim()
+  const name = who && what && who !== what ? `${who} (${what})` : who || what || 'Wpływ'
+  return `${name} · ${formatPln(work)} zł`
 }
 
 /**
@@ -96,6 +106,7 @@ export function outsideMoney(transactions: readonly Transaction[], month: string
   let topUpsGross = 0
   // One-sided transfers between the budget's accounts (before 1.7.0 – each side its own operation): their pair cancels out.
   let inside = 0
+  const workDetail: string[] = []
   for (const t of transactions) {
     if (t.kind === 'trading' && t.amount < 0) topUpsGross -= incomeParts(t, ctx).trading
     if (t.kind === 'expense') {
@@ -103,6 +114,7 @@ export function outsideMoney(transactions: readonly Transaction[], month: string
       for (const p of partsOf(t)) if (!p.refundable && p.goalId) goals -= p.amount
     } else if (t.kind === 'income' && t.amount > 0) {
       const own = incomeParts(t, ctx).work
+      if (own > 0) workDetail.push(workItemText(t, own))
       const loans = sum((ctx.loanBacks?.get(t.id) ?? []).map((x) => x.back))
       loansIn += loans
       // What is neither income, the loans' nor the tax pool's: the household members' money (debts repaid, advances).
@@ -113,8 +125,12 @@ export function outsideMoney(transactions: readonly Transaction[], month: string
       }
     } else if (t.kind === 'loan') {
       if (t.amount < 0) loansOut -= t.amount
-      // Beyond a given loan's debt it is interest – income (T70): the rest is the loan's money.
-      else loansIn += t.amount - incomeParts(t, ctx).work
+      else {
+        // Beyond a given loan's debt it is interest – income (T70): the rest is the loan's money.
+        const own = incomeParts(t, ctx).work
+        if (own > 0) workDetail.push(workItemText(t, own))
+        loansIn += t.amount - own
+      }
     } else if (t.kind === 'transfer' && !isTwoSided(t)) {
       if (t.counterAccountId) inside += t.amount
       else if (t.amount < 0) transfersOut -= t.amount
@@ -124,7 +140,7 @@ export function outsideMoney(transactions: readonly Transaction[], month: string
   if (inside < 0) transfersOut -= inside
   else transfersIn += inside
   const trading = incomeByMonth(transactions, ctx).get(month)?.trading ?? 0
-  return { goals, financed: sum(financed.map((f) => f.amount)), members, membersDeposit, loansOut, loansIn, transfersOut, transfersIn, topUps: Math.max(0, -trading), topUpsGross }
+  return { goals, financed: sum(financed.map((f) => f.amount)), members, membersDeposit, loansOut, loansIn, transfersOut, transfersIn, topUps: Math.max(0, -trading), topUpsGross, workDetail }
 }
 
 export interface MonthFlowsInput {
@@ -188,7 +204,7 @@ export function monthFlows(input: MonthFlowsInput): Flows {
   const passes = [Math.abs(o.goals), Math.abs(o.financed), o.members, o.loansIn, o.transfersIn, o.loansOut, o.transfersOut, o.topUps]
   const total = work + trading + returns + deficit + sum(passes.map((v) => Math.max(0, v)))
   const small = total * SMALL_SHARE
-  if (work) node({ id: 'work', label: 'Przychody z pracy', column: 0 })
+  if (work) node({ id: 'work', label: 'Przychody z pracy', column: 0, ...(o.workDetail?.length ? { detail: o.workDetail } : {}) })
   // Bilans paliwa's trading net (R2 review, item 9): „netto” when the month topped XTB up.
   if (trading) node({ id: 'trading', label: o.topUpsGross ? 'Dostawy z ICTTJ (netto)' : 'Dostawy z ICTTJ', column: 0 })
   if (returns) node({ id: 'returns', label: 'Zwroty ponad zakupy', column: 0, detail: returned })
