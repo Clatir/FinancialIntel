@@ -228,7 +228,6 @@ export function ConditionsEditor({ rule, fromRow, onDone }: { rule?: ImportRule;
           direction={d.direction ?? 'out'}
           onChange={(choice) => setD((x) => ({ ...x, choice }))}
           exclude={(o) => notForRule(o, d.direction, repayable) || restNotOfRule(o, members)}
-          noShares
           testId="import-rule-conditions-decision"
         />
       </div>

@@ -354,6 +354,16 @@ export const importRuleSchema = z.looseObject({
   memberId: keptDefault(ulidSchema.nullable(), null),
   /** Purpose of an incoming transfer: 'repay' (default), 'income' (independent income), 'advance' (deposit). */
   inflowKind: keptField(z.enum(['repay', 'income', 'advance'])),
+  /**
+   * Other household members whose debts an incoming repayment transfer also settles („w tym za”, D102): debts first,
+   * without fixed PLN amounts. Absent = only `memberId`.
+   */
+  alsoFor: keptField(z.array(ulidSchema).max(20)),
+  /**
+   * How to split the surplus beyond all debts of `memberId` and `alsoFor` (D102): 'even' (equally), 'debts'
+   * (proportionally to the debts settled by the transfer); absent = all surplus stays with `memberId`.
+   */
+  surplusSplit: keptField(z.enum(['even', 'debts'])),
   /** A purchase the member gives (D83, with `refundable`): nobody owes it. Absent = no. */
   gift: keptField(z.boolean()),
   /** A purchase financed by several people (D83): each row's amount split so (`calc/share.ts`). Absent / null = none. */
@@ -389,6 +399,8 @@ export function readableRuleFields(rule: ImportRule): boolean {
   if (rule.counterparty !== undefined && (typeof rule.counterparty !== 'string' || rule.counterparty.length > 300)) return false
   if (rule.memberId !== null && !ulidSchema.safeParse(rule.memberId).success) return false
   if (rule.inflowKind !== undefined && rule.inflowKind !== 'repay' && rule.inflowKind !== 'income' && rule.inflowKind !== 'advance') return false
+  if (rule.alsoFor !== undefined && !z.array(ulidSchema).max(20).safeParse(rule.alsoFor).success) return false
+  if (rule.surplusSplit !== undefined && rule.surplusSplit !== 'even' && rule.surplusSplit !== 'debts') return false
   if (rule.gift !== undefined && typeof rule.gift !== 'boolean') return false
   if (rule.share !== undefined && rule.share !== null && !shareSchema.safeParse(rule.share).success) return false
   if (rule.loanId !== undefined && rule.loanId !== null && !ulidSchema.safeParse(rule.loanId).success) return false

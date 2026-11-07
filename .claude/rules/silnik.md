@@ -11,6 +11,7 @@ paths:
   - "tests/unit/household.test.ts"
   - "tests/unit/household-n2-*.test.ts"
   - "tests/unit/repayments.test.ts"
+  - "tests/unit/surplus-*.test.ts"
   - "tests/unit/share.test.ts"
   - "tests/unit/plan*.test.ts"
   - "tests/unit/goals.test.ts"
@@ -112,6 +113,12 @@ paths:
   **Pułapka:** przy osobie dług i zaliczka naraz (`balanceText`, AF-16) – inaczej depozyt ≠ suma przy osobach.
   **Pułapka:** zmiana dawnej wpłaty liczy się od jej dnia – nie może zabrać długu późniejszej spłacie ani zaliczki
   późniejszemu zakupowi (przegląd 2 N2: dług 50 → 150 zł).
+- Nadwyżka przelewu za kilku domowników (D102, T519–T521, od 1.19.0): `surplusView`, `evenShares`, `debtShares`,
+  `fitShares`, `writeSurplus`, `loanPart`, `memberPartLines` (`calc/household.ts`) i `quickShareAs` / `quickSurplusInput` /
+  `quickPartLines` (`calc/quick.ts`) – wspólne dla edytora, szybkiego wpisu i importu. Zawsze najpierw pełna spłata długów
+  wszystkich osób przelewu, reszta groszy u nadawcy (`splitEvenly`). **Pułapka (T519):** osoba z `owed === 0` zachowuje `id`
+  i notatkę swojej linii na linii nadwyżki i z powrotem przy 0 zł. **Pułapka (T520):** `loanPart` przepisuje wyłącznie
+  linie wybranej osoby, nie podnosząc po cichu zaniżonych części innych osób z reszty nadawcy.
 - Spłata pożyczki częścią wpłaty (D100, T355–T356): linia wpływu `Split.loanId` bez domownika – część `incomeShares`
   z `loanId`, poza księgą domowników. Spłaty pożyczki czytaj tylko przez `loanParts` / `forEachLoanOperation` /
   `loanIdsOf` (stan, silnik `repayLoanParts`, wartość netto, statystyki, filtr), nigdy samo `t.loanId`; ile spłaty idzie

@@ -11,7 +11,8 @@ import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
 import { TagsField } from '../../components/TagsField'
 import { hashTags, tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
-import { restToChoose, senderOwn } from '@shared/calc/quick'
+import { quickPartLines, quickShareAs, quickSurplusInput, restToChoose, senderOwn } from '@shared/calc/quick'
+import { debtShares, evenShares, surplusView, type SurplusAs, type SurplusShare, type SurplusView } from '@shared/calc/household'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -120,6 +121,8 @@ export function QuickApp() {
   const [share, setShare] = useState<Share | null>(null)
   // Others' money in a member's transfer (D81, „w tym za …”), by member.
   const [shares, setShares] = useState<Record<string, number>>({})
+  // D102: a member's surplus goal ('income' | 'advance'), chosen explicitly by user.
+  const [shareAs, setShareAs] = useState<Record<string, { as: SurplusAs; chosen: boolean }>>({})
   // The part repaying a loan given (D100, T359 – whoever sent it): its loan; its amount typed, else what the loan still
   // owes, at most what the inflow has left (null).
   const [loan, setLoan] = useState<QuickLoan | null>(null)
@@ -145,11 +148,11 @@ export function QuickApp() {
   const [series, setSeries] = useState(0)
   const next = useRef(false)
   // The draft as typed and when it was last touched: closed unsaved, it waits for the next opening (F7).
-  const kept = useRef({ d, lines, share, at: 0 })
-  kept.current = { d, lines, share, at: kept.current.at }
+  const kept = useRef({ d, lines, share, shares, shareAs, at: 0 })
+  kept.current = { d, lines, share, shares, shareAs, at: kept.current.at }
   useEffect(() => {
     kept.current.at = Date.now()
-  }, [d, lines, share])
+  }, [d, lines, share, shares, shareAs])
   // The half hour counts from the closing too (Esc, the button, the system's close – the window only hides).
   useEffect(() => {
     const onHidden = () => {
@@ -195,6 +198,7 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setShareAs({})
         setLoan(null)
         setNightOk(false)
         setOfficer(null)
@@ -230,6 +234,7 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setShareAs({})
         setLoan(null)
         setNightOk(false)
         setOfficer(null)
@@ -247,6 +252,7 @@ export function QuickApp() {
         setLines([])
         setShare(null)
         setShares({})
+        setShareAs({})
         setLoan(null)
         // One countdown: a second answer to the same draft (B51) must not leave an earlier one to hide the window
         // opened again meanwhile.
@@ -288,6 +294,7 @@ export function QuickApp() {
         setLines((ls) => ls.map((l) => (member(l.memberId) ? l : { ...l, memberId: null, refundable: false, gift: false })))
         setShare((sh) => (sh && sh.lines.some((l) => !member(l.memberId)) ? null : sh))
         setShares((xs) => Object.fromEntries(Object.entries(xs).filter(([id]) => member(id))))
+        setShareAs((xs) => Object.fromEntries(Object.entries(xs).filter(([id]) => member(id))))
       }
       // A loan closed or gone meanwhile (D100): its part is chosen again.
       const loanGone = !!loanRef.current && !(fresh.loans ?? []).some((l) => l.id === loanRef.current!.loanId)
@@ -334,6 +341,7 @@ export function QuickApp() {
   const payerOwn = payer ? senderOwn(d.amount, payer.id, data?.members ?? [], shares, loanNow?.amount ?? 0) : 0
   const askRest = restToChoose(payerOwn, payer, !!d.advanceChosen)
   const restOpen = payer?.inflow === 'ask' && !d.advanceChosen
+  const through = useMemo(() => (d.kind === 'income' && d.household && data ? data.members.filter((m) => m.via === d.memberId) : []), [d.kind, d.household, d.memberId, data])
   const hide = !!data?.hideAmounts
   // The „#słowo” of the name and the note not in the tags yet (AP-20): the window shows them before saving.
   const hashed = useMemo(() => {
@@ -341,6 +349,33 @@ export function QuickApp() {
     return withTags([], [...hashTags(d.counterparty), ...hashTags(d.note)]).filter((x) => !have.has(tagKey(x)))
   }, [d.counterparty, d.note, d.tags])
   const money = useCallback((g: number) => (hide ? `${AMOUNT_MASK} zł` : `${plnText(g)} zł`), [hide])
+
+  // The split of 1.19.0 (D102, `calc/household.ts`) over „W tym za”: the members' parts, a loan's part typed.
+  const currentSurplusView = useMemo((): SurplusView | null => {
+    if (d.kind !== 'income' || !d.household || !data) return null
+    const typedLoan = loan?.amount != null && loanNow ? { id: loanNow.loan.id, amount: loanNow.amount } : null
+    const input = quickSurplusInput({ amount: d.amount, payerId: d.memberId, payerAdvance: d.advance, loan: typedLoan }, through, data.members, shares, shareAs)
+    return input && surplusView(input)
+  }, [d.kind, d.household, d.memberId, d.advance, d.amount, data, through, shares, shareAs, loan, loanNow])
+
+  const canByDebts = !!currentSurplusView && !!debtShares(currentSurplusView)
+
+  // „Po równo” / „proporcjonalnie do długów”: each member's part = their whole debt + their share (debts first); their
+  // „as” stays as it is – chosen in the window or their setting (a member „pytaj” still asked before saving).
+  const applyShares = useCallback(
+    (sharesMap: ReadonlyMap<string, SurplusShare> | null) => {
+      if (!currentSurplusView || currentSurplusView.free < 0 || !sharesMap) return
+      const nextShares: Record<string, number> = { ...shares }
+      for (const p of currentSurplusView.people) {
+        const s = sharesMap.get(p.memberId)
+        if (!p.payer && s) nextShares[p.memberId] = p.owed + s.amount
+      }
+      setShares(nextShares)
+    },
+    [currentSurplusView, shares]
+  )
+  const applyEven = useCallback(() => currentSurplusView && applyShares(evenShares(currentSurplusView)), [currentSurplusView, applyShares])
+  const applyDebts = useCallback(() => currentSurplusView && applyShares(debtShares(currentSurplusView)), [currentSurplusView, applyShares])
 
   // Today's energy (or the envelope) after this operation, before saving.
   const preview = useMemo((): ReactNode => {
@@ -373,12 +408,17 @@ export function QuickApp() {
         const as = advance == null ? '– przychód czy zaliczka? Wybierz wyżej' : advance ? 'jako zaliczka (depozyt)' : 'jako przychód (dokuje)'
         return `${who.name}${back ? ` – wyrównuje ${money(back)} (ma oddać ${money(who.owed)})` : ''}${rest ? `${back ? ', reszta' : ' –'} ${money(rest)} ${as}` : ''}.`
       }
+      const shareAdvance = (who: { id: string; owed: number; inflow: string }, sh: number): boolean | null => {
+        if (sh <= Math.max(0, who.owed)) return false
+        const as = quickShareAs(who, shareAs)
+        return as === null ? null : as === 'advance'
+      }
       return (
         <div className="flex flex-col">
           {own < 0 ? <span className="text-down">Części innych osób przekraczają kwotę.</span> : own > 0 || !toLoan ? <span data-testid="quick-preview-member">Od: {line(m, own, restOpen ? null : d.advance)}</span> : null}
           {others.map((x) => (
             <span key={x.id} data-testid="quick-preview-share">
-              W tym za: {line(x, shares[x.id]!, x.inflow === 'advance')}
+              W tym za: {line(x, shares[x.id]!, shareAdvance(x, shares[x.id]!))}
             </span>
           ))}
           {own >= 0 && loanLine}
@@ -473,7 +513,7 @@ export function QuickApp() {
       )
     }
     return out
-  }, [data, d, parts, cats, money, shares, restOpen, loanNow])
+  }, [data, d, parts, cats, money, shares, shareAs, restOpen, loanNow])
 
   const save = useCallback((andNext = false) => {
     if (busy || sending.current || !data) return
@@ -488,10 +528,16 @@ export function QuickApp() {
     if (d.kind === 'refundable' && lines.length <= 1 && !share && !d.memberId) return refuse('Wybierz domownika, który finansuje zakup.')
     // A member „pytaj” (D80 b, AP-19): the rest beyond what they owe is chosen – never saved as income unasked.
     if (askRest > 0) return refuse(`Wybierz, czym jest reszta ${money(askRest)} ponad to, co ${payer!.name} ma oddać: przychód czy zaliczka.`)
+    for (const m of through) {
+      const beyond = (shares[m.id] ?? 0) - Math.max(0, m.owed)
+      if (beyond > 0 && quickShareAs(m, shareAs) === null) {
+        return refuse(`Wybierz, czym jest reszta ${money(beyond)} ponad to, co ${m.name} ma oddać: przychód czy zaliczka.`)
+      }
+    }
     if (share && !shareComplete(share, d.amount)) return refuse(share.mode === 'percent' ? 'Procenty osób muszą dać razem 100 %.' : 'Kwoty innych osób przekraczają całość.')
     if (night && (!nightOk || !d.logNote.trim())) return refuse('Cisza nocna: potwierdź zakup i wpisz krótko, dlaczego teraz.')
-    // Others' money in a member's transfer (D81): their parts, as each one's setting says of the rest.
-    const parts = d.kind === 'income' && d.household ? data.members.filter((m) => m.via === d.memberId && (shares[m.id] ?? 0) > 0).map((m) => ({ memberId: m.id, amount: shares[m.id]!, advance: m.inflow === 'advance' })) : []
+    // Others' money in a member's transfer (D81, D102 – `quickPartLines`): debts first, surplus with its chosen kind.
+    const parts = d.kind === 'income' && d.household ? quickPartLines(through, shares, shareAs) : []
     // A loan's part (D100): with an amount, within the inflow beside the others' parts.
     if (d.kind === 'income' && loan && (loanNow?.amount ?? 0) <= 0) return refuse('Wpisz kwotę spłaty pożyczki.')
     if (loanNow && parts.reduce((a, x) => a + x.amount, 0) + loanNow.amount > d.amount) return refuse('Spłata pożyczki i części innych osób przekraczają kwotę wpłaty.')
@@ -504,7 +550,7 @@ export function QuickApp() {
     // „Plan czy impuls” only where the log asks – of my own part (AP-19); Alt+P / Alt+I may be pressed before the amount
     // is known (AP-20).
     void api.quickAdd({ ...d, impulse: asks ? d.impulse : null, folder: data.folder ?? null, splits: d.kind !== 'income' && !share && lines.length > 1 ? lines : [], share: d.kind !== 'income' ? share : null, shares: parts, loanPart } satisfies QuickDraft)
-  }, [busy, data, d, lines, share, night, nightOk, shares, askRest, payer, money, asks, loan, loanNow])
+  }, [busy, data, d, lines, share, night, nightOk, shares, shareAs, through, askRest, payer, money, asks, loan, loanNow])
 
   // Enter blurs the field first (its value goes into the draft), then saves the draft as rendered after that.
   const saveRef = useRef(save)
@@ -570,6 +616,7 @@ export function QuickApp() {
     setLines([])
     setShare(null)
     setShares({})
+    setShareAs({})
     setLoan(null)
     setNightOk(false)
     setOfficer(null)
@@ -584,6 +631,7 @@ export function QuickApp() {
     setLines([])
     setShare(null)
     setShares({})
+    setShareAs({})
     setLoan(null)
     setOfficer(null)
     setRestored(false)
@@ -878,19 +926,74 @@ export function QuickApp() {
               </div>
             </Row>
           )}
-          {/* Who passes money through this member (D81): their part of this transfer, typed or left empty. */}
+          {/* Who passes money through this member (D81, D102): their part of this transfer, typed or left empty. */}
+          {d.kind === 'income' && d.household && through.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pl-[110px] text-[11px]">
+              <button
+                type="button"
+                className={cx(currentSurplusView && currentSurplusView.free >= 0 ? 'text-accent hover:underline' : 'cursor-not-allowed text-dim')}
+                disabled={!currentSurplusView || currentSurplusView.free < 0}
+                title="Najpierw całe długi, nadwyżka po równo na osoby – grosze reszty nadawcy"
+                onClick={applyEven}
+                data-testid="quick-surplus-even"
+              >
+                po równo
+              </button>
+              <button
+                type="button"
+                className={cx(canByDebts ? 'text-accent hover:underline' : 'cursor-not-allowed text-dim')}
+                disabled={!canByDebts}
+                title="Najpierw całe długi, nadwyżka w proporcji do tego, ile każdy miał oddać"
+                onClick={applyDebts}
+                data-testid="quick-surplus-debts"
+              >
+                proporcjonalnie do długów
+              </button>
+            </div>
+          )}
           {d.kind === 'income' &&
             d.household &&
-            data.members
-              .filter((m) => m.via === d.memberId)
-              .map((m) => (
+            through.map((m) => {
+              const sh = shares[m.id] ?? 0
+              const mOwed = Math.max(0, m.owed)
+              const surplus = Math.max(0, sh - mOwed)
+              const currentAs = quickShareAs(m, shareAs)
+              return (
                 <Row key={m.id} label={`W tym za ${m.name}`}>
-                  <div className="flex items-center gap-2">
-                    <AmountField className="w-[110px]" value={shares[m.id] || null} allowEmpty onChange={(v) => setShares((x) => ({ ...x, [m.id]: v ?? 0 }))} aria-label={`W tym za ${m.name}`} data-testid="quick-share" />
-                    <span className="text-[11px] text-muted">{m.owed ? `ma oddać ${money(m.owed)}` : 'nic do oddania'}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AmountField
+                      className="w-[110px]"
+                      value={shares[m.id] || null}
+                      allowEmpty
+                      onChange={(v) => setShares((x) => ({ ...x, [m.id]: v ?? 0 }))}
+                      aria-label={`W tym za ${m.name}`}
+                      data-testid="quick-share"
+                    />
+                    <span className="text-[11px] text-muted">
+                      {m.owed ? (surplus > 0 ? `ma oddać ${money(m.owed)}, nadwyżka ${money(surplus)}` : `ma oddać ${money(m.owed)}`) : 'nic do oddania'}
+                    </span>
+                    {surplus > 0 && (
+                      <Segmented
+                        size="sm"
+                        value={currentAs}
+                        onChange={(v) => setShareAs((x) => ({ ...x, [m.id]: { as: v as SurplusAs, chosen: true } }))}
+                        options={[
+                          { value: 'income', label: 'przychód' },
+                          { value: 'advance', label: 'zaliczka' }
+                        ]}
+                        aria-label={`Nadwyżka – ${m.name}`}
+                        data-testid="quick-share-as"
+                      />
+                    )}
+                    {surplus > 0 && currentAs === null && (
+                      <span className="text-accent text-[11px]" data-testid="quick-share-ask">
+                        pytaj: wybierz
+                      </span>
+                    )}
                   </div>
                 </Row>
-              ))}
+              )
+            })}
           {/* D100: any inflow – whoever sent it – may repay a loan given, all of it or a part; the rest as above. */}
           {d.kind === 'income' && (data.loans?.length ?? 0) > 0 && (
             <Row label="Spłata pożyczki">

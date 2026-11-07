@@ -115,7 +115,8 @@ export const keywordOfSearch = (query: string): string | null => {
  * category – marked when archived since (N86: such a rule asks for a new one) –, whose money, the own transfer's account.
  */
 export function ruleDecisionText(
-  r: Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'> & Partial<Pick<ImportRule, 'loanId' | 'loanAmount'>>,
+  r: Pick<ImportRule, 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'> &
+    Partial<Pick<ImportRule, 'inflowKind' | 'loanId' | 'loanAmount' | 'alsoFor' | 'surplusSplit'>>,
   catLabel: (id: string | null) => string,
   members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'name'>> = membersNow()
 ): string {
@@ -132,9 +133,18 @@ export function ruleDecisionText(
   if (r.kind === 'income') {
     if (!r.household) return 'wpływ (przychód)'
     // The import's names (AP-4); a rule of „spłata” – the rest beyond the debt as the person's setting says (D80 b).
-    const kind = (r as ImportRule).inflowKind
+    const kind = r.inflowKind
     const kindText = kind === 'income' ? ` – ${MEMBER_MONEY_TEXT['all-income']}` : kind === 'advance' ? ` – ${MEMBER_MONEY_TEXT['all-advance']}` : ''
-    return `od domownika: ${memberName(r.memberId, members)}${kindText}`
+    const senderId = r.memberId ?? HOUSE_MEMBER_ID
+    const also = !kind || kind === 'repay' ? (r.alsoFor ?? []).filter((id) => id !== senderId) : []
+    const alsoText = also.length ? ` · w tym za: ${also.map((id) => memberName(id, members)).join(', ')}` : ''
+    const splitText =
+      also.length && r.surplusSplit === 'even'
+        ? ' · nadwyżka: po równo'
+        : also.length && r.surplusSplit === 'debts'
+          ? ' · nadwyżka: proporcjonalnie do długów'
+          : ''
+    return `od domownika: ${memberName(r.memberId, members)}${kindText}${alsoText}${splitText}`
   }
   if (r.kind === 'transfer') {
     const account = r.counterAccountId ? settings?.accounts.find((a) => a.id === r.counterAccountId)?.name : null
@@ -189,21 +199,39 @@ export function moveConditionalRule(id: string, delta: -1 | 1): void {
  * A rule's decision as the import's (the rule's editor – F22). A member's money of „spłata”: the rest the person's
  * setting gives at each import (D80 b, AP-4 – the rule keeps none), as `classifyRow` reads it.
  */
-export const choiceOfRule = (r: ImportRule, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'inflow'>> = membersNow()): Choice => ({
-  kind: r.kind as TxKind,
-  categoryId: r.categoryId,
-  refundable: r.refundable,
-  household: r.household,
-  memberId: r.memberId,
-  advance: r.inflowKind === 'advance' || (r.household && r.inflowKind !== 'income' && inflowOf(members.find((m) => m.id === (r.memberId ?? HOUSE_MEMBER_ID))) === 'advance'),
-  inflowKind: r.inflowKind ?? 'repay',
-  gift: r.gift,
-  share: r.share ?? null,
-  counterAccountId: r.counterAccountId,
-  // The loan it repays (D100, T358): whole (kind 'loan'), or its part of each income.
-  loanId: r.kind === 'loan' ? (r.loanId ?? null) : null,
-  ...(r.kind === 'income' && r.loanId && r.loanAmount ? { shares: [{ memberId: '', amount: r.loanAmount, advance: false, loanId: r.loanId }] } : {})
-})
+export const choiceOfRule = (r: ImportRule, members: ReadonlyArray<Pick<HouseholdMember, 'id' | 'inflow'>> = membersNow()): Choice => {
+  const senderId = r.memberId ?? HOUSE_MEMBER_ID
+  const repay = r.kind === 'income' && r.household && (r.inflowKind ?? 'repay') === 'repay'
+  const alsoIds = repay && r.alsoFor?.length ? [...new Set(r.alsoFor.filter((id) => id !== senderId))] : []
+  const shares =
+    r.kind === 'income'
+      ? [
+          ...alsoIds.map((id) => ({
+            memberId: id,
+            amount: 0,
+            advance: inflowOf(members.find((m) => m.id === id)) === 'advance',
+            each: true as const
+          })),
+          ...(r.loanId && r.loanAmount ? [{ memberId: '', amount: r.loanAmount, advance: false, loanId: r.loanId }] : [])
+        ]
+      : []
+  return {
+    kind: r.kind as TxKind,
+    categoryId: r.categoryId,
+    refundable: r.refundable,
+    household: r.household,
+    memberId: r.memberId,
+    advance: r.inflowKind === 'advance' || (r.household && r.inflowKind !== 'income' && inflowOf(members.find((m) => m.id === senderId)) === 'advance'),
+    inflowKind: r.inflowKind ?? 'repay',
+    gift: r.gift,
+    share: r.share ?? null,
+    counterAccountId: r.counterAccountId,
+    // The loan it repays (D100, T358): whole (kind 'loan'), or its part of each income.
+    loanId: r.kind === 'loan' ? (r.loanId ?? null) : null,
+    ...(shares.length ? { shares } : {}),
+    ...(alsoIds.length && (r.surplusSplit === 'even' || r.surplusSplit === 'debts') ? { surplusSplit: r.surplusSplit } : {})
+  }
+}
 
 /**
  * A rule changed in the settings (F22): its direction, decision and – a rule up to an amount – its limit; the user's
@@ -323,7 +351,7 @@ export function saveConditionsRule(id: string | null, d: ConditionsDraft): strin
   const label = labelOf(d)
   const rule = importRuleSchema.parse({
     ...(was ?? {}),
-    ...ruleDecisionOf({ ...d.choice, shares: undefined }),
+    ...ruleDecisionOf(d.choice),
     id: was?.id ?? newId(),
     match: label,
     mode: 'conditions',

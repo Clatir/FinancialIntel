@@ -5,11 +5,85 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
+**Stan:** **1.19.0 gotowe do wydania** – bloki I, II i III (kroki 0, 2, 4, 1, 3, 6) zakończone (07.11.2026).
+**1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
 **Gotowe do odbioru zbiorczego:**
 - Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
 - Pakiet odbioru GD przygotowany: tabela „Do potwierdzenia” uzupełniona o decyzje GA, GB i GC; lista „Tylko Ty” (`docs/audyt/ty.md`) i instrukcja maszyny wirtualnej (`docs/audyt/maszyna.md`) zaktualizowane.
 Otwarte poza ciągiem: odbiór w maszynie wirtualnej przez Cowork (48 punktów) oraz sesje Ty (`docs/audyt/ty.md`); iPhone (iD, iE) wstrzymany (D98). Odrzucone (D88): F32, F38, F39, F41, F43.
+## Grupa 1.19.0 – nadwyżka przelewu za kilku domowników (D102) – stan (06.11.2026)
+
+Gałąź `claude/1.19.0-nadwyzka`. Kolejność kroków na prośbę użytkownika – kroki z Opus max na końcu: blok I (0 → 2 → 4),
+blok II (1 → 3), blok III (6). Model zmieniany tylko między blokami, z `/clear`.
+
+| Blok | Krok | Co obejmuje | Model i thinking (z górką) | Szacunek | Stan |
+| --- | --- | --- | --- | --- | --- |
+| I | 0 | Gałąź, testy kontraktu i luk | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
+| I | 2 | Edytor: panel „Nadwyżka” (osoba, kwota, „jako”: przychód / zaliczka / spłata pożyczki), domyślnie nadawca według jego ustawienia („pytaj” pyta), „po równo” i „proporcjonalnie do długów”; wspólna funkcja podziału `features/household/surplus.ts` | Opus 5.5 · xhigh (min. high) | 0,5–0,75 h | ✅ (06.11, ok. 0,5 h) |
+| I | 4 | Szybki wpis: „W tym za” z celem i nadwyżką, ta sama funkcja | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
+| II | 1 | Silnik: funkcja podziału do `calc/household.ts`, testy z przykładami, edytor i szybki wpis na niej | Opus 5.5 · max (min. xhigh) | 0,5–1 h | ✅ (07.11, ok. 0,25 h) |
+| II | 3 | Import: cel przy „w tym za”, nadwyżka w wierszu / grupie / temacie, „pytaj” części pyta; reguły pamiętają, kogo spłacają i jak dzielić górkę (bez stałych kwot, „najpierw dług” zawsze) | Opus 5.5 · max (min. xhigh) | 1,5–2 h | ✅ (07.11, ok. 0,5 h) |
+| III | 6 | E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0 | Sonnet 5.5 + Opus 5.5 · xhigh | 0,5–0,75 h | ✅ (07.11, ok. 0,5 h) |
+
+**Decyzje użytkownika (06.11.2026, do zapisania jako D102 w kroku 6):** górka domyślnie nadawcy, według jego ustawienia
+(„pytaj” naprawdę pyta), z przyciskami „po równo” i „proporcjonalnie do długów”; „spłata innej pożyczki” = tylko pożyczka
+udzielona z Radaru (D100), bez długów między domownikami; reguły importu pamiętają podział (kogo spłaca, jak dzielić
+górkę – bez stałych kwot poza częścią pożyczki, „najpierw dług” zawsze); poprawiane wszystkie trzy miejsca (import,
+edytor, szybki wpis).
+
+**Krok 0 – wynik.** Format zapisu bez zmian: górka to linie `splits` (część osoby = dług + jej część nadwyżki z `advance`
+albo osobna linia z `inflowKind`; pożyczka – linia `loanId`). Testy:
+- `tests/unit/surplus-baseline.test.ts` (5, przechodzą) – kontrakt: księga i silnik liczą taki zapis dobrze (dwie linie
+  osoby w dowolnej kolejności, linia pożyczki, depozyt = suma przy osobach, warstwy = salda).
+- `tests/unit/surplus-gaps-store.test.ts` – 3 opisują dziś: import zapisuje nadwyżkę części osoby „pytaj” jako przychód
+  bez pytania (**potwierdzony błąd**); linia grupy ucięta do długu (AF-27, zgodnie z zamysłem – górka idzie do nadawcy);
+  jawna druga linia „zaliczka” działa. 2 `it.fails` – cel kroku 3 (temat „do zrobienia” przy „pytaj” części) i kroku 4
+  (szybki wpis zapisuje `inflowKind` części); w swoim kroku `it.fails` → `it`.
+- `tests/e2e/surplus.spec.ts` – cel kroku 2 (panel „Nadwyżka” w edytorze).
+- Szybki wpis: „pytaj” pilnowane tylko u nadawcy (`restToChoose`), część „w tym za” bierze `advance` z ustawienia osoby
+  (pytaj → przychód bez pytania) – do kroku 4.
+
+**Krok 2 – wynik.** Panel „Nadwyżka” w edytorze operacji (`SurplusPanel.tsx`) podpięty w `MemberPickers.tsx`:
+- Czysta funkcja podziału i widoku `src/renderer/features/household/surplus.ts`: `surplusView`, `evenShares`, `debtShares`,
+  `fitShares`, `writeSurplus`, `loanPart`.
+- Przeliczanie: najpierw pełne spłaty długów (D102), górka dzielona ręcznie, „po równo” lub „proporcjonalnie do długów”.
+  Grosze reszty zostają u nadawcy (T3). Nadwyżka osoby może spłacić otwartą pożyczkę z Radaru (D100).
+- Zapis do `splits`: linia spłaty długu (`advance: false`) + linia nadwyżki z jawnym `inflowKind` (`income` / `advance`)
+  albo pozostawiona na linii spłaty dla domownika z ustawieniem „pytaj” (do momentu wyboru traktowana jako przychód).
+- Testy: `tests/unit/surplus-split.test.ts` (19 testów jednostkowych podziału i zapisu – przechodzą), `tests/e2e/surplus.spec.ts`
+  (przejście z `test.fail` do `test` – zielone E2E z zapisem i weryfikacją w plikach JSON).
+
+**Krok 4 – wynik.** Szybki wpis („W tym za” – `QuickApp.tsx` i `quickHost.ts`):
+- Obsługa celu nadwyżki (`inflowKind`: `income` / `advance`) dla domowników w „W tym za” z blokadą zapisu i komunikatem, gdy domownik ma ustawienie „pytaj” (`m.inflow === 'ask'`) a cel nie został wybrany.
+- Przyciski „po równo” i „proporcjonalnie do długów” korzystające ze wspólnych czystych funkcji `features/household/surplus.ts` (`evenShares`, `debtShares`, `surplusView`).
+- Podgląd wpisu (`preview`) ostrzega przed niezdefiniowanym celem nadwyżki (`przychód czy zaliczka? Wybierz wyżej.`) i wskazuje wybrany cel.
+- `quickTransaction` zachowuje pole `inflowKind` na liniach `splits`, a `quickAdd` wywołuje `rememberInflows` dla domowników z jawnym wyborem (`advanceChosen: true`).
+- Testy: `tests/unit/surplus-gaps-store.test.ts` (przekształcenie `it.fails` w przechodzący `it`, testy dla przychodu, fi.json i sumy części > kwoty), nowy test E2E w `tests/e2e/surplus.spec.ts` (weryfikacja blokady, wyboru zaliczki, podziału „po równo” i zapisu w plikach JSON).
+
+**Krok 1 – wynik.** Przeniesienie czystych funkcji podziału nadwyżki do silnika (`src/shared/calc/household.ts` i `src/shared/calc/quick.ts`), usunięcie tymczasowego `src/renderer/features/household/surplus.ts`:
+- W `calc/household.ts`: `surplusView`, `sharesOf`, `evenShares`, `debtShares`, `shareMax`, `fitShares`, `writeSurplus`, `loanPart`, `memberPartLines`:
+  - T519: domownik bez długu (`owed === 0`) zachowuje `id` i notatkę swojej linii przy przekształceniu w linię nadwyżki oraz przy powrocie do 0 zł.
+  - T520: przekazanie nadwyżki osoby na spłatę pożyczki (`loanPart`) przepisuje wyłącznie linie tej osoby, bez cichego podnoszenia zaniżonych części innych osób do ich długu.
+  - Zachowanie domyślnego celu `zaliczka` (`defaultAs === 'advance'`) w `surplusView` przy zerowej nadwyżce na linii spłaty (`beyond === 0`).
+- W `calc/quick.ts`: `quickShareAs`, `quickSurplusInput`, `quickPartLines` (T521: zachowanie domyślnego ustawienia `zaliczka` domownika w podziale „po równo” / „proporcjonalnie” bez oznaczania go jako ręcznie wybranego `advanceChosen` oraz uwzględnienie wpisanej kwoty spłaty pożyczki w wolnej nadwyżce).
+- Edytor (`SurplusPanel.tsx`) i szybki wpis (`QuickApp.tsx`) przepięte na funkcje z `calc/household.ts` i `calc/quick.ts`.
+- Testy: `tests/unit/surplus-split.test.ts` (25 testów jednostkowych – przechodzą), pełny zestaw jednostkowy i E2E (`tests/e2e/surplus.spec.ts`) zielone.
+
+**Krok 3 – wynik.** Import CSV (`DecisionFields.tsx`, `state.ts`, `rules.ts`, `options.ts`, `classify.ts`, `reconcile.ts`, `budget.ts`):
+- Cel przy „w tym za” (`spłata` / `przychód` / `zaliczka`) i podział nadwyżki (`nadawcy` / `po równo` / `proporcjonalnie do długów`) w wierszu, grupie i temacie importu z użyciem `memberPartLines`, `evenShares` i `debtShares` z `calc/household.ts`.
+- T522: nadwyżka części dla domownika z ustawieniem „pytaj” (`inflow === 'ask'`) zatrzymuje temat jako „do zrobienia” (`themeStatus === 'todo'`) i wyświetla szybkie przyciski wyboru (`przychód` / `zaliczka`); wybór zapisuje odpowiedź domownika w `fi.json` przy `runImport()` (`inflowVotes`, `rememberInflows`).
+- T523–T524: reguły importu (`ImportRule`) pamiętają listę spłacanych osób (`alsoFor`) oraz sposób podziału nadwyżki (`surplusSplit`: `'even' | 'debts'`) bez stałych kwot PLN („najpierw dług” zawsze – `each: true`), edytowalne także w Ustawienia → Import (`RuleShares`, `ConditionsEditor`, `RulesAudit`) i udokumentowane w `docs/format-folderu.md`.
+- T525: rozkład nadwyżki w `rowShares` (`reconcile.ts`) uwzględnia zakupy z tego samego pliku CSV (`owedWithFile`), najpierw spłacając długi nadawcy i osób z `alsoFor`, a dopiero wolną górkę dzieląc po równo lub proporcjonalnie do długów.
+- Testy: `tests/unit/surplus-gaps-store.test.ts` (12 testów, w tym `it.fails` kroku 3 przekształcony w przechodzący `it` oraz T522–T525), `tests/e2e/surplus.spec.ts` (3 testy E2E: edytor, szybki wpis, import z nauką reguły – przechodzą), pełny zestaw Vitest (208 plików, 1937 testów) zielony.
+
+**Krok 6 – wynik.** Przegląd `/code-review` całości diffu `main...HEAD`, dokumentacja i wydanie `1.19.0`:
+- Poprawki po przeglądzie (T526):
+  - `src/renderer/features/import/DecisionFields.tsx` i `src/shared/import/reconcile.ts` przepięte bezpośrednio na `surplusView`, `evenShares`, `debtShares` i `memberPartLines` z `src/shared/calc/household.ts` (usunięcie powielonych wzorów zaokrągleń).
+  - Na linii reguły z `each: true` i `surplusSplit` (`'even' | 'debts'`) w `IncomeSharesEditor` pokazywane są przyciski `pytaj: [przychód] [zaliczka]`, gdy wyliczona nadwyżka z reguły > 0; kliknięcie zachowuje `each: true` (`advanceChosen: true`, `ask: undefined`), w `rowShares` tworzy część nadwyżki z `inflowKind: 'income' | 'advance'`, odblokowuje temat (`'done'`) i dopisuje głos w `inflowVotes` (test T526 w `tests/unit/surplus-gaps-store.test.ts`).
+  - W `hasUnansweredAskSurplus` (`state.ts`) spłata bez `advanceChosen` porównywana z `owedLeftOfRow` dla danego wiersza zamiast globalnej sumy `view.total > view.owed` (brak fałszywego `'todo'` między niezależnymi tematami).
+- Dokumentacja i wersja: `package.json` (`1.19.0`), `CHANGELOG.md` (`## 1.19.0`), `docs/decyzje.md` (`D102`, `T519`–`T526`), `.claude/rules/silnik.md` i `.claude/rules/import.md`.
+
+
 
 ## Ciąg G0–GD – stan (05.11.2026)
 

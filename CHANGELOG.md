@@ -1,5 +1,14 @@
 # Financial Intel – zmiany
 
+## 1.19.0
+
+Nadwyżka przelewu za kilku domowników:
+
+- **Panel „Nadwyżka” w edytorze operacji:** przy wpływie od domownika za kilku domowników („w tym za…”) aplikacja najpierw w pełni rozlicza długi wszystkich objętych osób, a wolną górkę pokazuje w panelu „Nadwyżka”. Domyślnie cała nadwyżka trafia do nadawcy według jego ustawienia, z przyciskami szybkiego podziału „po równo” (grosze reszty dla nadawcy) oraz „proporcjonalnie do długów”, możliwością ręcznej korekty kwot i wskazania celu części każdej osoby (`przychód`, `zaliczka` albo `spłata pożyczki` udzielonej z Radaru).
+- **Szybki wpis – „W tym za” z celem i podziałem nadwyżki:** w oknie szybkiego wpisu przy przelewie spłacającym także innego domownika dostępne są przyciski podziału nadwyżki („nadawcy”, „po równo”, „proporcjonalnie do długów”) oraz wybór celu nadwyżki (`przychód` / `zaliczka`). Gdy domownik ma ustawienie „pytaj”, podgląd przypomina o wyborze, zapis jest zablokowany do chwili wskazania celu, a wybrany wariant zapamiętuje się w ustawieniach domownika.
+- **Import z banku i reguły podziału nadwyżki:** wiersz, grupa i temat importu pozwalają wskazać cel części „w tym za” (`spłata`, `przychód`, `zaliczka`) i podzielić nadwyżkę („nadawcy”, „po równo”, „proporcjonalnie do długów”). Nierozstrzygnięta nadwyżka dla domownika z ustawieniem „pytaj” zatrzymuje temat jako „do zrobienia” z przyciskami szybkiego wyboru na linii. Reguły importu zapamiętują listę spłacanych osób oraz sposób podziału nadwyżki bez stałych kwot w złotych – w każdym kolejnym imporcie najpierw spłacają aktualne długi (z uwzględnieniem zakupów z tego samego pliku), a dopiero resztę dzielą według reguły.
+
+
 ## 1.18.1
 
 Wykres Sankey w Planie miesiąca, telefon i eksport pożyczek:

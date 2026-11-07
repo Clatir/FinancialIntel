@@ -2,7 +2,7 @@
 import type { QuickTemplate } from '../api'
 import { counterpartyKey } from '../import/names'
 import type { Scheduled, Transaction } from '../schema/records'
-import { CASH_REPAY_TITLE } from './household'
+import { CASH_REPAY_TITLE, memberPartLines, type MemberPartLine, type SurplusAs, type SurplusInput } from './household'
 
 /**
  * The rest of a household member's money beyond what they owe, still to be called income or their advance (D80 b, AP-19 –
@@ -21,6 +21,56 @@ export function restToChoose(amount: number, member: { owed: number; inflow: str
  */
 export function senderOwn(amount: number, senderId: string, members: ReadonlyArray<{ id: string; via?: string | null }>, shares: Readonly<Record<string, number>>, loan: number): number {
   return amount - members.filter((m) => m.via === senderId).reduce((a, m) => a + Math.max(0, shares[m.id] ?? 0), 0) - Math.max(0, loan)
+}
+
+/** A member as the quick entry knows them (`QuickData.members`). */
+type QuickMember = { id: string; owed: number; inflow: string }
+/** A member's surplus „as” chosen in the quick entry's „W tym za” (D102). */
+export type QuickShareAs = Readonly<Record<string, { as: SurplusAs; chosen: boolean } | undefined>>
+
+/** A member's surplus „as” in the quick entry: chosen in the window, else their setting (D80 b); null – „pytaj”. */
+export function quickShareAs(m: QuickMember, chosen: QuickShareAs): SurplusAs | null {
+  return chosen[m.id]?.as ?? (m.inflow === 'ask' ? null : m.inflow === 'advance' ? 'advance' : 'income')
+}
+
+/**
+ * The quick entry's „W tym za” as the split of 1.19.0 sees it (D102, `surplusView`): a line of each member passing money
+ * through the sender – their part typed, else their whole debt (what „po równo” and „proporcjonalnie do długów” start
+ * from) – with `advance` of their surplus „as” (T521: a member „zaliczka” by their setting keeps it through „po równo”),
+ * and the part repaying a loan when its amount is typed (`loan` – one not typed takes what the others leave, after the
+ * split). null – nothing to split (not a member's inflow, nobody through them).
+ */
+export function quickSurplusInput(
+  q: { amount: number; payerId: string | null; payerAdvance: boolean; loan: { id: string; amount: number } | null },
+  through: readonly QuickMember[],
+  members: readonly QuickMember[],
+  shares: Readonly<Record<string, number>>,
+  chosen: QuickShareAs
+): SurplusInput | null {
+  if (!q.payerId || !through.length || q.amount <= 0) return null
+  const line = { categoryId: null, refundable: false, note: '' }
+  return {
+    amount: q.amount,
+    payerId: q.payerId,
+    payerAdvance: q.payerAdvance,
+    splits: [
+      ...through.map((m) => ({ ...line, id: m.id, amount: shares[m.id] ?? Math.max(0, m.owed), memberId: m.id, advance: quickShareAs(m, chosen) === 'advance' })),
+      ...(q.loan && q.loan.amount > 0 ? [{ ...line, id: `loan:${q.loan.id}`, amount: q.loan.amount, memberId: null, advance: false, loanId: q.loan.id }] : [])
+    ],
+    owed: (id) => members.find((m) => m.id === id)?.owed ?? 0,
+    defaultAs: (id) => {
+      const m = members.find((x) => x.id === id)
+      return m ? quickShareAs(m, chosen) : 'income'
+    }
+  }
+}
+
+/**
+ * The quick entry's „W tym za” parts as saved (D81, D102 – `memberPartLines`): each member's debt repaid first, what is
+ * beyond it their surplus with its „as” – remembered for a member „pytaj” when chosen in the window (`advanceChosen`).
+ */
+export function quickPartLines(through: readonly QuickMember[], shares: Readonly<Record<string, number>>, chosen: QuickShareAs): Array<MemberPartLine & { memberId: string; advanceChosen: boolean }> {
+  return through.flatMap((m) => memberPartLines(shares[m.id] ?? 0, m.owed, quickShareAs(m, chosen)).map((l) => ({ memberId: m.id, ...l, advanceChosen: !!chosen[m.id]?.chosen })))
 }
 
 /** The templates a pair keeps (F7): the latest ones, newest first. */

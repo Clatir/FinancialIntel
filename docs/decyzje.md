@@ -436,6 +436,16 @@ Decyzji D nie zmieniaj bez pytania; nowe decyzje dopisuj na końcu z datą.
   potwierdzenia” w `docs/postep.md`, ciąg idzie dalej; przerwa tylko przy wyborze trudnym do cofnięcia (np. zmiana formatu
   danych), przy CI czerwonym dwa razy w tej samej grupie albo krytycznym znalezisku w nowym kodzie bez naprawy; (5) procentu
   limitu tygodniowego nie podaję – bez szacunku zużycia.
+- **D102** (06.11.2026) Nadwyżka przelewu za kilku domowników: (1) zawsze najpierw pełna spłata długów wszystkich osób
+  w przelewie (nadawcy oraz domowników z „w tym za”), a podziałowi podlega dopiero wolna górka ponad sumę ich długów
+  i spłat pożyczek; (2) domyślnie nadwyżka należy do nadawcy według jego ustawienia (`przychód` / `zaliczka` / `pytaj` –
+  przy „pytaj” pyta za każdym razem), z przyciskami szybkiego podziału „po równo” (grosze reszty dla nadawcy – T3) oraz
+  „proporcjonalnie do długów”; (3) nadwyżka innego domownika w „w tym za” ma jawny cel (`przychód` lub `zaliczka`), a dla
+  osoby z ustawieniem „pytaj” wymaga odpowiedzi (w szybkim wpisie blokuje zapis z komunikatem, w imporcie trzyma temat
+  jako „do zrobienia”, a odpowiedź zapisuje wybór w `fi.json`); (4) „spłata pożyczki” z nadwyżki dotyczy wyłącznie
+  otwartych pożyczek udzielonych z Radaru (D100), bez długów między domownikami; (5) reguły importu pamiętają listę osób
+  w „w tym za” (`alsoFor`) i podział nadwyżki (`surplusSplit`: `'even' | 'debts'`) bez stałych kwot PLN dla domowników
+  („najpierw dług” zawsze); (6) poprawione wszystkie trzy miejsca: edytor operacji, szybki wpis i import CSV. Wydanie 1.19.0.
 
 ## Decyzje techniczne (Claude)
 - **T1** Stos jak ICTTJ, wersje z jego `package.json`; bez natywnych modułów Node.
@@ -4301,3 +4311,45 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   rachunku; wiersz w innej walucie (rachunek walutowy) jest pomijany jak dotąd („kwota w EUR – FI prowadzi tylko PLN”).
   Import nic nie zapisuje w `foreign` i nie zgaduje kwoty z opisu – do zrobienia, gdy pojawi się zanonimizowany plik
   z taką płatnością, w którym bank ją podaje.
+- **T495–T518** Ciąg GA–GC (1.17.1–1.18.1): GA (1.17.1, T495–T503) – terminy naprzód po końcu miesiąca, filtr daty przy
+  zmianie ceny w Ładowni, boja roczna i zrealizowane cele w prognozie, ukryty `containerId` tylko dla kosztów, wykrywanie
+  i odblokowywanie plików tylko do odczytu, bezpieczne „Cofnij” odmawiające nadpisania zmienionego wpisu, duplikaty między
+  kontami różnych formatów, zachowanie `shares` przy zbiorczej decyzji domownika; GB (1.18.0, T504–T511) – zachowanie
+  nieznanych pól reguł (`keptField`), audyt reguł dla zamkniętych/usuniętych pożyczek, `impliedLoanRate` z harmonogramu,
+  rozpoznawanie PIT-38, wzorce regex z wiersza z `\d+`, ręczna kolejność reguł warunkowych; GC (1.18.1, T512–T518) –
+  wykres Sankey w Planie miesiąca (`planSankey`), nazwa pożyczki na Radarze telefonu i własna godzina odprawy, części
+  spłat pożyczek w eksporcie CSV/Excel, uporządkowanie edytora operacji, tagów i kontrastu skrótu „Ctrl K”.
+- **T519** Nadwyżka przelewu domowników w silniku (`calc/household.ts`, 1.19.0, D102): czyste funkcje `surplusView`,
+  `sharesOf`, `evenShares`, `debtShares`, `shareMax`, `fitShares`, `writeSurplus`, `loanPart`, `memberPartLines`.
+  Zapis bez migracji schematu: część innego domownika to linia spłaty jego długu (`advance: false`, bez `inflowKind`)
+  oraz – gdy ma nadwyżkę z wybranym celem – druga linia z `inflowKind: 'income' | 'advance'` (`advance: as === 'advance'`);
+  dla osoby z ustawieniem „pytaj” przed wyborem celu nadwyżka zostaje na linii spłaty (w silniku liczona jako przychód do
+  chwili wyboru). Domownik bez długu (`owed === 0`) zachowuje `id` i notatkę swojej linii na linii nadwyżki oraz z powrotem
+  przy powrocie nadwyżki do 0 zł (historia i powiązania nie giną).
+- **T520** Przekazanie nadwyżki osoby na spłatę pożyczki udzielonej (`loanPart` w `calc/household.ts`, 1.19.0, D100, D102):
+  przepisuje wyłącznie linie tej osoby (lub zmniejsza resztę nadawcy), dopisując linię `loanId` do wysokości otwartego długu
+  pożyczki; zaniżone poniżej długu części innych osób w tym samym przelewie pozostają nietknięte (nic nie jest po cichu
+  zabierane z reszty nadawcy).
+- **T521** Nadwyżka w szybkim wpisie (`calc/quick.ts`, `QuickApp.tsx`, `quickHost.ts`, 1.19.0, D102): `quickShareAs`,
+  `quickSurplusInput`, `quickPartLines`. Podział „po równo” / „proporcjonalnie do długów” zachowuje domyślne ustawienie
+  `zaliczka` domownika bez oznaczania go jako ręcznego wyboru `advanceChosen` (który nadpisuje `fi.json` przy osobie
+  „pytaj”) i odejmuje wpisaną kwotę spłaty pożyczki od wolnej nadwyżki. Przy osobie „pytaj” z nadwyżką ponad dług zapis
+  jest zablokowany czytelnym komunikatem do czasu wyboru `przychód` / `zaliczka`, a dokonany wybór aktualizuje `fi.json`
+  (`rememberInflows`).
+- **T522** Pytanie „przychód czy zaliczka?” dla części „w tym za” w imporcie (`state.ts`, `DecisionFields.tsx`, 1.19.0,
+  D102): wiersz/grupa/temat z nadwyżką dla domownika o ustawieniu `inflow: 'ask'` (nierozstrzygnięta linia `surplus: true`
+  albo linia spłaty przekraczająca `owedLeftOfRow` bez `advanceChosen`) zatrzymuje status tematu jako `'todo'`
+  (`hasUnansweredAskSurplus`) i pokazuje przyciski `pytaj: [przychód] [zaliczka]`. Wybór zamyka pytanie tematu i przy
+  `runImport()` dopisuje głos do `inflowVotes` → `rememberInflows`.
+- **T523** Reguły importu z „w tym za” i podziałem nadwyżki (`schema/budget.ts`, `classify.ts`, `rules.ts`, 1.19.0, D102):
+  pola addytywne `ImportRule.alsoFor` (`string[]`, unikalne ULID-y domowników poza nadawcą) i `ImportRule.surplusSplit`
+  (`'even' | 'debts'`), zachowywane przez `keptField` i opisane w `docs/format-folderu.md`. Reguła nigdy nie zapisuje
+  stałych kwot PLN dla domowników – `choiceOf` tworzy dla każdej osoby z `alsoFor` linię `{ memberId, amount: 0, each: true }`
+  (z `ask: true` dla domownika `inflow: 'ask'`), która w każdym kolejnym imporcie najpierw spłaca aktualny dług osoby.
+- **T524–T526** Rozkład nadwyżki reguły i odpowiedź „pytaj” na linii reguły (`reconcile.ts`, `DecisionFields.tsx`,
+  `state.ts`, 1.19.0, D102): `rowShares` wylicza długi z uwzględnieniem zakupów tego samego pliku (`owedWithFile`), najpierw
+  pokrywając długi osób z `alsoFor` oraz dług nadawcy, a wolną nadwyżkę dzieli przez `surplusView` + `evenShares` /
+  `debtShares` z `calc/household.ts`. Gdy brak nadwyżki, domownik „pytaj” dostaje tylko spłatę długu i temat jest `'done'`;
+  gdy nadwyżka > 0, `IncomeSharesEditor` pokazuje na linii reguły (`each: true`) przełącznik `pytaj: [przychód] [zaliczka]`,
+  a odpowiedź użytkownika (`advanceChosen: true`, `ask: undefined`) zachowuje `each: true`, zmienia części nadwyżki w
+  `rowShares` na `inflowKind: 'income' | 'advance'`, odblokowuje temat (`'done'`) i zapisuje wybór w `fi.json`.

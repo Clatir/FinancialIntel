@@ -3,7 +3,7 @@
  * purchase – D83, a loan of the Radar – B34) and the category.
  */
 import { useMemo } from 'react'
-import { balanceOf, memberName } from '@shared/calc/household'
+import { balanceOf, debtShares, evenShares, memberName, memberPartLines, surplusView } from '@shared/calc/household'
 import type { LoanChoice } from '@shared/calc/loans'
 import { startShare } from '@shared/calc/share'
 import { dm } from '@shared/format'
@@ -62,6 +62,8 @@ export function IncomeSharesEditor({
   startOf,
   owedOf,
   spreadOf,
+  totalAmount,
+  ruleMode = false,
   maxLoans = Infinity
 }: {
   choice: Choice
@@ -75,21 +77,111 @@ export function IncomeSharesEditor({
   startOf?: (who: string, lines: readonly SharePart[]) => number
   owedOf?: (who: string) => number
   spreadOf?: (line: number) => LineSpread | null
+  totalAmount?: number
+  ruleMode?: boolean
 }) {
   const shares = choice.shares ?? []
+  const senderId = choice.memberId ?? HOUSE_MEMBER_ID
   // Other members' parts of a member's money only (D81); a loan's of any income (D100).
-  const others = choice.household ? members.filter((m) => (!m.archived || shares.some((s) => s.memberId === m.id)) && m.id !== choice.memberId) : []
+  const others = choice.household ? members.filter((m) => (!m.archived || shares.some((s) => s.memberId === m.id)) && m.id !== senderId) : []
   const openLoans = loans.filter((l) => !l.closed)
   if (!others.length && !openLoans.length && !shares.some((s) => s.loanId)) return null
-  const setShares = (next: readonly SharePart[]) => onChange({ ...choice, shares: next.length ? next : undefined })
+  const setShares = (next: readonly SharePart[], surplusSplit = choice.surplusSplit) =>
+    onChange({
+      ...choice,
+      shares: next.length ? next : undefined,
+      surplusSplit: next.some((s) => !s.loanId && s.memberId) ? surplusSplit : undefined
+    })
   const unused = others.filter((m) => !shares.some((s) => !s.loanId && s.memberId === m.id))
   const viaMembers = unused.filter((m) => m.via === choice.memberId)
-  const addLine = (m: HouseholdMember) => setShares([...shares, { memberId: m.id, amount: startOf?.(m.id, shares) ?? 0, advance: inflowOf(m) === 'advance' }])
+  const addLine = (m: HouseholdMember) =>
+    setShares([
+      ...shares,
+      ruleMode
+        ? { memberId: m.id, amount: 0, advance: inflowOf(m) === 'advance', each: true as const }
+        : { memberId: m.id, amount: startOf?.(m.id, shares) ?? 0, advance: inflowOf(m) === 'advance' }
+    ])
   // A loan's part (D100): the first open loan not named yet, at what it still owes – at most what the money has left; never
   // a second line of one loan (przegląd N2 2.11).
   const toName = loanToName(loans, shares)
   const addLoan = () => {
     if (toName) setShares([...shares, { memberId: '', amount: startOf?.(loanKey(toName.id), shares) ?? 0, advance: false, loanId: toName.id }])
+  }
+  const memberIds = [...new Set(shares.filter((s) => !s.loanId && s.memberId && s.memberId !== senderId).map((s) => s.memberId))]
+  const senderOwed = Math.max(0, owedOf?.(senderId) ?? 0)
+  const othersOwed = memberIds.reduce((sum, id) => sum + Math.max(0, owedOf?.(id) ?? 0), 0)
+  const sv =
+    totalAmount != null && memberIds.length > 0
+      ? surplusView({
+          amount: totalAmount,
+          payerId: senderId,
+          payerAdvance: choice.advance,
+          splits: shares.map((s) => ({
+            id: '',
+            amount: s.each && !s.loanId && s.amount === 0 ? Math.max(0, owedOf?.(s.memberId) ?? 0) : Math.max(0, s.amount),
+            categoryId: null,
+            refundable: false,
+            memberId: s.loanId ? null : s.memberId || null,
+            advance: s.advance,
+            inflowKind: s.inflowKind,
+            loanId: s.loanId,
+            note: ''
+          })),
+          owed: (id) => Math.max(0, owedOf?.(id) ?? 0),
+          defaultAs: (id) => {
+            const m = others.find((x) => x.id === id)
+            const def = m ? inflowOf(m) : 'income'
+            return def === 'ask' ? null : def
+          }
+        })
+      : null
+  const free = sv?.free ?? 0
+  const totalOwed = sv ? sv.people.reduce((sum, p) => sum + p.owed, 0) : senderOwed + othersOwed
+  const ruleSurplusShares =
+    sv && (choice.surplusSplit === 'even' || choice.surplusSplit === 'debts')
+      ? choice.surplusSplit === 'even'
+        ? evenShares(sv)
+        : debtShares(sv)
+      : null
+  const applySurplus = (mode: 'sender' | 'even' | 'debts') => {
+    const targetShares = sv ? (mode === 'even' ? evenShares(sv) : mode === 'debts' ? debtShares(sv) : null) : null
+    const loanLines = shares.filter((s) => s.loanId)
+    const nextMemberLines: SharePart[] = []
+    for (const id of memberIds) {
+      const d = Math.max(0, owedOf?.(id) ?? 0)
+      const surplusAmount = targetShares?.get(id)?.amount ?? 0
+      const existing = shares.filter((s) => !s.loanId && s.memberId === id)
+      const exp = existing.find((s) => s.inflowKind === 'income' || s.inflowKind === 'advance')
+      const rep = existing.find((s) => !s.surplus && (!s.inflowKind || s.inflowKind === 'repay'))
+      const m = others.find((x) => x.id === id)
+      const def = m ? inflowOf(m) : 'income'
+      const chosenAs: 'income' | 'advance' | null =
+        exp?.inflowKind === 'income' || exp?.inflowKind === 'advance'
+          ? exp.inflowKind
+          : rep && (rep.advance || rep.advanceChosen)
+            ? rep.advance
+              ? 'advance'
+              : 'income'
+            : def === 'ask'
+              ? null
+              : def
+      if (chosenAs === null && surplusAmount > 0) {
+        if (d > 0) nextMemberLines.push({ memberId: id, amount: d, advance: false })
+        nextMemberLines.push({ memberId: id, amount: surplusAmount, advance: false, surplus: true as const })
+      } else if (surplusAmount > 0) {
+        for (const l of memberPartLines(d + surplusAmount, d, chosenAs)) {
+          nextMemberLines.push({ memberId: id, ...l })
+        }
+      } else {
+        nextMemberLines.push({
+          memberId: id,
+          amount: d,
+          advance: chosenAs === 'advance',
+          ...(def === 'ask' && chosenAs !== null ? { advanceChosen: true as const } : {})
+        })
+      }
+    }
+    setShares([...loanLines, ...nextMemberLines], mode === 'sender' ? undefined : mode)
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-[11px]" data-testid={`${testId}-also-for`}>
@@ -139,60 +231,208 @@ export function IncomeSharesEditor({
             })()}
           </span>
         ) : !others.length ? null : (
-        <span key={`${s.memberId}:${i}`} className="flex flex-wrap items-center gap-1" data-testid={`${testId}-also-for-line`}>
-          <span className="text-muted">w tym za</span>
+          <span key={`${s.memberId}:${i}`} className="flex flex-wrap items-center gap-1" data-testid={`${testId}-also-for-line`}>
+            <span className="text-muted">{s.surplus ? 'nadwyżka za' : 'w tym za'}</span>
+            <select
+              className="input h-[22px] w-[110px] py-0 text-[11px]"
+              value={s.memberId}
+              onChange={(e) => {
+                const m = others.find((x) => x.id === e.currentTarget.value)
+                if (m) setShares(shares.map((x, j) => (j === i ? { ...x, memberId: m.id, advance: inflowOf(m) === 'advance' } : x)))
+              }}
+              aria-label="W tym za kogo"
+              data-testid={`${testId}-also-for-member`}
+            >
+              {others.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            {ruleMode ? (
+              <span className="text-dim" data-testid={`${testId}-also-for-rule-note`}>
+                najpierw dług
+              </span>
+            ) : (
+              <>
+                <AmountField
+                  className="h-[22px] w-[88px] text-[11px]"
+                  value={(s.each && s.amount === 0 ? owedOf?.(s.memberId) : s.amount) || null}
+                  allowEmpty
+                  onChange={(v) => setShares(shares.map((x, j) => (j === i ? changedLine(x, { amount: Math.max(0, v ?? 0) }) : x)))}
+                  aria-label="Kwota w tym za"
+                  data-testid={`${testId}-also-for-amount`}
+                />
+                <select
+                  className="input h-[22px] w-[108px] py-0 text-[11px]"
+                  value={s.surplus ? (s.inflowKind ?? '') : (s.inflowKind ?? 'repay')}
+                  onChange={(e) => {
+                    const v = e.currentTarget.value
+                    if (s.surplus) {
+                      if (v === 'income' || v === 'advance')
+                        setShares(shares.map((x, j) => (j === i ? changedLine(x, { inflowKind: v, advance: v === 'advance', surplus: undefined }) : x)))
+                    } else if (v === 'repay' || v === 'income' || v === 'advance') {
+                      setShares(
+                        shares.map((x, j) =>
+                          j === i
+                            ? changedLine(x, {
+                                ...(x.each && x.amount === 0 ? { amount: Math.max(0, owedOf?.(x.memberId) ?? 0) } : {}),
+                                inflowKind: v === 'repay' ? undefined : v,
+                                advance: v === 'advance' ? true : v === 'income' ? false : x.advance,
+                                surplus: undefined,
+                                ask: undefined
+                              })
+                            : x
+                        )
+                      )
+                    }
+                  }}
+                  aria-label="Cel części w tym za"
+                  data-testid={`${testId}-also-for-kind`}
+                >
+                  {s.surplus ? (
+                    <>
+                      <option value="">pytaj: wybierz…</option>
+                      <option value="income">przychód</option>
+                      <option value="advance">zaliczka</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="repay">spłata</option>
+                      <option value="income">przychód</option>
+                      <option value="advance">zaliczka</option>
+                    </>
+                  )}
+                </select>
+                {(() => {
+                  const m = others.find((x) => x.id === s.memberId)
+                  const memberOwed = Math.max(0, owedOf?.(s.memberId) ?? 0)
+                  const ruleSurplus =
+                    s.each && !shares.some((x) => !x.loanId && x.memberId === s.memberId && (x.surplus || x.inflowKind === 'income' || x.inflowKind === 'advance'))
+                      ? (ruleSurplusShares?.get(s.memberId)?.amount ?? 0)
+                      : 0
+                  const hasSurplusOnLine = s.surplus || ((!s.inflowKind || s.inflowKind === 'repay') && (s.amount > memberOwed || ruleSurplus > 0))
+                  if (!hasSurplusOnLine) return null
+                  const unanswered = !!m && inflowOf(m) === 'ask' && (s.surplus ? !s.inflowKind : !s.advance && !s.advanceChosen)
+                  const currentAs = s.surplus ? s.inflowKind : unanswered ? undefined : s.advance ? 'advance' : 'income'
+                  const pickAs = (as: 'income' | 'advance') =>
+                    setShares(
+                      shares.map((x, j) =>
+                        j === i
+                          ? s.surplus
+                            ? changedLine(x, { inflowKind: as, advance: as === 'advance', surplus: undefined })
+                            : s.each
+                              ? { ...x, advance: as === 'advance', advanceChosen: true, ask: undefined }
+                              : changedLine(x, { advance: as === 'advance', advanceChosen: true, ask: undefined })
+                          : x
+                      )
+                    )
+                  return (
+                    <span className="flex items-center gap-1" data-testid={`${testId}-also-for-surplus-as`}>
+                      {unanswered && (
+                        <span className="text-warn" data-testid={`${testId}-also-for-ask`}>
+                          pytaj:
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className={`btn h-[20px] px-1.5 text-[10.5px] ${currentAs === 'income' ? 'btn-accent' : 'btn-ghost'}`}
+                        onClick={() => pickAs('income')}
+                        data-testid={`${testId}-also-for-as-income`}
+                      >
+                        przychód
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn h-[20px] px-1.5 text-[10.5px] ${currentAs === 'advance' ? 'btn-accent' : 'btn-ghost'}`}
+                        onClick={() => pickAs('advance')}
+                        data-testid={`${testId}-also-for-as-advance`}
+                      >
+                        zaliczka
+                      </button>
+                    </span>
+                  )
+                })()}
+              </>
+            )}
+            <button
+              type="button"
+              className="btn btn-ghost h-[20px] px-1"
+              title="Usuń część"
+              onClick={() => setShares(shares.filter((_, j) => j !== i))}
+              data-testid={`${testId}-also-for-remove`}
+            >
+              <IconClose size={11} />
+            </button>
+            {!ruleMode &&
+              (() => {
+                // A group's or a theme's line (AF-27): spread over its rows in their order, never beyond what they owe.
+                const spread = spreadOf?.(i)
+                const text = spread ? spreadText(spread, others.find((m) => m.id === s.memberId)?.name ?? 'domownik') : null
+                return text ? (
+                  <span className="text-dim" data-testid={`${testId}-also-for-spread`}>
+                    {text}
+                  </span>
+                ) : null
+              })()}
+          </span>
+        )
+      )}
+      {ruleMode && memberIds.length > 0 && (
+        <span className="flex items-center gap-1" data-testid={`${testId}-surplus-split`}>
+          <span className="text-muted">nadwyżka:</span>
           <select
-            className="input h-[22px] w-[110px] py-0 text-[11px]"
-            value={s.memberId}
+            className="input h-[22px] w-[170px] py-0 text-[11px]"
+            value={choice.surplusSplit ?? ''}
             onChange={(e) => {
-              const m = others.find((x) => x.id === e.currentTarget.value)
-              if (m) setShares(shares.map((x, j) => (j === i ? { ...x, memberId: m.id, advance: inflowOf(m) === 'advance' } : x)))
+              const v = e.currentTarget.value
+              onChange({ ...choice, surplusSplit: v === 'even' || v === 'debts' ? v : undefined })
             }}
-            aria-label="W tym za kogo"
-            data-testid={`${testId}-also-for-member`}
+            aria-label="Podział nadwyżki"
+            data-testid={`${testId}-surplus-split-select`}
           >
-            {others.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
+            <option value="">nadawcy</option>
+            <option value="even">po równo</option>
+            <option value="debts">proporcjonalnie do długów</option>
           </select>
-          <AmountField
-            className="h-[22px] w-[88px] text-[11px]"
-            value={s.amount || null}
-            allowEmpty
-            onChange={(v) => setShares(shares.map((x, j) => (j === i ? { ...x, amount: Math.max(0, v ?? 0) } : x)))}
-            aria-label="Kwota w tym za"
-            data-testid={`${testId}-also-for-amount`}
-          />
+        </span>
+      )}
+      {!ruleMode && memberIds.length > 0 && (free > 0 || choice.surplusSplit) && (
+        <span className="flex flex-wrap items-center gap-1" data-testid={`${testId}-surplus`}>
+          <span className="text-muted">{free > 0 ? `nadwyżka ${plnText(free)} zł:` : 'nadwyżka:'}</span>
           <button
             type="button"
-            className="btn btn-ghost h-[20px] px-1"
-            title="Usuń część"
-            onClick={() => setShares(shares.filter((_, j) => j !== i))}
-            data-testid={`${testId}-also-for-remove`}
+            className={`btn h-[20px] px-1.5 text-[10.5px] ${!choice.surplusSplit ? 'btn-accent' : 'btn-ghost'}`}
+            onClick={() => applySurplus('sender')}
+            data-testid={`${testId}-surplus-sender`}
           >
-            <IconClose size={11} />
+            nadawcy
           </button>
-          {(() => {
-            // A group's or a theme's line (AF-27): spread over its rows in their order, never beyond what they owe.
-            const spread = spreadOf?.(i)
-            const text = spread ? spreadText(spread, others.find((m) => m.id === s.memberId)?.name ?? 'domownik') : null
-            return text ? (
-              <span className="text-dim" data-testid={`${testId}-also-for-spread`}>
-                {text}
-              </span>
-            ) : null
-          })()}
+          <button
+            type="button"
+            className={`btn h-[20px] px-1.5 text-[10.5px] ${choice.surplusSplit === 'even' ? 'btn-accent' : 'btn-ghost'}`}
+            onClick={() => applySurplus('even')}
+            data-testid={`${testId}-surplus-even`}
+          >
+            po równo
+          </button>
+          <button
+            type="button"
+            className={`btn h-[20px] px-1.5 text-[10.5px] ${choice.surplusSplit === 'debts' ? 'btn-accent' : 'btn-ghost'}`}
+            disabled={totalOwed <= 0}
+            onClick={() => applySurplus('debts')}
+            data-testid={`${testId}-surplus-debts`}
+          >
+            proporcjonalnie do długów
+          </button>
         </span>
-        )
       )}
       {viaMembers.map((m) => {
         const owed = owedOf?.(m.id) ?? 0
         return (
           <button key={m.id} type="button" className="text-accent hover:underline" onClick={() => addLine(m)} data-testid={`${testId}-also-for-via`}>
             + w tym za {m.name}
-            {owed > 0 ? ` (ma oddać ${plnText(owed)} zł)` : ''}
+            {!ruleMode && owed > 0 ? ` (ma oddać ${plnText(owed)} zł)` : ''}
           </button>
         )
       })}
@@ -250,13 +490,25 @@ function DecisionShares({ from, choice, members, onChange, testId }: { from: Dec
   const ledger = useHousehold()
   const states = useFleet()?.loans
   const loans = useLoanChoices((choice.shares ?? []).flatMap((x) => (x.loanId ? [x.loanId] : [])))
-  const key = useSharesKey((v) => ({
-    owed: Object.fromEntries(whoKeys(members, loans).map((id) => [id, owedLeftOfDecision(v, from, id)])),
-    // Several groups' keys: their lines – of members and of loans alike (D100) – of 0 zł only, spread nothing (with an
-    // amount – each brand's, T336).
-    spread: typeof from === 'string' ? lineSpreads(v, from) : {}
-  }))
-  const view = useMemo(() => (key ? (JSON.parse(key) as { owed: Record<string, number>; spread: Record<number, LineSpread> }) : null), [key])
+  const senderId = choice.memberId ?? HOUSE_MEMBER_ID
+  const key = useSharesKey((v) => {
+    const keys = typeof from === 'string' ? [from] : from
+    const sum = keys.reduce((a, k) => a + (v.rows.get(k)?.sum ?? 0), 0)
+    const taken = keys.reduce((a, k) => a + (v.rows.get(k)?.keys ?? []).reduce((s, rk) => s + (v.parts.get(rk) ?? []).reduce((ps, x) => ps + x.amount, 0), 0), 0)
+    const senderInFrom = choice.household && (!choice.inflowKind || choice.inflowKind === 'repay') ? Math.max(0, sum - taken) : 0
+    const senderOwed = Math.max(0, (v.owed.get(senderId) ?? 0) - ((v.total.get(senderId) ?? 0) - senderInFrom))
+    return {
+      sum,
+      owed: {
+        ...Object.fromEntries(whoKeys(members, loans).map((id) => [id, owedLeftOfDecision(v, from, id)])),
+        [senderId]: senderOwed
+      },
+      // Several groups' keys: their lines – of members and of loans alike (D100) – of 0 zł only, spread nothing (with an
+      // amount – each brand's, T336).
+      spread: typeof from === 'string' ? lineSpreads(v, from) : {}
+    }
+  })
+  const view = useMemo(() => (key ? (JSON.parse(key) as { sum: number; owed: Record<string, number>; spread: Record<number, LineSpread> }) : null), [key])
   return (
     <IncomeSharesEditor
       choice={choice}
@@ -264,6 +516,7 @@ function DecisionShares({ from, choice, members, onChange, testId }: { from: Dec
       loans={loans}
       onChange={onChange}
       testId={testId}
+      totalAmount={view?.sum ?? 0}
       startOf={(who, lines) => {
         const v = sharesNow(ledger, members, states)
         return v ? decisionStart(v, from, who, lines) : 0
@@ -285,9 +538,23 @@ export function RowShares({ p, choice, mine }: { p: NewRow; choice: Choice; mine
   const ledger = useHousehold()
   const states = useFleet()?.loans
   const loans = useLoanChoices([...(choice.shares ?? []), ...(mine?.shares ?? [])].flatMap((x) => (x.loanId ? [x.loanId] : [])))
+  const base = mine ?? choice
+  const senderId = base.memberId ?? HOUSE_MEMBER_ID
   // What the members owe – said at „+ w tym za X” of a member's money only (przegląd N2 2.13).
-  const owing = (mine ?? choice).household ? members : NO_MEMBERS
-  const key = useSharesKey((v) => ({ parts: v.parts.get(p.key) ?? [], owed: Object.fromEntries(owing.map((m) => [m.id, owedLeftOfRow(v, p.key, p.row.amount, m.id)])) }))
+  const owing = base.household ? members : NO_MEMBERS
+  const key = useSharesKey((v) => {
+    const parts = v.parts.get(p.key) ?? []
+    const taken = parts.reduce((s, x) => s + x.amount, 0)
+    const senderInRow = base.household && (!base.inflowKind || base.inflowKind === 'repay') ? Math.max(0, p.row.amount - taken) : 0
+    const senderOwed = Math.max(0, (v.owed.get(senderId) ?? 0) - ((v.total.get(senderId) ?? 0) - senderInRow))
+    return {
+      parts,
+      owed: {
+        ...Object.fromEntries(owing.map((m) => [m.id, owedLeftOfRow(v, p.key, p.row.amount, m.id)])),
+        ...(base.household ? { [senderId]: senderOwed } : {})
+      }
+    }
+  })
   const view = useMemo(() => (key ? (JSON.parse(key) as { parts: SharePart[]; owed: Record<string, number> }) : null), [key])
   const shown: Choice = mine ?? { ...choice, shares: view?.parts.length ? view.parts : undefined }
   return (
@@ -298,6 +565,7 @@ export function RowShares({ p, choice, mine }: { p: NewRow; choice: Choice; mine
         loans={loans}
         onChange={(next) => chooseRow(p.key, rowSharesChoice(next, choice, shown, !!mine))}
         testId="import-row"
+        totalAmount={p.row.amount}
         startOf={(who, lines) => {
           const v = sharesNow(ledger, members, states)
           return v ? rowStart(v, p.key, p.row.amount, who, lines) : 0
@@ -382,8 +650,7 @@ export function DecisionFields({
   exclude,
   own,
   sharesFrom,
-  sharesInBrands,
-  noShares
+  sharesInBrands
 }: {
   choice: Choice
   direction: 'in' | 'out'
@@ -397,8 +664,6 @@ export function DecisionFields({
   sharesFrom?: DecisionKeys
   /** Its „w tym za” are its brands' own (a theme showing their common decision – `themeShows` 'brands', T336): said, not edited. */
   sharesInBrands?: boolean
-  /** A rule's editor (AP-15): a rule does not keep „w tym za” – it is said, not offered and lost. */
-  noShares?: boolean
 }) {
   const members = useMembers()
   const loans = useRecordList('loans')
@@ -459,26 +724,30 @@ export function DecisionFields({
         ) : sharesFrom ? (
           <DecisionShares from={sharesFrom} choice={choice} members={members} onChange={onChange} testId={testId} />
         ) : (
-          <>
-            {/* A rule does not keep other members' parts (AP-15): said, not offered and lost – its loan part it keeps (T358). */}
-            {noShares && choice.household && (!choice.inflowKind || choice.inflowKind === 'repay') && members.some((m) => m.id !== (choice.memberId ?? HOUSE_MEMBER_ID)) && (
-              <span className="text-[11px] text-muted" data-testid={`${testId}-no-shares`}>
-                „w tym za” – reguła tego nie zapamiętuje, ustawisz przy imporcie
-              </span>
-            )}
-            <RuleShares choice={choice} onChange={onChange} testId={testId} />
-          </>
+          <RuleShares choice={choice} members={members} onChange={onChange} testId={testId} />
         ))}
     </>
   )
 }
 
 /**
- * A rule's part repaying a loan (D100, T358 – the rule's editor): one loan of the Radar and the amount of each inflow;
- * other members' parts a rule does not keep – not offered (`noShares` says so).
+ * A rule's „w tym za” members (D102 – debts first, without fixed PLN amounts) and surplus split, and its part repaying a
+ * loan of the Radar (D100, T358 – one loan and the amount of each inflow).
  */
-function RuleShares({ choice, onChange, testId }: { choice: Choice; onChange: (c: Choice) => void; testId: string }) {
+function RuleShares({ choice, members, onChange, testId }: { choice: Choice; members: readonly HouseholdMember[]; onChange: (c: Choice) => void; testId: string }) {
   const loans = useLoanChoices((choice.shares ?? []).flatMap((x) => (x.loanId ? [x.loanId] : [])))
-  const lines = (choice.shares ?? []).filter((x) => x.loanId)
-  return <IncomeSharesEditor choice={{ ...choice, shares: lines.length ? lines.slice(0, 1) : undefined }} members={[]} loans={lines.length ? loans.filter((l) => l.id === lines[0]!.loanId || !l.closed) : loans} onChange={onChange} testId={testId} maxLoans={1} />
+  const loanLines = (choice.shares ?? []).filter((x) => x.loanId).slice(0, 1)
+  const memberLines = choice.household && (!choice.inflowKind || choice.inflowKind === 'repay') ? (choice.shares ?? []).filter((x) => !x.loanId && x.memberId) : []
+  const lines = [...memberLines, ...loanLines]
+  return (
+    <IncomeSharesEditor
+      choice={{ ...choice, shares: lines.length ? lines : undefined }}
+      members={choice.household && (!choice.inflowKind || choice.inflowKind === 'repay') ? members : []}
+      loans={loanLines.length ? loans.filter((l) => l.id === loanLines[0]!.loanId || !l.closed) : loans}
+      onChange={onChange}
+      testId={testId}
+      ruleMode
+      maxLoans={1}
+    />
+  )
 }
