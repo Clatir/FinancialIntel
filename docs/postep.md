@@ -5,7 +5,7 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 400 linii, sprawdza CI).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan:** **1.19.0 w toku** – blok I (kroki 0, 2, 4) oraz krok 1 z bloku II zakończone. Następny w bloku II: krok 3 (import) (Opus 5.5 · max).
+**Stan:** **1.19.0 w toku** – blok I (kroki 0, 2, 4) oraz blok II (kroki 1, 3) zakończone. Następny: blok III, krok 6 (E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0) (Sonnet 5.5 + Opus 5.5 · xhigh).
 **1.18.1 wydane** (05.11.2026). Ciąg N1–R2 (D101, 1.15.5–1.17.0, PR #50–#56) oraz ciąg G0–GD (1.17.1–1.18.1, PR #58–#60) zakończone jednym ciągiem bez przerw.
 **Gotowe do odbioru zbiorczego:**
 - Wersje 1.17.1 (GA – silnik i dane), 1.18.0 (GB – reguły, schemat, import), 1.18.1 (GC – interfejs, telefon, eksport) scalone do `main`.
@@ -22,7 +22,7 @@ blok II (1 → 3), blok III (6). Model zmieniany tylko między blokami, z `/clea
 | I | 2 | Edytor: panel „Nadwyżka” (osoba, kwota, „jako”: przychód / zaliczka / spłata pożyczki), domyślnie nadawca według jego ustawienia („pytaj” pyta), „po równo” i „proporcjonalnie do długów”; wspólna funkcja podziału `features/household/surplus.ts` | Opus 5.5 · xhigh (min. high) | 0,5–0,75 h | ✅ (06.11, ok. 0,5 h) |
 | I | 4 | Szybki wpis: „W tym za” z celem i nadwyżką, ta sama funkcja | Opus 5.5 · high (min. medium) | 0,25–0,5 h | ✅ (06.11, ok. 0,5 h) |
 | II | 1 | Silnik: funkcja podziału do `calc/household.ts`, testy z przykładami, edytor i szybki wpis na niej | Opus 5.5 · max (min. xhigh) | 0,5–1 h | ✅ (07.11, ok. 0,25 h) |
-| II | 3 | Import: cel przy „w tym za”, nadwyżka w wierszu / grupie / temacie, „pytaj” części pyta; reguły pamiętają, kogo spłacają i jak dzielić górkę (bez stałych kwot, „najpierw dług” zawsze) | Opus 5.5 · max (min. xhigh) | 1,5–2 h | ⏳ |
+| II | 3 | Import: cel przy „w tym za”, nadwyżka w wierszu / grupie / temacie, „pytaj” części pyta; reguły pamiętają, kogo spłacają i jak dzielić górkę (bez stałych kwot, „najpierw dług” zawsze) | Opus 5.5 · max (min. xhigh) | 1,5–2 h | ✅ (07.11, ok. 0,5 h) |
 | III | 6 | E2E, `/code-review`, CHANGELOG, D102 / T519+, rules, PR, CI, wydanie 1.19.0 | Sonnet 5.5 + Opus 5.5 · xhigh | 0,5–0,75 h | ⏳ |
 
 **Decyzje użytkownika (06.11.2026, do zapisania jako D102 w kroku 6):** górka domyślnie nadawcy, według jego ustawienia
@@ -68,6 +68,13 @@ albo osobna linia z `inflowKind`; pożyczka – linia `loanId`). Testy:
 - W `calc/quick.ts`: `quickShareAs`, `quickSurplusInput`, `quickPartLines` (T521: zachowanie domyślnego ustawienia `zaliczka` domownika w podziale „po równo” / „proporcjonalnie” bez oznaczania go jako ręcznie wybranego `advanceChosen` oraz uwzględnienie wpisanej kwoty spłaty pożyczki w wolnej nadwyżce).
 - Edytor (`SurplusPanel.tsx`) i szybki wpis (`QuickApp.tsx`) przepięte na funkcje z `calc/household.ts` i `calc/quick.ts`.
 - Testy: `tests/unit/surplus-split.test.ts` (25 testów jednostkowych – przechodzą), pełny zestaw jednostkowy i E2E (`tests/e2e/surplus.spec.ts`) zielone.
+
+**Krok 3 – wynik.** Import CSV (`DecisionFields.tsx`, `state.ts`, `rules.ts`, `options.ts`, `classify.ts`, `reconcile.ts`, `budget.ts`):
+- Cel przy „w tym za” (`spłata` / `przychód` / `zaliczka`) i podział nadwyżki (`nadawcy` / `po równo` / `proporcjonalnie do długów`) w wierszu, grupie i temacie importu z użyciem `memberPartLines`, `evenShares` i `debtShares` z `calc/household.ts`.
+- T522: nadwyżka części dla domownika z ustawieniem „pytaj” (`inflow === 'ask'`) zatrzymuje temat jako „do zrobienia” (`themeStatus === 'todo'`) i wyświetla szybkie przyciski wyboru (`przychód` / `zaliczka`); wybór zapisuje odpowiedź domownika w `fi.json` przy `runImport()` (`inflowVotes`, `rememberInflows`).
+- T523–T524: reguły importu (`ImportRule`) pamiętają listę spłacanych osób (`alsoFor`) oraz sposób podziału nadwyżki (`surplusSplit`: `'even' | 'debts'`) bez stałych kwot PLN („najpierw dług” zawsze – `each: true`), edytowalne także w Ustawienia → Import (`RuleShares`, `ConditionsEditor`, `RulesAudit`) i udokumentowane w `docs/format-folderu.md`.
+- T525: rozkład nadwyżki w `rowShares` (`reconcile.ts`) uwzględnia zakupy z tego samego pliku CSV (`owedWithFile`), najpierw spłacając długi nadawcy i osób z `alsoFor`, a dopiero wolną górkę dzieląc po równo lub proporcjonalnie do długów.
+- Testy: `tests/unit/surplus-gaps-store.test.ts` (12 testów, w tym `it.fails` kroku 3 przekształcony w przechodzący `it` oraz T522–T525), `tests/e2e/surplus.spec.ts` (3 testy E2E: edytor, szybki wpis, import z nauką reguły – przechodzą), pełny zestaw Vitest (208 plików, 1937 testów) zielony.
 
 
 

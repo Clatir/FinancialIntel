@@ -25,7 +25,7 @@ export const directionOf = (row: Pick<MbankRow, 'amount'>): Direction => (row.am
 
 /** What a decision remembered as a rule says (`upsertRule`). */
 export type LearnedRule = Pick<ImportRule, 'match' | 'direction' | 'label' | 'kind' | 'categoryId' | 'refundable' | 'household' | 'memberId' | 'gift' | 'share' | 'counterAccountId'> &
-  Partial<Pick<ImportRule, 'loanId' | 'loanAmount'>>
+  Partial<Pick<ImportRule, 'inflowKind' | 'loanId' | 'loanAmount' | 'alsoFor' | 'surplusSplit'>>
 
 /**
  * A decision remembered as a rule (the import's „zapamiętaj”, „Zapamiętaj” in Operacje): the exact rule of that key and
@@ -60,6 +60,8 @@ export function upsertRules(rules: readonly ImportRule[], items: ReadonlyArray<{
       share: r.share ?? undefined,
       loanId: r.loanId ?? undefined,
       loanAmount: r.loanAmount ?? undefined,
+      ...(prev?.alsoFor || r.alsoFor?.length ? { alsoFor: r.alsoFor?.length ? r.alsoFor : undefined } : {}),
+      ...(prev?.surplusSplit || (r.alsoFor?.length && r.surplusSplit) ? { surplusSplit: r.alsoFor?.length ? r.surplusSplit : undefined } : {}),
       id: prev?.id ?? opts.makeId(),
       mode: 'exact',
       learned: prev?.learned ?? true,
@@ -362,6 +364,13 @@ export interface ImportDecision {
   advance: boolean
   /** Purpose of an incoming transfer: 'repay' (repay purchases), 'income' (independent income), 'advance' (deposit). */
   inflowKind?: 'repay' | 'income' | 'advance'
+  /**
+   * Other household members whose debts a rule of household repayment also settles („w tym za”, D102): debts first,
+   * without fixed PLN amounts. Absent = none.
+   */
+  alsoFor?: ReadonlyArray<{ memberId: string; advance: boolean; ask?: true }>
+  /** How a rule splits the surplus beyond all debts of `memberId` and `alsoFor` (D102). Absent = all to `memberId`. */
+  surplusSplit?: 'even' | 'debts'
   /** A purchase the member gives (D83, with `refundable`): nobody owes it. */
   gift: boolean
   /** A purchase financed by several people (D83): the row's amount split so. */
@@ -631,6 +640,15 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     const archived = kind === 'expense' && !!rule.categoryId && !categoryId
     // The rule's part repaying a loan (D100): while the loan is open – at most its debt (`rowShares`).
     const loanPart = kind === 'income' && ruleLoan && rule.loanAmount ? { loanId: ruleLoan.id, amount: rule.loanAmount } : null
+    const senderId = memberId ?? HOUSE_MEMBER_ID
+    const repay = household && (rule.inflowKind ?? 'repay') === 'repay'
+    const alsoIds = repay && rule.alsoFor?.length ? [...new Set(rule.alsoFor.filter((id) => id !== senderId))] : []
+    const alsoFor = alsoIds.flatMap((id) => {
+      if (!ctx.members) return [{ memberId: id, advance: false }]
+      const m = ctx.members.find((x) => x.id === id)
+      return m && !m.archived ? [{ memberId: m.id, advance: inflowOf(m) === 'advance', ...(inflowOf(m) === 'ask' ? { ask: true as const } : {}) }] : []
+    })
+    const surplusSplit = alsoFor.length > 0 && (rule.surplusSplit === 'even' || rule.surplusSplit === 'debts') ? rule.surplusSplit : undefined
     const said = archived
       ? 'kategoria reguły zarchiwizowana – wybierz nową'
       : rule.mode === 'keyword'
@@ -641,6 +659,8 @@ function decideRow(row: MbankRow, ctx: ClassifyContext): Classified {
     return out(
       decision(kind, loanPart ? `${said} – w tym spłata pożyczki: ${ruleLoan!.name}` : said, {
         ...(loanPart ? { loanPart } : {}),
+        ...(alsoFor.length ? { alsoFor } : {}),
+        ...(surplusSplit ? { surplusSplit } : {}),
         source: archived ? 'none' : 'rule',
         ruleId: rule.id,
         byTitle,

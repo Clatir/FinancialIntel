@@ -157,6 +157,8 @@ export const FIELD_WORDS: Record<string, string> = {
   'fi:settings.import.rules[].household': 'Wpływ od domownika (najpierw spłaca jego zakupy).',
   'fi:settings.import.rules[].memberId': 'Domownik; `null` – pierwszy („Dom”).',
   'fi:settings.import.rules[].inflowKind': 'Wpływ domownika: `repay` (spłata), `income` (niezależny przychód), `advance` (zaliczka).',
+  'fi:settings.import.rules[].alsoFor': 'Spłata od domownika („w tym za”): inni domownicy, których długi przelew też spłaca (najpierw dług, bez stałych kwot).',
+  'fi:settings.import.rules[].surplusSplit': 'Podział nadwyżki ponad długi przy „w tym za”: `even` (po równo), `debts` (proporcjonalnie do długów); brak – cała reszta dla `memberId`.',
   'fi:settings.import.rules[].gift': 'Zakup, który domownik daje w prezencie (nikt go nie oddaje).',
   'fi:settings.import.rules[].share': 'Zakup finansowany przez kilka osób – zob. „Wspólny zakup”.',
   'fi:settings.import.rules[].counterAccountId': 'Przelewu własnego: drugie konto budżetu.',

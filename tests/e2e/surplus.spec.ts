@@ -1,12 +1,13 @@
-// 1.19.0 (D102): the surplus of one transfer repaying two household members – the editor's „Nadwyżka” panel (step 2):
-// how big the surplus is, split „po równo” (debts first), each person's share given „as” income or advance.
-import { mkdtempSync } from 'node:fs'
+// 1.19.0 (D102): the surplus of one transfer repaying two household members – the editor's „Nadwyżka” panel (step 2),
+// the quick entry (step 1), and the CSV import with „w tym za” surplus split, „pytaj” theme status, and learned rules (step 3).
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { importDone, launch } from './app'
 import { json, records } from './files'
+import { CSV_NUMBER, listaCsv } from './mbank-csv'
 import { seedFolder, zl } from './seed'
 
 const ACC = '01KDEFACC00000000000000001'
@@ -132,6 +133,90 @@ test('D102: szybki wpis – „W tym za” przy przelewie Taty za siebie i Mamę
     await quick.getByTestId('quick-save').click()
     await expect.poll(incomes).toEqual([[TATA, false, [[MAMA, zl(100), 'repay', false], [MAMA, zl(75), 'advance', true]]]])
     await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.household.members.find((m: { id: string }) => m.id === MAMA)?.inflow).toBe('advance')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('D102: import – „w tym za” z podziałem nadwyżki, blokada „pytaj” w temacie i nauka reguły (alsoFor + surplusSplit)', async () => {
+  const { date: today, month } = warsawNow()
+  const start = `${addMonths(month, -1)}-01`
+  const person = (id: string, name: string, bankNames: string[], inflow: string, via: string | null = null) => ({
+    id,
+    name,
+    bankNames,
+    inflow,
+    archived: false,
+    via,
+    opening: { owed: 0, deposit: 0 }
+  })
+  const tempRoot = mkdtempSync(join(tmpdir(), 'fi-surplus-import-'))
+  const dataDir = join(tempRoot, 'FinancialIntel')
+  const csvPath = join(tempRoot, 'lista.csv')
+  writeFileSync(csvPath, listaCsv([], { from: start, to: today }, CSV_NUMBER, [{ date: today, amount: 400, name: 'PIOTR TESTOWY', title: 'rozliczenie' }]), 'utf8')
+  seedFolder(dataDir, {
+    settings: (s) => ({
+      ...s,
+      budget: { ...s.budget, start },
+      household: {
+        since: start,
+        assignFrom: start,
+        members: [...s.household.members, person(TATA, 'Tata', ['PIOTR TESTOWY'], 'income'), person(MAMA, 'Mama', [], 'ask', TATA)]
+      }
+    }),
+    records: {
+      balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],
+      transactions: [
+        { date: today, accountId: ACC, amount: -zl(100), categoryId: GROCERIES, counterparty: 'Apteka Mamy', refundable: true, memberId: MAMA },
+        { date: today, accountId: ACC, amount: -zl(150), categoryId: GROCERIES, counterparty: 'Kiosk Taty', refundable: true, memberId: TATA }
+      ]
+    }
+  })
+  const { page, app, dataDir: dir, userData, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+3')
+    await expect(page.getByTestId('page-import')).toBeVisible()
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof dialog.showOpenDialog
+    }, csvPath)
+    await page.getByTestId('import-pick').click()
+    await page.getByTestId('import-search').fill('piotr')
+
+    const theme = page.getByTestId('import-theme').first()
+    await expect(theme).toHaveAttribute('data-status', 'check')
+
+    // Add „+ w tym za Mama (ma oddać 100,00 zł)” (decision made -> „done”) and split the 150 zł surplus „po równo” (75 zł each).
+    await theme.getByTestId('import-theme-also-for-via').click()
+    await expect(theme).toHaveAttribute('data-status', 'done')
+    await theme.getByTestId('import-theme-surplus-even').click()
+    await expect(theme.getByTestId('import-theme-also-for-amount').nth(0)).toHaveValue('100,00')
+    await expect(theme.getByTestId('import-theme-also-for-amount').nth(1)).toHaveValue('75,00')
+
+    // Mama's setting is „ask”, so the theme is now „todo” until her 75 zł surplus is answered.
+    await expect(theme.getByTestId('import-theme-also-for-ask')).toBeVisible()
+    await expect(theme).toHaveAttribute('data-status', 'todo')
+
+    // Answer „zaliczka” for Mama's surplus -> theme becomes „done”, „zapamiętaj” is checked.
+    await theme.getByTestId('import-theme-also-for-as-advance').click()
+    await expect(theme.getByTestId('import-theme-also-for-ask')).toHaveCount(0)
+    await expect(theme).toHaveAttribute('data-status', 'done')
+    await expect(theme.getByTestId('import-theme-remember')).toBeChecked()
+
+    await page.getByTestId('import-run').click()
+    await importDone(page, userData)
+
+    const incomes = async () =>
+      ((await records(dir, 'transactions')) as unknown as Op[])
+        .filter((t) => t.amount === zl(400))
+        .map((t) => [t.memberId, t.advance, t.splits.map((s) => [s.memberId, s.amount, s.inflowKind ?? 'repay', s.advance])])
+    await expect.poll(incomes).toEqual([[TATA, false, [[MAMA, zl(100), 'repay', false], [MAMA, zl(75), 'advance', true]]]])
+
+    const fi = await json(join(dir, 'fi.json'))
+    expect(fi.settings.household.members.find((m: { id: string }) => m.id === MAMA)?.inflow).toBe('advance')
+    const rule = fi.settings.import.rules.find((r: { match: string }) => r.match === 'piotrtestowy')
+    expect(rule).toMatchObject({ kind: 'income', household: true, memberId: TATA, alsoFor: [MAMA], surplusSplit: 'even' })
     expect(errors).toEqual([])
   } finally {
     await app.close()

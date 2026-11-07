@@ -76,7 +76,7 @@ describe('D102 krok 0 – dziś: część „w tym za” osoby „pytaj” ponad
 
   // Wanted (step 3): the question „zaliczka czy przychód?” stays open for her part's surplus – the theme is to do (as N85
   // for a new member), nothing of it saved as income until answered.
-  it.fails('CEL kroku 3: temat Taty „do zrobienia”, dopóki nadwyżka części Mamy („pytaj”) nie ma odpowiedzi', async () => {
+  it('CEL kroku 3: temat Taty „do zrobienia”, dopóki nadwyżka części Mamy („pytaj”) nie ma odpowiedzi', async () => {
     open()
     await state.loadImportFile('lista.csv', bytes(listaCsv([], PERIOD, null, [{ date: '2026-11-01', amount: 400, name: 'PIOTR TESTOWY', title: 'ZA MNIE I MAME' }])))
     const g = tataGroup()
@@ -85,6 +85,178 @@ describe('D102 krok 0 – dziś: część „w tym za” osoby „pytaj” ponad
     state.chooseRow(g.rows[0]!.key, { ...g.proposed, shares: [{ memberId: MAMA, amount: 17500, advance: false }] })
     const theme = importThemes(groups()).find((x) => x.groups.some((y) => y.group === g.group))!
     expect(state.themeStatus(theme, state.useImport.getState().choices)).toBe('todo')
+  })
+
+  it('T522: odpowiedź dla nadwyżki Mamy („pytaj”) w „w tym za” zamyka pytanie tematu i zapisuje ustawienie Mamy w fi.json', async () => {
+    open()
+    await state.loadImportFile('lista.csv', bytes(listaCsv([], PERIOD, null, [{ date: '2026-11-01', amount: 400, name: 'PIOTR TESTOWY', title: 'ZA MNIE I MAME' }])))
+    const g = tataGroup()
+    state.decideGroup(g.group, {
+      ...g.proposed,
+      surplusSplit: 'even',
+      shares: [
+        { memberId: MAMA, amount: 10000, advance: false },
+        { memberId: MAMA, amount: 7500, advance: false, surplus: true }
+      ]
+    })
+    const theme = importThemes(groups()).find((x) => x.groups.some((y) => y.group === g.group))!
+    expect(state.themeStatus(theme, state.useImport.getState().choices)).toBe('todo')
+    // User answers „zaliczka” for Mama's surplus:
+    state.decideGroup(g.group, {
+      ...g.proposed,
+      surplusSplit: 'even',
+      shares: [
+        { memberId: MAMA, amount: 10000, advance: true },
+        { memberId: MAMA, amount: 7500, advance: true, inflowKind: 'advance' }
+      ]
+    })
+    expect(state.themeStatus(theme, state.useImport.getState().choices)).toBe('done')
+    await state.runImport()
+    expect(data.useData.getState().fi!.settings.household.members.find((m) => m.id === MAMA)?.inflow).toBe('advance')
+    const ops = data.listOf(data.useData.getState().records.transactions)
+    expect(balanceOf(settleHousehold(ops), MAMA)).toMatchObject({ owed: 0, deposit: 7500 })
+  })
+})
+
+describe('D102 krok 3: reguły pamiętają „w tym za” (bez stałych kwot, najpierw dług) i podział nadwyżki', () => {
+  it('T523: decyzja grupy uczy regułę z `alsoFor` i `surplusSplit` (bez stałych kwot); kolejny import najpierw spłaca aktualne długi i dzieli górkę', async () => {
+    open()
+    await state.loadImportFile('lista.csv', bytes(listaCsv([], PERIOD, null, [{ date: '2026-11-01', amount: 400, name: 'PIOTR TESTOWY', title: 'ZA MNIE I MAME' }])))
+    const g = tataGroup()
+    state.decideGroup(g.group, {
+      ...g.proposed,
+      surplusSplit: 'even',
+      shares: [
+        { memberId: MAMA, amount: 10000, advance: false },
+        { memberId: MAMA, amount: 7500, advance: false, inflowKind: 'income' }
+      ]
+    })
+    await state.runImport()
+    const rule = data.useData.getState().fi!.settings.import.rules.find((r) => r.match === 'piotrtestowy')
+    expect(rule).toMatchObject({
+      household: true,
+      memberId: TATA,
+      inflowKind: 'repay',
+      alsoFor: [MAMA],
+      surplusSplit: 'even'
+    })
+    expect(rule!.loanAmount).toBeUndefined()
+
+    // Second import: new purchases (Tata owes 40 zł, Mama owes 80 zł) and a 200 zł transfer from Tata.
+    // Debts first: 80 zł for Mama + 40 zł for Tata = 120 zł; remaining 80 zł surplus split evenly -> 40 zł for Mama, 40 zł for Tata.
+    await state.loadImportFile(
+      'lista2.csv',
+      bytes(
+        listaCsv([], { from: '2026-11-02', to: '2026-11-05' }, null, [
+          { date: '2026-11-02', amount: -40, name: 'BIEDRONKA', title: 'ZAKUP' },
+          { date: '2026-11-03', amount: -80, name: 'APTEKA', title: 'LEKI' },
+          { date: '2026-11-04', amount: 200, name: 'PIOTR TESTOWY', title: 'PRZELEW' }
+        ])
+      )
+    )
+    for (const grp of groups()) {
+      if (grp.label.toLowerCase().includes('biedronka')) state.decideGroup(grp.group, { ...grp.proposed, refundable: true, memberId: TATA })
+      if (grp.label.toLowerCase().includes('apteka')) state.decideGroup(grp.group, { ...grp.proposed, refundable: true, memberId: MAMA })
+    }
+    await state.runImport()
+    const ops = data.listOf(data.useData.getState().records.transactions)
+    const second = ops.find((x) => x.date === '2026-11-04' && x.counterparty === 'PIOTR TESTOWY')!
+    expect(second.splits.map((s) => [s.memberId, s.amount, s.inflowKind ?? 'repay'])).toEqual([
+      [MAMA, 8000, 'repay'],
+      [MAMA, 4000, 'income']
+    ])
+    const ledger = settleHousehold(ops)
+    expect(balanceOf(ledger, TATA).owed).toBe(0)
+    expect(balanceOf(ledger, MAMA).owed).toBe(0)
+  })
+
+  it('T524: reguła z `surplusSplit: "debts"` dzieli górkę proporcjonalnie do długów, a gdy brak górki – spłaca tylko długi (pytaj nie pyta bez górki)', async () => {
+    open()
+    // Rule already exists for Piotr Testowy with alsoFor: [MAMA], surplusSplit: 'debts'
+    data.updateSettings((f) => ({
+      ...f,
+      settings: {
+        ...f.settings,
+        import: {
+          ...f.settings.import,
+          rules: [
+            {
+              id: '01KN9RULE0000000000000001',
+              match: 'piotrtestowy',
+              mode: 'exact',
+              direction: 'in',
+              label: 'PIOTR TESTOWY',
+              kind: 'income',
+              categoryId: null,
+              refundable: false,
+              household: true,
+              memberId: TATA,
+              inflowKind: 'repay',
+              alsoFor: [MAMA],
+              surplusSplit: 'debts',
+              counterAccountId: null,
+              learned: false,
+              hits: 1,
+              updatedAt: AT
+            }
+          ]
+        }
+      }
+    }))
+    // 1) Transfer of 100 zł covers only Mama's 100 zł debt -> 0 surplus -> Mama ('ask') has no surplus, so theme is 'done'!
+    await state.loadImportFile('lista-exact.csv', bytes(listaCsv([], PERIOD, null, [{ date: '2026-11-01', amount: 100, name: 'PIOTR TESTOWY', title: 'PRZELEW' }])))
+    const themeExact = importThemes(groups()).find((x) => x.groups.some((y) => y.label === 'PIOTR TESTOWY'))!
+    expect(state.themeStatus(themeExact, state.useImport.getState().choices)).toBe('done')
+
+    // 2) Transfer of 250 zł -> 100 zł debt (Mama 100, Tata 0) + 150 zł surplus (Mama gets 100/100 * 150 = 150 zł) -> Mama is 'ask', so theme is 'todo'!
+    await state.loadImportFile('lista-surplus.csv', bytes(listaCsv([], PERIOD, null, [{ date: '2026-11-01', amount: 250, name: 'PIOTR TESTOWY', title: 'PRZELEW' }])))
+    const themeSurplus = importThemes(groups()).find((x) => x.groups.some((y) => y.label === 'PIOTR TESTOWY'))!
+    expect(state.themeStatus(themeSurplus, state.useImport.getState().choices)).toBe('todo')
+  })
+
+  it('T525: `choiceOfRule`, `ruleDecisionText` i edycja reguły zachowują `alsoFor` i `surplusSplit` (bez stałych kwot)', async () => {
+    open()
+    const rulesMod = await import('../../src/renderer/features/import/rules')
+    const id = '01KN9RULE0000000000000002'
+    data.updateSettings((f) => ({
+      ...f,
+      settings: {
+        ...f.settings,
+        import: {
+          ...f.settings.import,
+          rules: [
+            {
+              id,
+              match: 'piotrtestowy',
+              mode: 'exact',
+              direction: 'in',
+              label: 'PIOTR TESTOWY',
+              kind: 'income',
+              categoryId: null,
+              refundable: false,
+              household: true,
+              memberId: TATA,
+              inflowKind: 'repay',
+              alsoFor: [MAMA],
+              surplusSplit: 'even',
+              counterAccountId: null,
+              learned: true,
+              hits: 1,
+              updatedAt: AT
+            }
+          ]
+        }
+      }
+    }))
+    const r0 = data.useData.getState().fi!.settings.import.rules[0]!
+    expect(rulesMod.ruleDecisionText(r0, () => '')).toBe('od domownika: Tata · w tym za: Mama · nadwyżka: po równo')
+    const c0 = rulesMod.choiceOfRule(r0)
+    expect(c0.surplusSplit).toBe('even')
+    expect(c0.shares).toEqual([{ memberId: MAMA, amount: 0, advance: false, each: true }])
+    rulesMod.editRule(id, { direction: 'in', choice: { ...c0, surplusSplit: 'debts' } })
+    const r1 = data.useData.getState().fi!.settings.import.rules[0]!
+    expect(r1).toMatchObject({ alsoFor: [MAMA], surplusSplit: 'debts', learned: false })
+    expect(rulesMod.ruleDecisionText(r1, () => '')).toBe('od domownika: Tata · w tym za: Mama · nadwyżka: proporcjonalnie do długów')
   })
 })
 

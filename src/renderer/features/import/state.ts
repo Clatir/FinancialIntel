@@ -1115,9 +1115,33 @@ export function skipSelected(groups: readonly ImportGroup[], on: boolean): numbe
  */
 export type ThemeStatus = 'todo' | 'check' | 'done'
 
+function hasUnansweredAskSurplus(t: ImportTheme, c: ImportChoices): boolean {
+  const plan = useImport.getState().plan
+  const members = useData.getState().fi?.settings.household.members
+  if (!plan || !members?.length) return false
+  const askIds = new Set(members.filter((m) => m.inflow === 'ask').map((m) => m.id))
+  if (!askIds.size) return false
+  const fleet = fleetNow()
+  const view = sharesView(plan, c, fleet?.household ?? null, members, fleet?.loans)
+  if (!view) return false
+  for (const g of t.groups)
+    for (const p of g.rows) {
+      if (c.skip[p.key]) continue
+      const parts = view.parts.get(p.key)
+      if (!parts?.length) continue
+      for (const x of parts) {
+        if (x.loanId || !askIds.has(x.memberId)) continue
+        if (x.surplus && !x.inflowKind) return true
+        if ((!x.inflowKind || x.inflowKind === 'repay') && !x.advance && !x.advanceChosen && (view.total.get(x.memberId) ?? 0) > (view.owed.get(x.memberId) ?? 0))
+          return true
+      }
+    }
+  return false
+}
+
 export function themeStatus(t: ImportTheme, c: ImportChoices): ThemeStatus {
-  // A new member's money (N85): still the question „zaliczka czy przychód?”.
-  if (t.groups.some((g) => c.implicit?.[g.group])) return 'todo'
+  // A new member's money (N85) or an unanswered surplus of an „ask” member in „w tym za” (D102): still „zaliczka czy przychód?”.
+  if (t.groups.some((g) => c.implicit?.[g.group]) || hasUnansweredAskSurplus(t, c)) return 'todo'
   if (c.themes[t.theme]) return 'done'
   const open = t.groups.filter((g) => !c.groups[g.group] && g.source !== 'rule')
   if (!open.length) return 'done'
@@ -1291,7 +1315,7 @@ export function owedLeftOfRow(view: SharesView, key: string, amount: number, mem
   for (const x of view.parts.get(key) ?? []) {
     const v = Math.min(x.amount, money)
     money -= v
-    if (shareWho(x) === memberId && (!x.inflowKind || x.inflowKind === 'repay')) mine += v
+    if (shareWho(x) === memberId && !x.surplus && (!x.inflowKind || x.inflowKind === 'repay')) mine += v
   }
   return Math.max(0, (view.owed.get(memberId) ?? 0) - ((view.total.get(memberId) ?? 0) - mine))
 }
@@ -1320,7 +1344,22 @@ export function inflowVotes(groups: readonly ImportGroup[], c: ImportChoices): A
       const own = c.rows[p.key] ?? (c.groups[g.group] ? (c.implicit?.[g.group] ? undefined : c.groups[g.group]) : c.themes[g.theme])
       // The question is the rest beyond their debt (D80 b): an explicit independent income or advance for the future
       // answers nothing of it (AP-4 – it skips the debt).
-      if (own && own.kind === 'income' && own.household && (own.inflowKind ?? 'repay') === 'repay') out.push({ kind: 'income', memberId: own.memberId ?? HOUSE_MEMBER_ID, advance: own.advance })
+      if (own && own.kind === 'income' && own.household) {
+        const senderId = own.memberId ?? HOUSE_MEMBER_ID
+        if ((own.inflowKind ?? 'repay') === 'repay') out.push({ kind: 'income', memberId: senderId, advance: own.advance })
+        // Other members' surplus answers in „w tym za” (D102): one per member per operation.
+        const voted = new Set<string>([senderId])
+        for (const x of own.shares ?? []) {
+          if (x.loanId || !x.memberId || voted.has(x.memberId) || x.amount <= 0) continue
+          if (x.inflowKind === 'income' || x.inflowKind === 'advance') {
+            voted.add(x.memberId)
+            out.push({ kind: 'income', memberId: x.memberId, advance: x.inflowKind === 'advance' })
+          } else if (!x.surplus && (x.advance || x.advanceChosen)) {
+            voted.add(x.memberId)
+            out.push({ kind: 'income', memberId: x.memberId, advance: x.advance })
+          }
+        }
+      }
     }
   return out
 }

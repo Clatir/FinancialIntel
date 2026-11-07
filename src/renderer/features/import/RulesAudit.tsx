@@ -105,7 +105,7 @@ function RuleEditor({ rule, onDone }: { rule: ImportRule; onDone: () => void }) 
           <option value="">oba kierunki</option>
         </select>
         {/* A member's money: the rest the person's setting gives only – the rule keeps none (AP-4, D80 b). */}
-        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={(o) => forRule(o, direction, repayable) || restNotOfRule(o, members)} noShares testId="import-rule-edit" />
+        <DecisionFields choice={choice} direction={direction ?? 'out'} onChange={setChoice} exclude={(o) => forRule(o, direction, repayable) || restNotOfRule(o, members)} testId="import-rule-edit" />
         {rule.mode === 'amount' && (
           <label className="flex items-center gap-1 text-muted">
             do kwoty

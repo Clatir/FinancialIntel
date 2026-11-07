@@ -218,7 +218,8 @@ export function offersNewMember(
 }
 
 /** The lines of „w tym za” as one text – of 0 zł too (`sameChoice` leaves those out); a loan's part by its loan (D100). */
-export const linesKey = (xs: Choice['shares']): string => (xs ?? []).map((x) => `${shareWho(x)}=${x.amount}:${x.inflowKind ?? (x.advance ? 'a' : 'i')}`).join(',')
+export const linesKey = (xs: Choice['shares']): string =>
+  (xs ?? []).map((x) => `${shareWho(x)}=${x.each && !x.loanId ? '*' : x.amount}:${x.surplus ? '?' : (x.inflowKind ?? (x.advance ? 'a' : 'i'))}${x.advanceChosen ? '!' : ''}`).join(',')
 
 /**
  * A row's decision after its „w tym za” changed (AF-27 – a new line of 0 zł was „the same as the group's”, so the row's
@@ -275,7 +276,7 @@ export function choiceFor(option: Option, prev: Pick<Choice, 'kind' | 'categoryI
 export function listChoice(option: Option, prev: Choice, share?: Share | null): Choice {
   const next = choiceFor(option, prev, share)
   const sameMoney = prev.kind === 'income' && prev.household && next.kind === 'income' && next.household && memberOfChoice(prev) === memberOfChoice(next)
-  return sameMoney && prev.shares?.length ? { ...next, shares: prev.shares } : next
+  return sameMoney && prev.shares?.length ? { ...next, shares: prev.shares, ...(prev.surplusSplit ? { surplusSplit: prev.surplusSplit } : {}) } : next
 }
 
 /**
@@ -283,7 +284,7 @@ export function listChoice(option: Option, prev: Choice, share?: Share | null): 
  * („w tym za”), of loans (D100 – „w tym spłata pożyczki”) or both.
  */
 export function linesInBrands(shares: Choice['shares']): { text: string; title: string } {
-  const lines = (shares ?? []).filter((x) => x.amount > 0)
+  const lines = (shares ?? []).filter((x) => x.amount > 0 || (x.each && !x.loanId))
   const loans = lines.some((x) => x.loanId)
   const only = loans && !lines.some((x) => !x.loanId)
   return {

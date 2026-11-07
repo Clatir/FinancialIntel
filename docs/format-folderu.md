@@ -175,6 +175,8 @@ Jeden plik w korzeniu folderu. Wszystkie ustawienia budżetu wspólne dla komput
 | `settings.import.rules[].household` | tak / nie (`true` / `false`) | domyślnie `false` | Wpływ od domownika (najpierw spłaca jego zakupy). |
 | `settings.import.rules[].memberId` | ULID | domyślnie `null`, może być `null` | Domownik; `null` – pierwszy („Dom”). |
 | `settings.import.rules[].inflowKind` | jedna z: `repay`, `income`, `advance` | opcjonalne | Wpływ domownika: `repay` (spłata), `income` (niezależny przychód), `advance` (zaliczka). |
+| `settings.import.rules[].alsoFor` | lista: ULID | opcjonalne | Spłata od domownika („w tym za”): inni domownicy, których długi przelew też spłaca (najpierw dług, bez stałych kwot). |
+| `settings.import.rules[].surplusSplit` | jedna z: `even`, `debts` | opcjonalne | Podział nadwyżki ponad długi przy „w tym za”: `even` (po równo), `debts` (proporcjonalnie do długów); brak – cała reszta dla `memberId`. |
 | `settings.import.rules[].gift` | tak / nie (`true` / `false`) | opcjonalne | Zakup, który domownik daje w prezencie (nikt go nie oddaje). |
 | `settings.import.rules[].share` | obiekt – zob. „Wspólny zakup” | opcjonalne, może być `null` | Zakup finansowany przez kilka osób – zob. „Wspólny zakup”. |
 | `settings.import.rules[].counterAccountId` | ULID | domyślnie `null`, może być `null` | Przelewu własnego: drugie konto budżetu. |

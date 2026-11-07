@@ -420,6 +420,8 @@ const LABELS: Record<string, string> = {
   manual: 'Także dla wpisów ręcznych',
   label: 'Nazwa',
   household: 'Domownik',
+  alsoFor: 'W tym za',
+  surplusSplit: 'Podział nadwyżki',
   loanAmount: 'Część pożyczki',
   learned: 'Nauczona z decyzji',
   hits: 'Użycia',
