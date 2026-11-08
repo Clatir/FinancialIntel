@@ -3925,5 +3925,6 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   – jedno trafienie Grepa nie przynosi całego akapitu. `CHANGELOG.md` bez zmian (aplikacja parsuje go liniami).
 - **T529** Reportery testów: lokalnie kropki (`dot` w Vitest i Playwright – komputer i telefon), w CI (`CI` ustawione)
   dotychczasowe `default` / `list`.
-- **T530** `.claude/settings.json` blokuje czytanie wyników buildów i testów (`out/`, `dist/`, `test-results/`,
-  `playwright-report/`, `coverage/`, buildy iOS) obok `package-lock.json` i `release*/`.
+- **T530** `.claude/settings.json` blokuje czytanie wyników buildów i raportów (`out/`, `dist/`, `playwright-report/`,
+  `coverage/`, buildy iOS) obok `package-lock.json` i `release*/`; `test-results/` zostaje dostępne (zrzuty i kontekst
+  błędów E2E przy naprawach).
