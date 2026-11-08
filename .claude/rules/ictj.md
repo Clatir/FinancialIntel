@@ -40,4 +40,4 @@ paths:
 - Cele ICTTJ: `syncIctjGoals` – rekordy z id ICTTJ; pula Cele najpierw do celów ICTTJ.
 - Testy: `FI_ICTJ_DIR`, `FI_ICTJ_APPDATA`, `FI_ICTJ_LAUNCH=dry`; przykładowy folder ICTTJ tylko zanonimizowany.
 
-Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji) i `docs/decyzje.md`.
+Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji), `docs/decyzje.md` (D) i `docs/decyzje-techniczne.md` (T).

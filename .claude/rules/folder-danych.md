@@ -75,4 +75,4 @@ paths:
   Synchronizacji, historii i odzyskaniu z kopii.
 - Pola addytywne bez podbijania `SCHEMA_VERSION`; zmiana nieaddytywna: `SCHEMA_VERSION` + krok w `migrations/` + test.
 
-Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji) i `docs/decyzje.md`.
+Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji), `docs/decyzje.md` (D) i `docs/decyzje-techniczne.md` (T).

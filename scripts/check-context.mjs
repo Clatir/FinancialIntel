@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 // Keeps the files Claude Code loads on its own small: CLAUDE.md (every turn of every session and subagent),
-// docs/postep.md (read on every resume) and the path-scoped rules in .claude/rules/. Fails CI when one outgrows
+// docs/postep.md (read on every resume), the registers of decisions and the path-scoped rules in .claude/rules/. Fails CI when one outgrows
 // its limit – history belongs in CHANGELOG.md and docs/archiwum/, module knowledge in .claude/rules/.
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 const root = new URL('../', import.meta.url)
 const limits = [
-  { file: 'CLAUDE.md', lines: 200, kb: 20 },
-  { file: 'docs/postep.md', lines: 400, kb: 60 },
+  // D103: CLAUDE.md goes into every request – module knowledge belongs in .claude/rules/.
+  { file: 'CLAUDE.md', lines: 120, kb: 10 },
+  // D103: read in full on every resume – state and queue only, finished entries go to docs/archiwum/.
+  { file: 'docs/postep.md', lines: 250, kb: 20 },
+  // Registers of decisions (T525): D and T in separate files; new T entries stay short.
+  { file: 'docs/decyzje.md', lines: 1000, kb: 200 },
+  { file: 'docs/decyzje-techniczne.md', lines: 6000, kb: 560 },
 ]
 const rules = new URL('.claude/rules/', root)
 if (existsSync(rules)) {

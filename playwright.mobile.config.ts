@@ -13,7 +13,8 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 15_000 },
   workers: 1,
-  reporter: [['list']],
+  // Locally dots only – a line per test fills Claude's context (T529); CI keeps the full list.
+  reporter: process.env.CI ? [['list']] : [['dot']],
   outputDir: 'test-results/mobile',
   use: {
     ...devices['iPhone 13'],

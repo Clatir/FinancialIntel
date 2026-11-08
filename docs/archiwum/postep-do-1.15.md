@@ -12,7 +12,12 @@ D92 / D93, T305–T311.
 **1.12.0 wydane** (PR #40 – zwrot domownika przypisany do zakupu, D91). **1.11.0 wydane** (PR #38 – opis wydatku na liście operacji, opis części paragonu, wybór kolumn, D89). Ciąg grup M–V (D87) zakończony – każda grupa z własnym PR i wydaniem.
 **1.10.1 wydane** (PR #35 – zamknięcie aplikacji bez fałszywego pytania o niezapisane zmiany, D88, T301),
 **1.10.0 wydane** (PR #32 i poprawka PR #33 – job Windows na `main` po PR #32 złapał wyścig ustawień komputera między
-oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 – notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`: wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2 wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main` za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
+oknami, T300), **1.9.0 wydane** (PR #31), **1.8.0 wydane** (PR #30), **1.7.0 wydane** (PR #29, razem z 1.6.5 i 1.6.6 –
+notatki wydania mają ich sekcje), **1.6.6 scalone bez wydania** (PR #28 – E2E ukrywania kwot na Windows na `main`:
+wyścig zapisu ustawień komputera, poprawka i obie wersje w 1.7.0), **1.6.5 scalone bez wydania** (PR #27 – job Windows
+na `main` padł na wolnym runnerze, wchodzi w 1.6.6), **1.6.4 wydane** (PR #26), **1.6.3 wydane** (PR #25), **1.6.2
+wydane** (PR #24), **1.6.1 wydane** (PR #23), **1.6.0 wydane** (PR #22), **1.5.4 wydane** (PR #21; job Windows na `main`
+za drugim razem – za pierwszym jednorazowo zawiesił się test duplikatów,
 ten sam kod przeszedł w PR, po ponowieniu i lokalnie 5 razy z rzędu), **1.5.3 wydane** (PR #20), **1.5.2 wydane** (PR #19),
 **1.5.1 wydane** (PR #18), **1.5.0 wydane**
 (PR #17), **1.4.3 wydane** (PR #15 i poprawka szybkiego wpisu PR #16 – E2E na `main` złapał podwójny licznik zamknięcia

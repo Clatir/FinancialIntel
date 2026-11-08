@@ -15,6 +15,8 @@ export default defineConfig({
   },
   test: {
     testTimeout: 30000,
+    // Locally dots only – a line per file fills Claude's context (T529); CI keeps the default reporter.
+    reporters: process.env.CI ? ['default'] : ['dot'],
     // The data store checks its views updated in place against views built whole after every change (W8).
     env: { FI_VERIFY_VIEWS: '1' },
     projects: [

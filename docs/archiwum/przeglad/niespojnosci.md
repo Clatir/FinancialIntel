@@ -8,7 +8,12 @@ Priorytet: wysoki · obszar: domownicy i ICTTJ, Operacje, Plan, Ładownia, kreat
 
 Gdzie: `src/shared/schema/records.ts:122`, `src/shared/calc/fleet.ts:610`, `src/shared/calc/fleet.ts:614`, `src/shared/calc/operations.ts:100`, `src/renderer/features/operations/OperationEditor.tsx:248`, `src/renderer/features/starmap/StarMapPage.tsx:111`, `docs/decyzje.md:289`, `src/renderer/features/starmap/actions.ts:29` …
 
-**Co się dzieje.** Cel własny „Wakacje” ma uzbierane 5 000 zł. Użytkownik płaci 5 000 zł za wyjazd. Edytor operacji (ma tylko pole „Ładownia”), szybki wpis ani import nie pozwalają oznaczyć wydatku jako opłaconego z celu, więc silnik bierze go z energii i osłon. Skutki: czerwony alarm „Energia wyczerpana”, przekroczony przydział dnia albo koperta, a w grze naruszenie zamrażane po 24 h. Wydatek liczy się też do kosztów netto, więc rośnie cel kadłuba. Cel trzyma 5 000 zł na zawsze, bo nie ma akcji „przenieś środki celu do osłon”, także dla celu zarchiwizowanego. Według T24 i tekstu Mapy gwiezdnej („wydatek z tego celu je zużywa”) wydatek powinien zejść z celu.
+**Co się dzieje.** Cel własny „Wakacje” ma uzbierane 5 000 zł. Użytkownik płaci 5 000 zł za wyjazd. Edytor operacji (ma
+tylko pole „Ładownia”), szybki wpis ani import nie pozwalają oznaczyć wydatku jako opłaconego z celu, więc silnik bierze
+go z energii i osłon. Skutki: czerwony alarm „Energia wyczerpana”, przekroczony przydział dnia albo koperta, a w grze
+naruszenie zamrażane po 24 h. Wydatek liczy się też do kosztów netto, więc rośnie cel kadłuba. Cel trzyma 5 000 zł na
+zawsze, bo nie ma akcji „przenieś środki celu do osłon”, także dla celu zarchiwizowanego. Według T24 i tekstu Mapy
+gwiezdnej („wydatek z tego celu je zużywa”) wydatek powinien zejść z celu.
 
 **Poprawka.** W edytorze operacji dodać pole „Z celu” dla wydatku (lista celów aktywnych i zarchiwizowanych, które mają środki; patch `goalId`, a przy zmianie rodzaju `withKind` zdejmuje goalId). Opcjonalnie to samo w szybkim wpisie i w decyzji grupy importu. Na Mapie gwiezdnej dodać akcję „Zwolnij środki do osłon” dla celu (najprościej rekord przeniesienia albo zdarzenie w silniku), bo T31 zabrania silnikowi ruszać cele samemu.
 
@@ -27,9 +32,19 @@ Gdzie: `src/renderer/features/settings/AccountsTab.tsx:126`, `src/renderer/featu
 - Plan miesiąca: pole pensji i kopert przyjmuje wpis, a po wyjściu z pola bez komunikatu wraca stara wartość.
 Tymczasem edytor operacji i „Warstwy i rozkazy” są wyłączone (fieldset disabled), import mówi „Folder tylko do odczytu”, a szybki wpis – „Folder jest tylko do odczytu.”.
 
-**Poprawka.** addRecord, addRecords, replaceRecords i updateSettings mają zwracać boolean (false przy folderze tylko do odczytu). confirmBalance, setOpening, categorizeTicked, financeTicked i changeAliases pokazują toast sukcesu i „Cofnij” tylko po true, a w przeciwnym razie jeden wspólny komunikat „Folder jest tylko do odczytu”. W AccountsTab, CategoriesTab, ImportTab i w BulkBar Operacji czytać status.readOnly i wyłączać pola (fieldset disabled, jak w OperationEditor). W MonthPage usunąć strażnik `!readOnly &&` przy onChange, bo editPlan sam pokaże komunikat, albo ustawić readOnly na AmountField.
+**Poprawka.** addRecord, addRecords, replaceRecords i updateSettings mają zwracać boolean (false przy folderze tylko do
+odczytu). confirmBalance, setOpening, categorizeTicked, financeTicked i changeAliases pokazują toast sukcesu i „Cofnij”
+tylko po true, a w przeciwnym razie jeden wspólny komunikat „Folder jest tylko do odczytu”. W AccountsTab,
+CategoriesTab, ImportTab i w BulkBar Operacji czytać status.readOnly i wyłączać pola (fieldset disabled, jak w
+OperationEditor). W MonthPage usunąć strażnik `!readOnly &&` przy onChange, bo editPlan sam pokaże komunikat, albo
+ustawić readOnly na AmountField.
 
-To samo zgłoszone też jako: „W folderze tylko do odczytu Ustawienia → Import, słowa kluczowe, połączone nazwy i potwierdzenie salda pokazują sukces, choć nic się nie zapisuje”; „Tryb tylko do odczytu: akcje zbiorcze w Operacjach i potwierdzenie salda zgłaszają sukces, choć nic się nie zapisało”; „Tryb tylko do odczytu: Konta, Kategorie i Okręt można edytować, a potwierdzenie salda melduje sukces, choć nic nie zapisuje”; „Folder tylko do odczytu: część pól Domowników, Mapy gwiezdnej i Dokowania przyjmuje zmiany, które bez słowa przepadają”; „Tryb tylko do odczytu na stronie Synchronizacja: przyciski konfliktów i „Do Kosza” aktywne, „Przywróć” wyłączone”.
+To samo zgłoszone też jako: „W folderze tylko do odczytu Ustawienia → Import, słowa kluczowe, połączone nazwy i
+potwierdzenie salda pokazują sukces, choć nic się nie zapisuje”; „Tryb tylko do odczytu: akcje zbiorcze w Operacjach i
+potwierdzenie salda zgłaszają sukces, choć nic się nie zapisało”; „Tryb tylko do odczytu: Konta, Kategorie i Okręt można
+edytować, a potwierdzenie salda melduje sukces, choć nic nie zapisuje”; „Folder tylko do odczytu: część pól Domowników,
+Mapy gwiezdnej i Dokowania przyjmuje zmiany, które bez słowa przepadają”; „Tryb tylko do odczytu na stronie
+Synchronizacja: przyciski konfliktów i „Do Kosza” aktywne, „Przywróć” wyłączone”.
 
 ## N3. Szybki wpis: podgląd „Energia dziś → …” liczy inaczej niż silnik (kategoria bez koperty, data inna niż dziś)
 
@@ -41,7 +56,11 @@ Gdzie: `src/renderer/features/quick/QuickApp.tsx:142-144`, `src/renderer/feature
 (1) Kategoria główna ma w Ustawienia → Kategorie kopertę „brak” (envelope null). Wydatek 100 zł w tej kategorii: podgląd pokazuje „Energia dziś: 110,71 zł → 10,71 zł”, a przy niskiej energii wynik na czerwono poniżej zera. Po zapisie Mostek, zasobnik i odprawa dalej pokazują 110,71 zł. Silnik liczy do energii dnia tylko kategorie codzienne i wydatki bez kategorii, a ten wydatek zdejmuje tylko energię miesiąca.
 (2) Wieczorem albo rano użytkownik dopisuje wczorajszy zakup 140 zł (pole Data w szybkim wpisie). Podgląd odejmuje całe 140 zł od dzisiejszej energii. Silnik rozkłada wydatek sprzed dziś na pozostałe dni, więc przy 14 dniach energia dziś spada o 10 zł.
 
-**Poprawka.** Najpewniej liczyć podgląd silnikiem: quickHost na żądanie okna (np. przez quickData z dopisaną operacją szkicu) przelicza computeFleet z tą operacją i odsyła daily.left oraz envelopes[].left po operacji. Minimum w QuickApp: (1) `c.envelope === 'daily' || !c` → energia dnia; `c.envelope === null` → osobny wiersz „poza kopertami – nie zmienia energii dnia”; (2) gdy d.date < dziś i ten sam miesiąc → spadek ≈ kwota / pozostałe dni („przydział od dziś mniejszy o …”); gdy inny miesiąc → bez podglądu energii dnia.
+**Poprawka.** Najpewniej liczyć podgląd silnikiem: quickHost na żądanie okna (np. przez quickData z dopisaną operacją
+szkicu) przelicza computeFleet z tą operacją i odsyła daily.left oraz envelopes[].left po operacji. Minimum w QuickApp:
+(1) `c.envelope === 'daily' || !c` → energia dnia; `c.envelope === null` → osobny wiersz „poza kopertami – nie zmienia
+energii dnia”; (2) gdy d.date < dziś i ten sam miesiąc → spadek ≈ kwota / pozostałe dni („przydział od dziś mniejszy o
+…”); gdy inny miesiąc → bez podglądu energii dnia.
 
 To samo zgłoszone też jako: „Podgląd „Energia dziś X → Y” w szybkim wpisie liczy inaczej niż silnik (data spoza dziś, kategoria „bez koperty”)”; „Szybki wpis: wydatek w kategorii „poza kopertami” zmniejsza energię dziś w podglądzie, a w silniku nie”.
 
@@ -51,7 +70,11 @@ Priorytet: średni · obszar: całość
 
 Gdzie: `src/shared/calc/income.ts:129`, `src/shared/calc/income.ts:145`, `src/shared/calc/income.ts:79`, `src/shared/calc/intel.ts:310`, `src/shared/export/budget.ts:136`, `src/renderer/features/month/IncomePanel.tsx:27`
 
-**Co się dzieje.** 6 pełnych miesięcy: praca 5 000 zł co miesiąc, a w trzech z nich dopłata do XTB 6 000 zł. Panel „Przychody” (Mostek, Plan miesiąca) w kolumnie „mediana” pokazuje: Praca i inne 5 000 zł, Trading 0 zł, Razem 2 000 zł. „Razem” jest mniejsze niż „Praca” w tej samej kolumnie. Przegląd roczny i eksport „Miesiące” CSV / Excel pokazują dla każdego z tych miesięcy 5 000 zł (trading netto miesiąca nigdy poniżej zera – T119), a okno 6 mies. 5 000 zł. Ta sama historia daje medianę 2 000 zł, choć w raportach żaden miesiąc nie ma mniej niż 5 000 zł.
+**Co się dzieje.** 6 pełnych miesięcy: praca 5 000 zł co miesiąc, a w trzech z nich dopłata do XTB 6 000 zł. Panel
+„Przychody” (Mostek, Plan miesiąca) w kolumnie „mediana” pokazuje: Praca i inne 5 000 zł, Trading 0 zł, Razem 2 000 zł.
+„Razem” jest mniejsze niż „Praca” w tej samej kolumnie. Przegląd roczny i eksport „Miesiące” CSV / Excel pokazują dla
+każdego z tych miesięcy 5 000 zł (trading netto miesiąca nigdy poniżej zera – T119), a okno 6 mies. 5 000 zł. Ta sama
+historia daje medianę 2 000 zł, choć w raportach żaden miesiąc nie ma mniej niż 5 000 zł.
 
 **Poprawka.** W incomeStats miesiąc liczyć jak incomeOfPeriod: `total: v.work + Math.max(0, v.trading)`. Można też w polu months trzymać trading już obcięty, bo mediana tradingu się nie zmieni (funkcja monotoniczna i tak obcina). Dodać test do tests/unit/income.test.ts.
 
@@ -61,9 +84,21 @@ Priorytet: średni · obszar: całość, Operacje, Plan, Ładownia, kreator, gra
 
 Gdzie: `src/shared/calc/game.ts:237`, `src/shared/calc/game.ts:187`, `src/shared/calc/game.ts:224-235`, `src/shared/calc/game.ts:305`, `src/shared/calc/game.ts:382`, `src/shared/calc/game.ts:330`, `tests/unit/game.test.ts:93-95`, `docs/decyzje.md:228` …
 
-**Co się dzieje.** Użytkownik o 23:30 kupuje w Żabce za 30 zł dla domownika („finansuje: Dom”, `refundable: true`). Energia i koperty słusznie tego nie widzą (daily.left bez zmian, należność 30 zł), ale `rateDay` dopisuje poważne naruszenie „Zakup w ciszy nocnej” na całą kwotę paragonu. Tak samo zakup za domownika na 3 500 zł, który zgodnie z D80 d „pożyczają osłony”, spycha osłony poniżej minimum → poważne „Osłony poniżej minimum” (wydatek jest w DECISIONS). Dzień zamraża się na zawsze: przerwana seria, licznik degradacji, a 3 takie zdarzenia w miesiącu degradują stopień. Do tego misja „Cisza w eterze” jest wybierana i oblewana, a „Zero impulsów” oblewana przez cudze zakupy. D80 f i T107 mówią wprost: „wydatek sfinansowany przez domownika nie jest naruszeniem w grze”.
+**Co się dzieje.** Użytkownik o 23:30 kupuje w Żabce za 30 zł dla domownika („finansuje: Dom”, `refundable: true`).
+Energia i koperty słusznie tego nie widzą (daily.left bez zmian, należność 30 zł), ale `rateDay` dopisuje poważne
+naruszenie „Zakup w ciszy nocnej” na całą kwotę paragonu. Tak samo zakup za domownika na 3 500 zł, który zgodnie z D80 d
+„pożyczają osłony”, spycha osłony poniżej minimum → poważne „Osłony poniżej minimum” (wydatek jest w DECISIONS). Dzień
+zamraża się na zawsze: przerwana seria, licznik degradacji, a 3 takie zdarzenia w miesiącu degradują stopień. Do tego
+misja „Cisza w eterze” jest wybierana i oblewana, a „Zero impulsów” oblewana przez cudze zakupy. D80 f i T107 mówią
+wprost: „wydatek sfinansowany przez domownika nie jest naruszeniem w grze”.
 
-**Poprawka.** W rateDay liczyć ciszę nocną z części własnej: `const own = -sum(partsOf(t).filter((p) => !p.refundable).map((p) => p.amount)); if (isNight(t, orders) && own > 0) add('quiet', own, t.id, t.counterparty)`. Celowo nie przez costOf, który zeruje też zakupy z pieniędzy celu (goalId). Tak samo w chooseMission.quiet i missionStatus 'quiet'. W `moved` dla osłon nie liczyć pożyczki dla domownika: dodać z powrotem przepływy `lent` / `fromDeposit` z f.household.byTx dla operacji dnia albo pominąć wpisy 'expense' operacji bez części własnej. Test game.test.ts:94 przepisać na decyzję, która naprawdę rusza osłony (np. udzielona pożyczka albo dopłata 'trading') i dodać test D80 f (cisza nocna i osłony przy zakupie finansowanym).
+**Poprawka.** W rateDay liczyć ciszę nocną z części własnej: `const own = -sum(partsOf(t).filter((p) =>
+!p.refundable).map((p) => p.amount)); if (isNight(t, orders) && own > 0) add('quiet', own, t.id, t.counterparty)`.
+Celowo nie przez costOf, który zeruje też zakupy z pieniędzy celu (goalId). Tak samo w chooseMission.quiet i
+missionStatus 'quiet'. W `moved` dla osłon nie liczyć pożyczki dla domownika: dodać z powrotem przepływy `lent` /
+`fromDeposit` z f.household.byTx dla operacji dnia albo pominąć wpisy 'expense' operacji bez części własnej. Test
+game.test.ts:94 przepisać na decyzję, która naprawdę rusza osłony (np. udzielona pożyczka albo dopłata 'trading') i
+dodać test D80 f (cisza nocna i osłony przy zakupie finansowanym).
 
 To samo zgłoszone też jako: „Zakup finansowany przez domownika w ciszy nocnej jest poważnym naruszeniem w grze – wbrew D80 f / T107”; „Cisza nocna i pytanie dziennika także przy zakupach finansowanych przez domownika (gra liczy je jako poważne naruszenie)”.
 
@@ -73,7 +108,13 @@ Priorytet: średni · obszar: całość, Operacje, Plan, Ładownia, kreator, sil
 
 Gdzie: `src/shared/calc/plan.ts:290`, `src/shared/calc/plan.ts:326`, `src/shared/calc/fleet.ts:535`, `src/shared/calc/fleet.ts:573`, `src/shared/calc/briefing.ts:52`, `src/renderer/features/month/MonthPage.tsx:289`, `src/shared/calc/game.ts:482`, `src/renderer/features/month/MonthPage.tsx:296` …
 
-**Co się dzieje.** (a) Pensja 5 000 zł, rata odkładki OC 100 zł, wydatki 4 950 zł. Odprawa pokazuje czerwony alarm „Energia wyczerpana: 50,00 zł ponad pensję poszło z osłon”, a debriefing jednocześnie gra fanfarę z dźwiękiem: „Miesiąc zamknięty na plus – koszty netto 4 950 zł nie przekroczyły pensji 5 000 zł”. (b) W grudniu OC 1 200 zł zapłacono ze zbiornika uzbieranego przez rok z pensji. Zostało 400 zł łupów, a debriefing mówi „Koszty netto 3 700 – ponad pensję o 700 zł”, co przerywa osiągnięcie Hat-trick. Silnik traktuje opłatę okresową jako koszt zbiornika, „nigdy pensji” (fleet.ts:573, T45), a debriefing liczy ją w całości jako koszt miesiąca. Sprzeczne komunikaty wynikają z reguły T52 (koszty netto ≤ pensja), więc poprawka wymaga zmiany decyzji.
+**Co się dzieje.** (a) Pensja 5 000 zł, rata odkładki OC 100 zł, wydatki 4 950 zł. Odprawa pokazuje czerwony alarm
+„Energia wyczerpana: 50,00 zł ponad pensję poszło z osłon”, a debriefing jednocześnie gra fanfarę z dźwiękiem: „Miesiąc
+zamknięty na plus – koszty netto 4 950 zł nie przekroczyły pensji 5 000 zł”. (b) W grudniu OC 1 200 zł zapłacono ze
+zbiornika uzbieranego przez rok z pensji. Zostało 400 zł łupów, a debriefing mówi „Koszty netto 3 700 – ponad pensję o
+700 zł”, co przerywa osiągnięcie Hat-trick. Silnik traktuje opłatę okresową jako koszt zbiornika, „nigdy pensji”
+(fleet.ts:573, T45), a debriefing liczy ją w całości jako koszt miesiąca. Sprzeczne komunikaty wynikają z reguły T52
+(koszty netto ≤ pensja), więc poprawka wymaga zmiany decyzji.
 
 **Poprawka.** Bez zmiany decyzji: tekst alarmu „Energia wyczerpana: X ponad energię miesiąca (pensja po ratach odkładek) poszło z osłon”. Do decyzji użytkownika (zmiana T52 / spec. 218): „na plus” = miesiąc bez 'energy-exhausted' i łupy ≥ 0, albo koszty netto bez płatności pokrytych ze zbiorników plus raty odkładek tego miesiąca z logu silnika ≤ pensja. Hattrick i debriefing wtedy z tej samej reguły.
 
@@ -85,7 +126,11 @@ Priorytet: średni · obszar: całość, domownicy i ICTTJ, Operacje, Plan, Ład
 
 Gdzie: `src/renderer/features/wizard/WizardPage.tsx:230`, `src/renderer/features/wizard/WizardPage.tsx:280`, `src/renderer/features/wizard/state.ts:119`, `docs/specyfikacja.md:397`, `docs/specyfikacja.md:398`, `src/shared/calc/start.ts:30`, `src/shared/calc/fleet.ts:744`, `src/renderer/features/wizard/state.ts:18` …
 
-**Co się dzieje.** Aplikacja ma wersję 1.4.1, a Mapa gwiezdna i ICTTJ działają od 1.1.0. Kreator nadal pisze „Cele dojdą z Mapą gwiezdną (wersja 1.1)” i „Folder ICT Trade Journal (wypłaty i cele) podłączysz w wersji 1.1”. Spec: krok 5 to podział obecnych środków na osłony, kadłub i cele, a krok 6 to folder ICTTJ (opcjonalnie). W kreatorze cele w podziale są zawsze puste (`goals: {}`), a folderu ICTTJ nie da się wskazać. Nowy użytkownik z celami w ICTTJ ma wszystkie środki w osłonach i kadłubie i czyta, że ta funkcja dopiero będzie.
+**Co się dzieje.** Aplikacja ma wersję 1.4.1, a Mapa gwiezdna i ICTTJ działają od 1.1.0. Kreator nadal pisze „Cele dojdą
+z Mapą gwiezdną (wersja 1.1)” i „Folder ICT Trade Journal (wypłaty i cele) podłączysz w wersji 1.1”. Spec: krok 5 to
+podział obecnych środków na osłony, kadłub i cele, a krok 6 to folder ICTTJ (opcjonalnie). W kreatorze cele w podziale
+są zawsze puste (`goals: {}`), a folderu ICTTJ nie da się wskazać. Nowy użytkownik z celami w ICTTJ ma wszystkie środki
+w osłonach i kadłubie i czyta, że ta funkcja dopiero będzie.
 
 **Poprawka.** W kroku „Podział środków” pokazać listę niezarchiwizowanych celów (rekordy goals – własne i z ICTTJ, w kolejności priorytetów) z kwotami na start. Zapisać je w `budget.initial.goals`: reszta do osłon, walidacja: kadłub + cele ≤ środki. W kroku „Okręt i rozkazy” dodać opcjonalny wybór folderu ICTTJ (ictjSuggest + setIctjDir, jak w IctjTab), żeby cele ICTTJ były rekordami jeszcze przed krokiem 5. Usunąć oba napisy o „wersji 1.1” i komentarz w src/shared/calc/start.ts:34.
 
@@ -97,7 +142,11 @@ Priorytet: średni · obszar: Operacje, Plan, Ładownia, kreator
 
 Gdzie: `src/renderer/features/month/MonthPage.tsx:172`, `src/renderer/features/month/MonthPage.tsx:203`, `src/shared/calc/plan.ts:226`, `src/shared/calc/fleet.ts:897-898`, `src/shared/calc/operations.ts:58`
 
-**Co się dzieje.** Kategoria „Osobiste” ma kopertę codzienną 310 zł i użytkownik archiwizuje ją w Ustawieniach. W „Podziale pensji” wiersza Osobiste już nie ma, więc nie da się wyczyścić pola. Nagłówek „Koperty codzienne” pokazuje jednak 1 210 zł zamiast 900 zł, a „Rozdzielone” i „Niezaplanowane (łupy)” dalej ją liczą. Silnik dolicza 310 zł do energii dnia i dziennego przydziału, a w panelu „Koperty” pasek Osobiste dalej jest. Kopia planu na kolejne miesiące (T46) przenosi kopertę dalej. Jedyne wyjście: przywrócić kategorię, wyczyścić kopertę i znów zarchiwizować.
+**Co się dzieje.** Kategoria „Osobiste” ma kopertę codzienną 310 zł i użytkownik archiwizuje ją w Ustawieniach. W
+„Podziale pensji” wiersza Osobiste już nie ma, więc nie da się wyczyścić pola. Nagłówek „Koperty codzienne” pokazuje
+jednak 1 210 zł zamiast 900 zł, a „Rozdzielone” i „Niezaplanowane (łupy)” dalej ją liczą. Silnik dolicza 310 zł do
+energii dnia i dziennego przydziału, a w panelu „Koperty” pasek Osobiste dalej jest. Kopia planu na kolejne miesiące
+(T46) przenosi kopertę dalej. Jedyne wyjście: przywrócić kategorię, wyczyścić kopertę i znów zarchiwizować.
 
 **Poprawka.** W SplitPanel pokazywać także zarchiwizowane kategorie, które mają kopertę w planie miesiąca, z dopiskiem „zarchiwizowana” i możliwością wyczyszczenia. Dodatkowo przy archiwizacji kategorii (patchCategory archived: true) zdejmować jej kopertę z planu bieżącego i późniejszych miesięcy z „Cofnij”. Ewentualnie pomijać zarchiwizowane w salarySplit i silniku, ale wtedy musi to być spójne z debriefingiem minionych miesięcy (np. pomijać od miesiąca archiwizacji).
 
@@ -107,7 +156,12 @@ Priorytet: średni · obszar: Operacje, Plan, Ładownia, kreator
 
 Gdzie: `src/renderer/features/wizard/WizardPage.tsx:75`, `src/renderer/features/wizard/WizardPage.tsx:77`, `src/renderer/features/wizard/WizardPage.tsx:216`, `src/renderer/features/wizard/WizardPage.tsx:53`, `src/renderer/features/wizard/WizardPage.tsx:139`, `src/shared/calc/fleet.ts:108`, `src/shared/calc/fleet.ts:573`, `src/renderer/features/month/MonthPage.tsx:54`
 
-**Co się dzieje.** W kreatorze (krok 4) użytkownik zaznacza z propozycji OC 1 240 zł płacone co rok (ostatnio w 2025-11, więc kolejne za miesiąc). Kreator liczy odkładkę pierwszego miesiąca jako `sinkingSchedule(...)[0]`, czyli 103,33 zł, i z tą kwotą pokazuje „Niezaplanowane (łupy)”. Silnik w miesiącu startu (T29) dorzuca brak zbiornika: rata = 619,98 zł. Tę kwotę pokaże potem Plan miesiąca bieżącego miesiąca (sinkingOf z logu). Kwota „niezaplanowane” z kreatora różni się więc o ok. 517 zł i może się zmienić w „Plan przekracza pensję”. Podobnie notka „pierwsza pensja na resztę miesiąca to X” (krok 3) odejmuje wszystkie koszty miesiąca, a silnik (T45) pomija płatności opłat okresowych podpiętych do kontenerów.
+**Co się dzieje.** W kreatorze (krok 4) użytkownik zaznacza z propozycji OC 1 240 zł płacone co rok (ostatnio w 2025-11,
+więc kolejne za miesiąc). Kreator liczy odkładkę pierwszego miesiąca jako `sinkingSchedule(...)[0]`, czyli 103,33 zł, i
+z tą kwotą pokazuje „Niezaplanowane (łupy)”. Silnik w miesiącu startu (T29) dorzuca brak zbiornika: rata = 619,98 zł. Tę
+kwotę pokaże potem Plan miesiąca bieżącego miesiąca (sinkingOf z logu). Kwota „niezaplanowane” z kreatora różni się więc
+o ok. 517 zł i może się zmienić w „Plan przekracza pensję”. Podobnie notka „pierwsza pensja na resztę miesiąca to X”
+(krok 3) odejmuje wszystkie koszty miesiąca, a silnik (T45) pomija płatności opłat okresowych podpiętych do kontenerów.
 
 **Poprawka.** W kreatorze liczyć odkładki pierwszego miesiąca jak silnik: `sinkingInstallment(c, month, 0)` dla istniejących kontenerów z cyklem > 1 i dla `draftFromPayment(p)` wybranych propozycji. Najlepiej pokazać obie kwoty: „w tym miesiącu X (zbiornik nadrabia), potem Y”. W spentThisMonth pomijać płatności opłat okresowych: z containerId kontenera z cyklem > 1 oraz te, które finishWizard podepnie (payeeKey równe kluczowi wybranej propozycji z cyklem > 1).
 
@@ -117,7 +171,11 @@ Priorytet: średni · obszar: Operacje, Plan, Ładownia, kreator
 
 Gdzie: `src/renderer/features/operations/state.ts:179`, `src/renderer/features/operations/OperationEditor.tsx:186`, `src/renderer/features/operations/OperationEditor.tsx:295`, `src/renderer/features/quick/QuickApp.tsx:184`, `src/shared/calc/game.ts:237`, `src/shared/calc/game.ts:42`
 
-**Co się dzieje.** D40 i spec (l. 143): zakup z godziną w ciszy nocnej wymaga potwierdzenia i krótkiego wpisu, a poważne naruszenie to „potwierdzony zakup w ciszy nocnej”. Szybki wpis tego wymaga: nie zapisze bez potwierdzenia i notatki. W Operacjach Ctrl+N tworzy wydatek z bieżącą godziną (warsawNow().time) i zapisuje go bez żadnego pytania – jest tylko mały znaczek „noc”. Użytkownik, który o 23:20 dopisuje w Operacjach zakupy z całego dnia („wieczorne dopisanie”), dostaje każdy jako nocny zakup. game.ts dla każdego isNight dopisuje poważne naruszenie 'quiet', bez potwierdzenia.
+**Co się dzieje.** D40 i spec (l. 143): zakup z godziną w ciszy nocnej wymaga potwierdzenia i krótkiego wpisu, a poważne
+naruszenie to „potwierdzony zakup w ciszy nocnej”. Szybki wpis tego wymaga: nie zapisze bez potwierdzenia i notatki. W
+Operacjach Ctrl+N tworzy wydatek z bieżącą godziną (warsawNow().time) i zapisuje go bez żadnego pytania – jest tylko
+mały znaczek „noc”. Użytkownik, który o 23:20 dopisuje w Operacjach zakupy z całego dnia („wieczorne dopisanie”),
+dostaje każdy jako nocny zakup. game.ts dla każdego isNight dopisuje poważne naruszenie 'quiet', bez potwierdzenia.
 
 **Poprawka.** W OperationEditor przy godzinie w ciszy nocnej wymagać potwierdzenia (przełącznik „tak, kupiłem w nocy” + krótki wpis w logNote). Bez potwierdzenia nie traktować wpisu jako nocnego, np. zapisać time = null albo poprosić o godzinę. Nowy wpis z Operacji (zwłaszcza z przypomnienia wieczornego) zakładać bez godziny. Dla spójności z D40 rateDay powinien liczyć 'quiet' tylko dla potwierdzonych nocnych zakupów (wymaga doprecyzowania T75 z użytkownikiem).
 
@@ -127,7 +185,13 @@ Priorytet: średni · obszar: Operacje, Plan, Ładownia, kreator, silnik budżet
 
 Gdzie: `src/shared/calc/fleet.ts:835`, `src/shared/calc/fleet.ts:897`, `src/shared/calc/fleet.ts:891`, `src/shared/calc/plan.ts:236`, `src/shared/calc/plan.ts:305`, `src/shared/calc/plan.ts:314`, `src/renderer/features/month/MonthPage.tsx:221`, `src/renderer/features/month/MonthPage.tsx:254` …
 
-**Co się dzieje.** Plan: Jedzenie (koperta codzienna) 3 100 zł, październik ma 31 dni, a decyzja łupów dała 310 zł na następny miesiąc (T28: „powiększa koperty codzienne”). Na stronie Plan miesiąca panel „Dzienny przydział” pokazuje podstawowy przydział 110 zł i limit 3 410 zł. Panel „Podział pensji” na tej samej stronie pokazuje „Podstawowy przydział: 100 zł dziennie”. Po miesiącu z wydatkiem 3 300 zł silnik nie zgłosił przekroczenia, a debriefing (FVG) pokazuje Jedzenie „3 300 z 3 100 zł, −200 zł” na czerwono. Podobnie z wydatkami bez kategorii: w trakcie miesiąca zjadają energię dziś (T30), a w debriefingu są osobno („Bez kategorii”), więc FVG kopert codziennych wygląda dobrze, choć przydział był przekroczony.
+**Co się dzieje.** Plan: Jedzenie (koperta codzienna) 3 100 zł, październik ma 31 dni, a decyzja łupów dała 310 zł na
+następny miesiąc (T28: „powiększa koperty codzienne”). Na stronie Plan miesiąca panel „Dzienny przydział” pokazuje
+podstawowy przydział 110 zł i limit 3 410 zł. Panel „Podział pensji” na tej samej stronie pokazuje „Podstawowy
+przydział: 100 zł dziennie”. Po miesiącu z wydatkiem 3 300 zł silnik nie zgłosił przekroczenia, a debriefing (FVG)
+pokazuje Jedzenie „3 300 z 3 100 zł, −200 zł” na czerwono. Podobnie z wydatkami bez kategorii: w trakcie miesiąca
+zjadają energię dziś (T30), a w debriefingu są osobno („Bez kategorii”), więc FVG kopert codziennych wygląda dobrze,
+choć przydział był przekroczony.
 
 **Poprawka.** Przekazać do salarySplit i debriefing dodatek z łupów (zdarzenie 'loot' z moves.energy w danym miesiącu albo `plan.loot.nextMonth` poprzedniego miesiąca) i pokazać go jako osobną pozycję „+ łupy z poprzedniego miesiąca” w kopertach codziennych. Podstawowy przydział = (koperty codzienne + dodatek) / dni. W debriefingu dodać wiersz sumy puli codziennej (koperty + dodatek wobec wydatków codziennych razem z bez kategorii), żeby FVG puli zgadzało się z silnikiem.
 
@@ -139,7 +203,12 @@ Priorytet: średni · obszar: import (ekran)
 
 Gdzie: `src/renderer/features/import/state.ts:120`, `src/renderer/features/import/state.ts:126`, `src/renderer/features/import/state.ts:142`, `src/renderer/features/import/state.ts:250`, `src/renderer/features/import/ImportPage.tsx:76`, `src/renderer/features/import/ImportPage.tsx:96`, `src/renderer/features/import/ImportPage.tsx:101`, `src/main/index.ts:1015`
 
-**Co się dzieje.** Pierwszy import roku: kilkaset grup, użytkownik zdecydował połowę tematów, jeszcze bez importu. Pobiera drugi plik i upuszcza go na panel albo klika „Wybierz plik CSV…”, albo przez pomyłkę upuszcza PDF wyciągu. loadImportFile zawsze ustawia puste choices, a przy błędzie file: null, plan: null – poprzedni plik i wszystkie jego decyzje znikają bez pytania i bez „Cofnij”. To samo robi „Zamknij plik” jednym kliknięciem. Decyzje są tylko w pamięci okna: przeładowanie po awarii (render-process-gone → reload) albo zamknięcie aplikacji też je gubi. Konwencja projektu: „opuszczenie ekranu nigdy nie gubi zmian”, usuwanie z „Cofnij”.
+**Co się dzieje.** Pierwszy import roku: kilkaset grup, użytkownik zdecydował połowę tematów, jeszcze bez importu.
+Pobiera drugi plik i upuszcza go na panel albo klika „Wybierz plik CSV…”, albo przez pomyłkę upuszcza PDF wyciągu.
+loadImportFile zawsze ustawia puste choices, a przy błędzie file: null, plan: null – poprzedni plik i wszystkie jego
+decyzje znikają bez pytania i bez „Cofnij”. To samo robi „Zamknij plik” jednym kliknięciem. Decyzje są tylko w pamięci
+okna: przeładowanie po awarii (render-process-gone → reload) albo zamknięcie aplikacji też je gubi. Konwencja projektu:
+„opuszczenie ekranu nigdy nie gubi zmian”, usuwanie z „Cofnij”.
 
 **Poprawka.** Gdy otwarty plik ma decyzje (choices niepuste albo `accepted` / `skip`): przed „Zamknij plik” i przed wczytaniem innego pliku pytanie albo toast „Cofnij” przywracający poprzednią sesję (zachować poprzedni stan useImport w zmiennej). Błędny plik pokazać jako komunikat obok otwartego, bez zerowania `file` / `plan`. Opcjonalnie szkic decyzji w localStorage (klucz: konto + okres + odcisk pliku) odtwarzany po przeładowaniu.
 
@@ -149,7 +218,13 @@ Priorytet: średni · obszar: import (ekran)
 
 Gdzie: `src/renderer/features/import/ImportPage.tsx:156`, `src/renderer/features/import/ImportPage.tsx:200`, `src/renderer/features/import/state.ts:465`, `src/shared/calc/briefing.ts:175`, `src/shared/calc/dock.ts:130`, `src/shared/calc/game.ts:406`
 
-**Co się dzieje.** Ktoś przez kilka dni nie płacił kartą (np. był na urlopie). Wypłata z ICTTJ poszła do Portfela XTB. Użytkownik pobiera z mBanku świeży CSV, w którym są tylko znane już wiersze. Przycisk pokazuje „Nic nowego w tym pliku” i jest wyłączony, więc runImport się nie wykona. W efekcie settings.import.lastImport i log się nie zmieniają. Odprawa i powiadomienie dalej mówią „ostatni import N dni temu – zaimportuj nowy plik”. Dostawa ICTTJ zostaje 'waiting' (warunek importedOn > until), więc nie trafi do Portfela XTB. Ten import nie liczy się też do misji „Łączność z bazą”. lastImport ma znaczyć „czas ostatniego importu” (T42) – a import faktycznie się odbył, tylko nic nie zmienił. Druga strona tej samej przyczyny: znalezisko o „ostatnim imporcie” jako czasie kliknięcia, nie zasięgu pliku.
+**Co się dzieje.** Ktoś przez kilka dni nie płacił kartą (np. był na urlopie). Wypłata z ICTTJ poszła do Portfela XTB.
+Użytkownik pobiera z mBanku świeży CSV, w którym są tylko znane już wiersze. Przycisk pokazuje „Nic nowego w tym pliku”
+i jest wyłączony, więc runImport się nie wykona. W efekcie settings.import.lastImport i log się nie zmieniają. Odprawa i
+powiadomienie dalej mówią „ostatni import N dni temu – zaimportuj nowy plik”. Dostawa ICTTJ zostaje 'waiting' (warunek
+importedOn > until), więc nie trafi do Portfela XTB. Ten import nie liczy się też do misji „Łączność z bazą”. lastImport
+ma znaczyć „czas ostatniego importu” (T42) – a import faktycznie się odbył, tylko nic nie zmienił. Druga strona tej
+samej przyczyny: znalezisko o „ostatnim imporcie” jako czasie kliknięcia, nie zasięgu pliku.
 
 **Poprawka.** Gdy plik jest poprawny, ale nic nie zmienia, zamiast wyłączonego przycisku pokazać „Zapisz import (bez zmian)”. Taki import zapisuje lastImport[konto] i wpis w log, bez kopii zapasowej i bez rekordów. Ewentualnie zapisywać sam fakt wczytania, gdy okres pliku (file.period.to) sięga wczoraj albo dziś.
 
@@ -159,7 +234,15 @@ Priorytet: średni · obszar: import (logika)
 
 Gdzie: `src/shared/import/reconcile.ts:597-626`, `src/shared/import/learn.ts:135-137`, `src/shared/import/classify.ts:302-321`, `src/shared/calc/fleet.ts:695-716`, `docs/decyzje.md:477`, `docs/decyzje.md:566`, `docs/decyzje.md:632`
 
-**Co się dzieje.** Użytkownik pożycza koledze 1000 zł przelewem i w imporcie wybiera dla grupy „JAN NOWAK” „Pożyczka udzielona” („zapamiętaj” jest przy własnej decyzji domyślnie zaznaczone). buildImport uczy regułę dokładną 'jannowak' → kind 'loan'. Miesiąc później przelew 120 zł do tego samego kolegi „ZA BILETY KONCERT” dostaje z reguły rodzaj 'loan' ze źródłem 'rule' – temat jest „gotowy”, nikt o niego nie pyta. Operacja nie ma `loanId`, więc nie dotyczy żadnej pożyczki z Radaru (T70: „powiązanie z pożyczką ma tylko operacja rodzaju „Pożyczka” z jej id”), a silnik liczy ją jako nową należność bez rekordu (klucz '-'): pieniądze wychodzą z osłon zamiast z energii, wydatek nie trafia do kopert, Radar pokazuje należność, której nikt nie odda. Tak samo „Podatek PIT-38” dla przelewu do urzędu skarbowego: kolejna wpłata innego podatku bierze z rezerwy podatku. T98 i komentarz w learn.ts mówią wprost, że „pożyczka, XTB i podatek są decyzją dla każdej operacji” – dla słów kluczowych tak jest, ale nauka reguł dokładnych (T89) tego wyjątku nie ma.
+**Co się dzieje.** Użytkownik pożycza koledze 1000 zł przelewem i w imporcie wybiera dla grupy „JAN NOWAK” „Pożyczka
+udzielona” („zapamiętaj” jest przy własnej decyzji domyślnie zaznaczone). buildImport uczy regułę dokładną 'jannowak' →
+kind 'loan'. Miesiąc później przelew 120 zł do tego samego kolegi „ZA BILETY KONCERT” dostaje z reguły rodzaj 'loan' ze
+źródłem 'rule' – temat jest „gotowy”, nikt o niego nie pyta. Operacja nie ma `loanId`, więc nie dotyczy żadnej pożyczki
+z Radaru (T70: „powiązanie z pożyczką ma tylko operacja rodzaju „Pożyczka” z jej id”), a silnik liczy ją jako nową
+należność bez rekordu (klucz '-'): pieniądze wychodzą z osłon zamiast z energii, wydatek nie trafia do kopert, Radar
+pokazuje należność, której nikt nie odda. Tak samo „Podatek PIT-38” dla przelewu do urzędu skarbowego: kolejna wpłata
+innego podatku bierze z rezerwy podatku. T98 i komentarz w learn.ts mówią wprost, że „pożyczka, XTB i podatek są decyzją
+dla każdej operacji” – dla słów kluczowych tak jest, ale nauka reguł dokładnych (T89) tego wyjątku nie ma.
 
 **Poprawka.** W `buildImport` pomijać naukę reguł dla `c.kind` 'loan' i 'tax' (ta sama lista co `KEYWORD_KINDS` plus 'trading', które i tak rozpoznaje mechanizm wbudowany), a w UI nie pokazywać lub nie zaznaczać „zapamiętaj” przy takiej decyzji. Istniejące reguły loan i tax traktować jako propozycję (źródło inne niż 'rule', temat „do sprawdzenia”). Osobno warto rozważyć wybór pożyczki z Radaru przy decyzji „Pożyczka” w imporcie, bo dziś każda pożyczka z importu jest bez `loanId`.
 
@@ -169,9 +252,20 @@ Priorytet: średni · obszar: import (logika)
 
 Gdzie: `src/renderer/features/import/rules.ts:15`, `src/renderer/features/import/rules.ts:25-36`, `src/renderer/features/import/rules.ts:42-55`, `src/renderer/features/operations/OperationEditor.tsx:206`, `src/renderer/features/operations/OperationEditor.tsx:237-245`, `src/shared/import/reconcile.ts:135-136`, `src/shared/import/reconcile.ts:529-531`, `src/shared/import/similar.ts:149-151`
 
-**Co się dzieje.** Operacja z importu „SKLEP U ELI”. Użytkownik zmienia jej kontrahenta w edytorze na „Warzywniak pani Eli”, wybiera kategorię i klika „Zapamiętaj: „Warzywniak pani Eli” → Spożywcze”. Toast obiecuje: „Kolejne importy skategoryzują go same”. Reguła powstaje jednak na kluczu `warzywniakpanieli` (targetOf bierze t.counterparty), a kolejny wiersz z banku ma markę `sklepueli`, więc zostaje „do decyzji”. Przycisk znika, bo ruleFor(t) liczy tę samą nazwę. Gdzie indziej import pilnuje, że nazwę mógł zmienić użytkownik: rozliczanie nierozliczonych porównuje `tx.bank.counterparty` („the user may have renamed it”), a settle zachowuje zmienioną nazwę. similar.ts zakłada przy tym, że etykieta reguły to nazwa z banku – tu jest nazwą użytkownika. Tak samo uczy się decyzja zbiorcza „zapamiętaj dla marek” (rememberBrands).
+**Co się dzieje.** Operacja z importu „SKLEP U ELI”. Użytkownik zmienia jej kontrahenta w edytorze na „Warzywniak pani
+Eli”, wybiera kategorię i klika „Zapamiętaj: „Warzywniak pani Eli” → Spożywcze”. Toast obiecuje: „Kolejne importy
+skategoryzują go same”. Reguła powstaje jednak na kluczu `warzywniakpanieli` (targetOf bierze t.counterparty), a kolejny
+wiersz z banku ma markę `sklepueli`, więc zostaje „do decyzji”. Przycisk znika, bo ruleFor(t) liczy tę samą nazwę. Gdzie
+indziej import pilnuje, że nazwę mógł zmienić użytkownik: rozliczanie nierozliczonych porównuje `tx.bank.counterparty`
+(„the user may have renamed it”), a settle zachowuje zmienioną nazwę. similar.ts zakłada przy tym, że etykieta reguły to
+nazwa z banku – tu jest nazwą użytkownika. Tak samo uczy się decyzja zbiorcza „zapamiętaj dla marek” (rememberBrands).
 
-**Poprawka.** W rules.ts liczyć cel reguły tak samo jak `classifyRow`, czyli z danych banku: `const targetOf = (t) => ruleTargetOf({ counterparty: t.bank ? t.bank.counterparty : t.counterparty, title: t.title, operation: t.bank?.operation, bankName: t.bank?.bankName }, aliasesNow())`. `bank.counterparty` = '' daje rodzaj operacji, tak samo jak w imporcie. Etykieta: `brand.brand?.label ?? (t.bank?.counterparty || t.counterparty)`. `ruleFor` korzysta z tego samego `targetOf`, więc przycisk zostaje spójny. W tekście przycisku i komunikacie warto pokazać nazwę z banku (np. „„MOKKA SP Z O O” (Kawiarnia Mokka) → …”), żeby użytkownik wiedział, czego reguła się nauczy.
+**Poprawka.** W rules.ts liczyć cel reguły tak samo jak `classifyRow`, czyli z danych banku: `const targetOf = (t) =>
+ruleTargetOf({ counterparty: t.bank ? t.bank.counterparty : t.counterparty, title: t.title, operation:
+t.bank?.operation, bankName: t.bank?.bankName }, aliasesNow())`. `bank.counterparty` = '' daje rodzaj operacji, tak samo
+jak w imporcie. Etykieta: `brand.brand?.label ?? (t.bank?.counterparty || t.counterparty)`. `ruleFor` korzysta z tego
+samego `targetOf`, więc przycisk zostaje spójny. W tekście przycisku i komunikacie warto pokazać nazwę z banku (np.
+„„MOKKA SP Z O O” (Kawiarnia Mokka) → …”), żeby użytkownik wiedział, czego reguła się nauczy.
 
 ## N16. Propozycja reguły na słowo pokazuje inną decyzję niż ta, którą zapisuje
 
@@ -179,7 +273,11 @@ Priorytet: średni · obszar: import (logika)
 
 Gdzie: `src/renderer/features/import/Learning.tsx:133`, `src/renderer/features/import/Learning.tsx:141`, `src/renderer/features/import/Learning.tsx:145`, `src/renderer/features/import/rules.ts:73-77`
 
-**Co się dzieje.** Użytkownik decyduje grupę jako „Finansuje: Anna · Jedzenie” albo „Od domownika: Anna”. Pod grupą pojawia się „Reguła na słowo – Jedzenie” (albo „– Wpływ”), a toast po kliknięciu mówi „Słowo „x” → Wpływ”. saveKeywordRule zapisuje jednak refundable / household z osobą, a w Ustawieniach ta sama reguła wyświetla się przez ruleDecisionText jako „finansuje: Anna · Jedzenie” / „od domownika: Anna”. Jedna reguła ma więc dwa różne opisy, a przy propozycji nie widać, że słowo przypisze pieniądze lub zakupy osobie.
+**Co się dzieje.** Użytkownik decyduje grupę jako „Finansuje: Anna · Jedzenie” albo „Od domownika: Anna”. Pod grupą
+pojawia się „Reguła na słowo – Jedzenie” (albo „– Wpływ”), a toast po kliknięciu mówi „Słowo „x” → Wpływ”.
+saveKeywordRule zapisuje jednak refundable / household z osobą, a w Ustawieniach ta sama reguła wyświetla się przez
+ruleDecisionText jako „finansuje: Anna · Jedzenie” / „od domownika: Anna”. Jedna reguła ma więc dwa różne opisy, a przy
+propozycji nie widać, że słowo przypisze pieniądze lub zakupy osobie.
 
 **Poprawka.** W RuleProposal (i w toaście) opisywać decyzję jak w Ustawieniach: ruleDecisionText({ kind: choice.kind, categoryId: choice.categoryId, refundable: choice.refundable, household: choice.household, memberId: choice.memberId, … } as ImportRule, cats.label, members), np. „Reguła na słowo – finansuje: Anna · Jedzenie”. Rozważyć też, by dla refundable / household nie proponować słów (pieniądze osoby to raczej decyzja na kontrahenta, nie na słowo).
 
@@ -189,9 +287,21 @@ Priorytet: średni · obszar: folder danych i synchronizacja
 
 Gdzie: `src/renderer/features/sync/SyncPage.tsx:63`, `src/renderer/features/sync/SyncPage.tsx:81`, `src/main/datastore/store.ts:945`, `src/shared/merge.ts:86`, `src/renderer/features/sync/RemoteChangesDialog.tsx:143`, `docs/specyfikacja.md:365`
 
-**Co się dzieje.** Laptop offline: import dodaje 20 reguł i słów kluczowych do fi.json; w tym czasie na komputerze stacjonarnym użytkownik dodaje domownika. Po połączeniu OneDrive zostawia fi-LAPTOP.json. Strona Synchronizacja oferuje tylko „Zachowaj tę wersję” dla jednej strony – reguły z laptopa albo nowy domownik znikają w całości (do Kosza). To samo dla operacji zmienionej na obu (notatka tam, kategoria tu). Gdy ta sama sytuacja zdarzy się przy otwartym folderze (zmiana przychodzi z watchera), okno „Zmiany z drugiego komputera” scala pole po polu (merge3, listy po id) i pyta tylko o pola zmienione po obu stronach. Specyfikacja: „Działają te same mechanizmy: … scalanie zmian z drugiego komputera i rozwiązywanie konfliktów”. fi.json – plik zapisywany najczęściej (reguły, log importu, domownicy) – jest najbardziej narażony.
+**Co się dzieje.** Laptop offline: import dodaje 20 reguł i słów kluczowych do fi.json; w tym czasie na komputerze
+stacjonarnym użytkownik dodaje domownika. Po połączeniu OneDrive zostawia fi-LAPTOP.json. Strona Synchronizacja oferuje
+tylko „Zachowaj tę wersję” dla jednej strony – reguły z laptopa albo nowy domownik znikają w całości (do Kosza). To samo
+dla operacji zmienionej na obu (notatka tam, kategoria tu). Gdy ta sama sytuacja zdarzy się przy otwartym folderze
+(zmiana przychodzi z watchera), okno „Zmiany z drugiego komputera” scala pole po polu (merge3, listy po id) i pyta tylko
+o pola zmienione po obu stronach. Specyfikacja: „Działają te same mechanizmy: … scalanie zmian z drugiego komputera i
+rozwiązywanie konfliktów”. fi.json – plik zapisywany najczęściej (reguły, log importu, domownicy) – jest najbardziej
+narażony.
 
-**Poprawka.** Najpierw (pilne): w resolveConflict przed nadpisaniem oryginału odłożyć jego wersję do historii, np. `await this.history.snapshot(kind, canonicalState.record, 'discarded')` (dla fi: 'fi'), albo przenieść plik oryginału do Kosza przed zapisem. Przy „Zachowaj oryginał” też odłożyć kopię do historii, a nie tylko do Kosza. Potem dodać „Scal” w ConflictCard: merge3(baza, oryginał, kopia). Baza to najnowsza wersja z .history/ o updatedAt nie późniejszym niż obie strony. Bez bazy (undefined) każda różnica jest konfliktem do wyboru pole po polu, tą samą tabelą co w RemoteChangesDialog. Wynik zapisać przez saveRecord / saveSettings (stempel, historia), a plik kopii usunąć.
+**Poprawka.** Najpierw (pilne): w resolveConflict przed nadpisaniem oryginału odłożyć jego wersję do historii, np.
+`await this.history.snapshot(kind, canonicalState.record, 'discarded')` (dla fi: 'fi'), albo przenieść plik oryginału do
+Kosza przed zapisem. Przy „Zachowaj oryginał” też odłożyć kopię do historii, a nie tylko do Kosza. Potem dodać „Scal” w
+ConflictCard: merge3(baza, oryginał, kopia). Baza to najnowsza wersja z .history/ o updatedAt nie późniejszym niż obie
+strony. Bez bazy (undefined) każda różnica jest konfliktem do wyboru pole po polu, tą samą tabelą co w
+RemoteChangesDialog. Wynik zapisać przez saveRecord / saveSettings (stempel, historia), a plik kopii usunąć.
 
 ## N18. Historia zapisywana dla wszystkich wpisów, ale do obejrzenia tylko dla operacji, kontenerów i ustawień, mimo tekstów „jest w historii wpisu”
 
@@ -199,7 +309,13 @@ Priorytet: średni · obszar: folder danych i synchronizacja
 
 Gdzie: `src/renderer/features/operations/OperationEditor.tsx:114`, `src/renderer/features/cargo/CargoPage.tsx:270`, `src/renderer/features/sync/SyncPage.tsx:305`, `src/renderer/features/sync/RemoteChangesDialog.tsx:222`, `src/renderer/features/settings/SettingsPage.tsx:133`, `src/main/datastore/store.ts:836`
 
-**Co się dzieje.** Plan miesiąca (pensja, koperty, łupy), cel na Mapie gwiezdnej, pożyczka, saldo albo dokowanie zmienia się na drugim komputerze. Użytkownik wybiera w oknie „Weź z …” albo „Zachowaj moją”. Okno zapewnia: „Wybrana do odrzucenia wersja nie ginie – jest w historii wpisu”, a Ustawienia → Praca na kilku komputerach: „Odrzucona wersja zostaje w historii wpisu”. Main rzeczywiście odkłada wersje do .history/ dla każdej kolekcji (test fs „cel i plan miesiąca też mają historię”). Przycisk „Historia” istnieje jednak tylko w edytorze operacji, kontenera i dla fi.json. Dla planu miesiąca, celu, pożyczki, salda i dokowania nie ma w interfejsie drogi do tej wersji. Zostaje tylko „Usunięte wpisy”, które pokazuje wyłącznie usunięte.
+**Co się dzieje.** Plan miesiąca (pensja, koperty, łupy), cel na Mapie gwiezdnej, pożyczka, saldo albo dokowanie zmienia
+się na drugim komputerze. Użytkownik wybiera w oknie „Weź z …” albo „Zachowaj moją”. Okno zapewnia: „Wybrana do
+odrzucenia wersja nie ginie – jest w historii wpisu”, a Ustawienia → Praca na kilku komputerach: „Odrzucona wersja
+zostaje w historii wpisu”. Main rzeczywiście odkłada wersje do .history/ dla każdej kolekcji (test fs „cel i plan
+miesiąca też mają historię”). Przycisk „Historia” istnieje jednak tylko w edytorze operacji, kontenera i dla fi.json.
+Dla planu miesiąca, celu, pożyczki, salda i dokowania nie ma w interfejsie drogi do tej wersji. Zostaje tylko „Usunięte
+wpisy”, które pokazuje wyłącznie usunięte.
 
 **Poprawka.** Dodać HistoryButton w Planie miesiąca (kind 'months', id planu bieżącego / wybranego miesiąca), na Mapie gwiezdnej przy celu, w Radarze przy pożyczce oraz przy saldach i dokowaniach (np. w ich oknach / wierszach). Dodatkowo w RemoteChangesDialog przy każdym ItemCard dać link „Historia” (HistoryDialog dla item.collection / item.id), niezależnie od ekranu. Ewentualnie złagodzić tekst do „jest w folderze .history”, dopóki przyciski nie powstaną.
 
@@ -209,7 +325,11 @@ Priorytet: średni · obszar: folder danych i synchronizacja, proces główny i 
 
 Gdzie: `src/main/index.ts:411`, `src/main/datastore/backup.ts:52`, `src/renderer/features/settings/SettingsPage.tsx:277`, `docs/decyzje.md:48`, `docs/specyfikacja.md:360`
 
-**Co się dzieje.** D31 i specyfikacja mówią „Kopie zapasowe – codziennie (30 ostatnich)”. FI startuje z Windows ukryty w zasobniku, a X chowa okno do zasobnika (D64), więc aplikacja na laptopie usypianym zamiast wyłączanego działa bez restartu dniami albo tygodniami. runBackups wywołuje się wyłącznie w openFolder: nie ma timera ani reakcji na wybudzenie. Przez cały ten czas nie powstaje żadna kopia dzienna, choć użytkownik importuje i edytuje dane. Tekst w Ustawieniach („Przy każdym starcie raz dziennie”) opisuje kod, ale nie obietnicę D31.
+**Co się dzieje.** D31 i specyfikacja mówią „Kopie zapasowe – codziennie (30 ostatnich)”. FI startuje z Windows ukryty w
+zasobniku, a X chowa okno do zasobnika (D64), więc aplikacja na laptopie usypianym zamiast wyłączanego działa bez
+restartu dniami albo tygodniami. runBackups wywołuje się wyłącznie w openFolder: nie ma timera ani reakcji na
+wybudzenie. Przez cały ten czas nie powstaje żadna kopia dzienna, choć użytkownik importuje i edytuje dane. Tekst w
+Ustawieniach („Przy każdym starcie raz dziennie”) opisuje kod, ale nie obietnicę D31.
 
 **Poprawka.** W main dodać sprawdzanie kopii dziennej w tle: np. w heartbeat albo osobnym timerze co godzinę oraz po powerMonitor.on('resume') wołać runBackups(store.root, store.backupsDir) (jest idempotentne – zwraca null, gdy dzisiejsza kopia istnieje), tylko gdy folder nie jest tylko do odczytu i nie trwa otwieranie. Poprawić T20 w docs/decyzje.md i tekst w Ustawieniach na „raz dziennie (przy starcie i w tle, gdy aplikacja działa)”.
 
@@ -221,7 +341,13 @@ Priorytet: średni · obszar: proces główny i okna
 
 Gdzie: `src/renderer/app/Banners.tsx:84`, `src/main/index.ts:268`, `src/main/index.ts:410`, `src/main/datastore/presence.ts:8`
 
-**Co się dzieje.** Dwa komputery (D2, „nigdy jednocześnie”), na obu kreator włączył start z Windows, X chowa do zasobnika. Komputer stacjonarny stoi włączony z FI w zasobniku, użytkownik pracuje na laptopie. Proces główny stacjonarnego pisze heartbeat co 60 s także przy ukrytym oknie, więc laptop cały czas pokazuje baner „Zamknij tam aplikację, żeby uniknąć konfliktów” – a „zamknięcie” X niczego nie zmienia (tylko „Zakończ” z zasobnika, co wyłącza powiadomienia, o które chodzi w D64). Ukryta kopia dalej zapisuje w tle (zamrażanie gry, synchronizacja celów ICTTJ), więc ostrzeżenie dotyczy realnego stanu, który aplikacja sama domyślnie wymusza. Przy okazji: plik w `.presence/` zmienia się co minutę całą dobę, więc OneDrive synchronizuje go bez przerwy także w nocy.
+**Co się dzieje.** Dwa komputery (D2, „nigdy jednocześnie”), na obu kreator włączył start z Windows, X chowa do
+zasobnika. Komputer stacjonarny stoi włączony z FI w zasobniku, użytkownik pracuje na laptopie. Proces główny
+stacjonarnego pisze heartbeat co 60 s także przy ukrytym oknie, więc laptop cały czas pokazuje baner „Zamknij tam
+aplikację, żeby uniknąć konfliktów” – a „zamknięcie” X niczego nie zmienia (tylko „Zakończ” z zasobnika, co wyłącza
+powiadomienia, o które chodzi w D64). Ukryta kopia dalej zapisuje w tle (zamrażanie gry, synchronizacja celów ICTTJ),
+więc ostrzeżenie dotyczy realnego stanu, który aplikacja sama domyślnie wymusza. Przy okazji: plik w `.presence/`
+zmienia się co minutę całą dobę, więc OneDrive synchronizuje go bez przerwy także w nocy.
 
 **Poprawka.** W pliku obecności zapisywać stan „aktywny” (okno widoczne / ruch w ostatnich minutach) albo „w zasobniku”. Baner z prośbą o zamknięcie tylko dla aktywnych, dla kopii w zasobniku łagodniejsza informacja z możliwością ukrycia. W zasobniku heartbeat rzadziej (5–10 min). Ukryta kopia, która widzi aktywny inny komputer, wstrzymuje zapisy w tle (wzór ICTTJ releaseOpen). Tekst banera: „Zakończ” z menu ikony zamiast „zamknij”.
 
@@ -231,7 +357,11 @@ Priorytet: średni · obszar: silnik budżetu
 
 Gdzie: `src/shared/calc/fleet.ts:931`, `src/shared/calc/fleet.ts:680`, `src/renderer/features/bridge/BridgePage.tsx:381`, `docs/specyfikacja.md:127`
 
-**Co się dzieje.** Kadłub ma 5 000 / 21 900 zł (obniżony w kreatorze albo jeszcze niepełny). Łupy bez decyzji idą 8. dnia do osłon (D18), więc osłony mają 19 000 / 12 000 zł. Mostek pokazuje „wolne do decyzji: 7 000 zł”. Według specyfikacji dopłata do XTB jest dozwolona tylko z „wolnego do decyzji”. Użytkownik dopłaca 7 000 zł zgodnie z rozkazem i dostaje czerwony alarm firewall oraz poważne naruszenie w grze, bo silnik wymaga też pełnego kadłuba (T31). Według kolejności dokowania (D13) „wolne” to dopiero reszta po kadłubie i celach.
+**Co się dzieje.** Kadłub ma 5 000 / 21 900 zł (obniżony w kreatorze albo jeszcze niepełny). Łupy bez decyzji idą 8.
+dnia do osłon (D18), więc osłony mają 19 000 / 12 000 zł. Mostek pokazuje „wolne do decyzji: 7 000 zł”. Według
+specyfikacji dopłata do XTB jest dozwolona tylko z „wolnego do decyzji”. Użytkownik dopłaca 7 000 zł zgodnie z rozkazem
+i dostaje czerwony alarm firewall oraz poważne naruszenie w grze, bo silnik wymaga też pełnego kadłuba (T31). Według
+kolejności dokowania (D13) „wolne” to dopiero reszta po kadłubie i celach.
 
 **Poprawka.** `free` liczyć jako max(0, osłony − cel) tylko przy hull ≥ cel kadłuba (zgodnie z D23 i firewall), inaczej 0. Albo na Mostku zmienić podpis przy niepełnym kadłubie na „ponad cel osłon (kadłub niepełny – nie do dopłaty XTB)”. Poprawić tekst kreatora (WizardPage.tsx:230). Celów nie dodawać do warunku firewall (D23).
 
@@ -241,7 +371,11 @@ Priorytet: niski · obszar: całość, domownicy i ICTTJ, Mostek, Radar, Mapa, U
 
 Gdzie: `src/renderer/features/bridge/BridgePage.tsx:375`, `src/renderer/features/bridge/BridgePage.tsx:387`, `src/renderer/features/starmap/StarMapPage.tsx:40`, `src/renderer/features/starmap/StarMapPage.tsx:49`, `src/shared/calc/fleet.ts:933`
 
-**Co się dzieje.** Cel „Rower” ma 800 zł i zostaje zarchiwizowany – ręcznie albo dlatego, że cel ICTTJ wypadł ze scenariusza (T66: archiwizacja zachowuje środki, „środki zarchiwizowanego celu zostają w nim”). Mostek → Stan okrętu pokazuje „Układy gwiezdne · cele 800,00 zł”, a nagłówek Mapy gwiezdnej „w celach 0,00 zł”. Te 800 zł widać tam tylko w panelu „Zarchiwizowane”. Z aktywnym celem A (500 zł) i zarchiwizowanym B (700 zł): Mostek 1 200 zł, Mapa 500 zł. Ta sama warstwa okrętu ma na dwóch ekranach dwie wartości.
+**Co się dzieje.** Cel „Rower” ma 800 zł i zostaje zarchiwizowany – ręcznie albo dlatego, że cel ICTTJ wypadł ze
+scenariusza (T66: archiwizacja zachowuje środki, „środki zarchiwizowanego celu zostają w nim”). Mostek → Stan okrętu
+pokazuje „Układy gwiezdne · cele 800,00 zł”, a nagłówek Mapy gwiezdnej „w celach 0,00 zł”. Te 800 zł widać tam tylko w
+panelu „Zarchiwizowane”. Z aktywnym celem A (500 zł) i zarchiwizowanym B (700 zł): Mostek 1 200 zł, Mapa 500 zł. Ta sama
+warstwa okrętu ma na dwóch ekranach dwie wartości.
 
 **Poprawka.** Na Mapie gwiezdnej w nagłówku „w celach X” liczyć wszystkie środki warstwy (jak Mostek) i dopisać „w tym zarchiwizowane Y”, gdy Y > 0. Alternatywa: Mostek pokazuje „cele X (w tym zarchiwizowane Y)”.
 
@@ -253,7 +387,12 @@ Priorytet: niski · obszar: całość
 
 Gdzie: `src/renderer/app/Banners.tsx:98-104`, `src/renderer/features/wizard/state.ts:66`, `src/shared/calc/fleet.ts:200-203`, `src/renderer/store/game.ts:44-48`, `src/renderer/features/balances/actions.ts:37-40`
 
-**Co się dzieje.** Nowy użytkownik importuje historię i w Ustawienia → Konta klika „Ustaw z salda w banku”. Powstaje saldo otwarcia na dzień pierwszej operacji (np. rok wstecz). Silnik (budgetStartOf) uznaje budżet za działający od tamtej daty: Mostek pokazuje „Stan okrętu”, a useGameAdvance ustawia start gry. Baner dalej mówi „Budżet jeszcze nie wystartował” (sprawdza tylko settings.budget.start), a kreator pozwala uruchomić budżet ponownie i przesuwa start na dziś. Gra ma wtedy start i zamrożone dni sprzed kreatora, ocenione bez planu i bez pensji. T51 („działający budżet nie uruchamia kreatora drugi raz”) jest obchodzony.
+**Co się dzieje.** Nowy użytkownik importuje historię i w Ustawienia → Konta klika „Ustaw z salda w banku”. Powstaje
+saldo otwarcia na dzień pierwszej operacji (np. rok wstecz). Silnik (budgetStartOf) uznaje budżet za działający od
+tamtej daty: Mostek pokazuje „Stan okrętu”, a useGameAdvance ustawia start gry. Baner dalej mówi „Budżet jeszcze nie
+wystartował” (sprawdza tylko settings.budget.start), a kreator pozwala uruchomić budżet ponownie i przesuwa start na
+dziś. Gra ma wtedy start i zamrożone dni sprzed kreatora, ocenione bez planu i bez pensji. T51 („działający budżet nie
+uruchamia kreatora drugi raz”) jest obchodzony.
 
 **Poprawka.** Grę startować dopiero po kreatorze: w useGameAdvance warunek `fi.settings.budget.start && fleetNow()?.started`. W banerze przy fleet.started bez settings.budget.start inny tekst, np. „Budżet liczy się od salda otwarcia – kreator ustawi pensję, warstwy i koperty”. Decyzję dopisać jako T-decyzję obok T25 i T51.
 
@@ -263,7 +402,13 @@ Priorytet: niski · obszar: całość, gra, Wywiad, raporty
 
 Gdzie: `src/shared/operationsView.ts:117-138`, `src/renderer/features/operations/OperationsPage.tsx:435`, `src/shared/export/budget.ts:136`, `src/shared/export/budget.ts:140`, `src/renderer/features/reports/ReportsPage.tsx:134`, `src/renderer/features/reports/ReportsPage.tsx:376`, `src/renderer/features/reports/ReportsPage.tsx:382`, `src/shared/calc/income.ts:51-81` …
 
-**Co się dzieje.** Tydzień: wypłata 6 000 zł, Mama oddaje 500 zł za zakupy, zwrot towaru 50 zł. Operacje (filtr na ten tydzień) pokazują „Wpływy +6 550 zł”, czyli wszystkie pieniądze na plus. Raport wachty pokazuje „Wpływy 6 000 zł”, czyli przychód wg D81 bez spłat domowników i zwrotów. Przegląd roczny i kolumna CSV / Excel „Wpływy (zł)” też pokazują przychód. Tak samo w skali miesiąca: pensja 6 000 zł, zwrot od Mamy 400 zł, pożyczka 2 000 zł i wypłata z XTB z puli Podatek 1 000 zł dają w Operacjach 9 400 zł, a w Raportach → Miesiące 6 000 zł. Z kolei alarm i Plan miesiąca mówią „Pensja wyższa niż średnie wpływy z 6 mies.”, a panel tuż obok podaje tę samą liczbę jako „średni przychód (6 mies.)” (FleetState.income = windows[6].total). Ta sama etykieta daje dwie kwoty bez wyjaśnienia, czym się różnią.
+**Co się dzieje.** Tydzień: wypłata 6 000 zł, Mama oddaje 500 zł za zakupy, zwrot towaru 50 zł. Operacje (filtr na ten
+tydzień) pokazują „Wpływy +6 550 zł”, czyli wszystkie pieniądze na plus. Raport wachty pokazuje „Wpływy 6 000 zł”, czyli
+przychód wg D81 bez spłat domowników i zwrotów. Przegląd roczny i kolumna CSV / Excel „Wpływy (zł)” też pokazują
+przychód. Tak samo w skali miesiąca: pensja 6 000 zł, zwrot od Mamy 400 zł, pożyczka 2 000 zł i wypłata z XTB z puli
+Podatek 1 000 zł dają w Operacjach 9 400 zł, a w Raportach → Miesiące 6 000 zł. Z kolei alarm i Plan miesiąca mówią
+„Pensja wyższa niż średnie wpływy z 6 mies.”, a panel tuż obok podaje tę samą liczbę jako „średni przychód (6 mies.)”
+(FleetState.income = windows[6].total). Ta sama etykieta daje dwie kwoty bez wyjaśnienia, czym się różnią.
 
 **Poprawka.** Przychód wg D81 nazywać wszędzie „Przychody”: raport wachty, przegląd roczny (linia i kolumna tabeli), nagłówek CSV / Excel 'Wpływy (zł)' → 'Przychody (zł)', tekst alarmu salary-above-income → „średni przychód z 6 mies.”. W Operacjach zostawić sumę brutto z podpowiedzią (title), np. „Wpływy na konta (z oddanymi przez domowników, zwrotami i pożyczkami) – to nie przychód”. Zmiana tekstu ze specyfikacji (:123) wymaga jednego zdania w decyzjach.
 
@@ -331,7 +476,11 @@ Priorytet: niski · obszar: całość, proces główny i okna
 
 Gdzie: `docs/specyfikacja.md:323`, `docs/specyfikacja.md:334`, `docs/specyfikacja.md:277`, `src/shared/machine.ts:18`, `src/shared/notify.ts:46`, `src/renderer/features/bridge/BridgePage.tsx:269`, `src/renderer/features/bridge/BridgePage.tsx:278`, `src/renderer/features/settings/MachineTabs.tsx:89` …
 
-**Co się dzieje.** Specyfikacja: odprawa „przy pierwszym uruchomieniu … albo o ustalonej godzinie”, odsłuch „przyciskiem albo automatycznie”, „Każde powiadomienie ma własny przełącznik i godzinę”, a Mostek ma „później radar, wywiad i krzywą majątku”. W kodzie godzinę ma tylko wieczorne dopisanie: odprawy nie da się ustawić na godzinę, automatycznego odsłuchu nie ma, Mostek nie ma radaru ani krzywej. T80: „Silver Bullet = odprawa skrócona do 3 zdań”, a w kodzie blok Silver Bullet jest dokładany nad pełną listą pozycji. Odprawa między 10:00 a 11:00 NY jest więc dłuższa, nie krótsza.
+**Co się dzieje.** Specyfikacja: odprawa „przy pierwszym uruchomieniu … albo o ustalonej godzinie”, odsłuch „przyciskiem
+albo automatycznie”, „Każde powiadomienie ma własny przełącznik i godzinę”, a Mostek ma „później radar, wywiad i krzywą
+majątku”. W kodzie godzinę ma tylko wieczorne dopisanie: odprawy nie da się ustawić na godzinę, automatycznego odsłuchu
+nie ma, Mostek nie ma radaru ani krzywej. T80: „Silver Bullet = odprawa skrócona do 3 zdań”, a w kodzie blok Silver
+Bullet jest dokładany nad pełną listą pozycji. Odprawa między 10:00 a 11:00 NY jest więc dłuższa, nie krótsza.
 
 **Poprawka.** Najtaniej: dopisać do docs/specyfikacja.md i T56 / T80 stan kodu. Odprawa przy pierwszym otwarciu po ciszy nocnej (D70), odsłuch przyciskiem (D49), godzina tylko przy wieczornym dopisaniu, radar i krzywa majątku na osobnych ekranach. Ewentualnie w oknie Silver Bullet zwinąć listę pozycji (pokazać tylko 3 zdania i „pokaż wszystko”) i czytać głosem tylko te 3 zdania – wtedy T80 będzie spełnione dosłownie.
 
@@ -383,11 +532,22 @@ Priorytet: niski · obszar: całość, Operacje, Plan, Ładownia, kreator, Moste
 
 Gdzie: `src/renderer/lib/format.ts:4`, `src/renderer/lib/format.ts:41`, `src/renderer/lib/format.ts:62`, `src/renderer/lib/format.ts:85`, `src/renderer/features/screens/PlaceholderPage.tsx:27`, `src/renderer/app/App.tsx:232`, `src/renderer/app/App.tsx:188`, `src/shared/calc/plan.ts:188` …
 
-**Co się dzieje.** lib/format.ts eksportuje fmtNum, fmtPercent, fmtAmount (kropka dziesiętna, „1 223.50 PLN”), fmtPct, fmtPctShort, toneClass i fmtPln (format „8 640 zł” bez groszy). Żadnego z nich nikt nie używa, a fmtPln sugeruje drugi format kwot, sprzeczny z formatPln („8 640,00”). PlaceholderPage i gałąź `pageDef(route.page)` w App są nieosiągalne, bo każda strona z PAGES ma swój komponent. Napis `ready` / `dim` „w przygotowaniu” nigdy się nie pokaże. plan.ts ma własną kopię activeIn z fleet.ts, OperationsPage – własny monthLabel, fields.tsx – własny plDate.
+**Co się dzieje.** lib/format.ts eksportuje fmtNum, fmtPercent, fmtAmount (kropka dziesiętna, „1 223.50 PLN”), fmtPct,
+fmtPctShort, toneClass i fmtPln (format „8 640 zł” bez groszy). Żadnego z nich nikt nie używa, a fmtPln sugeruje drugi
+format kwot, sprzeczny z formatPln („8 640,00”). PlaceholderPage i gałąź `pageDef(route.page)` w App są nieosiągalne, bo
+każda strona z PAGES ma swój komponent. Napis `ready` / `dim` „w przygotowaniu” nigdy się nie pokaże. plan.ts ma własną
+kopię activeIn z fleet.ts, OperationsPage – własny monthLabel, fields.tsx – własny plDate.
 
 **Poprawka.** Usunąć nieużywane eksporty z lib/format.ts (zwłaszcza fmtPln z formatem bez groszy, sprzecznym z formatPln). Usunąć PlaceholderPage, gałąź w Page() i pole ready / dim (albo opisać je komentarzem jako świadomy wzór). activeIn w plan.ts importować z fleet.ts, a monthLabel i plDate z lib/format.ts.
 
-To samo zgłoszone też jako: „Martwy kod: ekran-zaślepka, pola stage/ready, przygaszanie menu i rodzaj okna 'placeholder', do tego pozostałości ICTTJ”; „Martwy kod po etapach: PlaceholderPage i rodzaj okna 'placeholder', IPC copyText, AppInfo.isPortable, QuickEntry.isOpen”; „Martwe eksporty w lib/format.ts i zdublowane formatery”; „Martwy kod: `GameChange.events` liczone w advanceGame, ale nigdzie nieczytane (święta idą z dziennika wachty)”; „Martwy kod sugerujący niedokończone funkcje: importRecords, saveGenerated, powody historii „import” / „merge””; „Martwy kod i pola, które sugerują niedokończone funkcje”; „Nieaktualne komentarze i odwołania do nieistniejących decyzji (E0-2, E0-4, „stage E3”, „not used yet”, „EODHD key”)”; „Dokumentacja opisuje usunięte „Połącz wszystkie” i nieistniejące `mergePairs`”.
+To samo zgłoszone też jako: „Martwy kod: ekran-zaślepka, pola stage/ready, przygaszanie menu i rodzaj okna
+'placeholder', do tego pozostałości ICTTJ”; „Martwy kod po etapach: PlaceholderPage i rodzaj okna 'placeholder', IPC
+copyText, AppInfo.isPortable, QuickEntry.isOpen”; „Martwe eksporty w lib/format.ts i zdublowane formatery”; „Martwy kod:
+`GameChange.events` liczone w advanceGame, ale nigdzie nieczytane (święta idą z dziennika wachty)”; „Martwy kod
+sugerujący niedokończone funkcje: importRecords, saveGenerated, powody historii „import” / „merge””; „Martwy kod i pola,
+które sugerują niedokończone funkcje”; „Nieaktualne komentarze i odwołania do nieistniejących decyzji (E0-2, E0-4,
+„stage E3”, „not used yet”, „EODHD key”)”; „Dokumentacja opisuje usunięte „Połącz wszystkie” i nieistniejące
+`mergePairs`”.
 
 ## N35. „Cofnij” niespójnie przy archiwizacji i zamykaniu
 
@@ -407,7 +567,11 @@ Priorytet: niski · obszar: całość
 
 Gdzie: `src/renderer/features/radar/RadarPage.tsx:263`, `src/renderer/features/cargo/CargoPage.tsx:51`, `src/renderer/features/starmap/StarMapPage.tsx:295-297`, `src/renderer/features/month/MonthPage.tsx:281-282`, `src/renderer/app/App.tsx:265`
 
-**Co się dzieje.** Radar → „Nowa pożyczka”: użytkownik wpisuje nazwę, kwotę 12 000 zł, 24 raty i datę pierwszej raty, po czym przechodzi Ctrl+5 do Ładowni, żeby sprawdzić masę ładunku. Gdy wrócisz, formularz jest pusty. Tak samo „Nowy kontener” (w tym propozycja z historii po „Do ładowni”), „Nowy cel” na Mapie gwiezdnej i wpisany podział łupów w debriefingu. Konwencja z CLAUDE.md: „Nowy wpis jest szkicem do pierwszej edycji; opuszczenie ekranu nigdy nie gubi zmian”. Operacje (szkic w store) i kreator (wizard/state.ts) tak działają.
+**Co się dzieje.** Radar → „Nowa pożyczka”: użytkownik wpisuje nazwę, kwotę 12 000 zł, 24 raty i datę pierwszej raty, po
+czym przechodzi Ctrl+5 do Ładowni, żeby sprawdzić masę ładunku. Gdy wrócisz, formularz jest pusty. Tak samo „Nowy
+kontener” (w tym propozycja z historii po „Do ładowni”), „Nowy cel” na Mapie gwiezdnej i wpisany podział łupów w
+debriefingu. Konwencja z CLAUDE.md: „Nowy wpis jest szkicem do pierwszej edycji; opuszczenie ekranu nigdy nie gubi
+zmian”. Operacje (szkic w store) i kreator (wizard/state.ts) tak działają.
 
 **Poprawka.** Szkice tych formularzy trzymać w małym store zustand poza komponentem strony (np. `store/drafts.ts`, klucz per formularz: 'radar:newLoan', 'cargo:container', 'starmap:newGoal', 'month:loot:<RRRR-MM>'), jak robi to wizard/state.ts. Szkic czyścić po „Dodaj” / zapisie albo „Anuluj”. Szkic podziału łupów kluczować miesiącem i zerować, gdy decyzja dla tego miesiąca już istnieje (np. przyszła z drugiego komputera).
 
@@ -429,7 +593,11 @@ Priorytet: niski · obszar: domownicy i ICTTJ
 
 Gdzie: `src/shared/calc/income.ts:39`, `src/shared/calc/income.ts:62`, `src/shared/calc/fleet.ts:411`, `src/shared/calc/fleet.ts:421`, `docs/decyzje.md:232`, `docs/decyzje.md:771`
 
-**Co się dzieje.** Budżet od 01.10. W sierpniu przyszła z XTB wypłata 9 000 zł z puli Podatek (wpis w ICTTJ ma pulę `tax`). Statystyki biorą całą historię (`firstFull` ze wszystkich operacji), ale pulę Podatek rozpoznają tylko po dokowaniu (`taxOfDockings`), a wpisów sprzed startu zadokować się nie da. Sierpień ma więc 9 000 zł przychodu z tradingu, a średnia z 6 miesięcy wynosi 4 500 zł/mies. To zawyża panel „Przychody” i może ukryć ostrzeżenie „pensja wyższa niż średnie wpływy”. D81 mówi wprost: trading „bez wypłat z puli Podatek”.
+**Co się dzieje.** Budżet od 01.10. W sierpniu przyszła z XTB wypłata 9 000 zł z puli Podatek (wpis w ICTTJ ma pulę
+`tax`). Statystyki biorą całą historię (`firstFull` ze wszystkich operacji), ale pulę Podatek rozpoznają tylko po
+dokowaniu (`taxOfDockings`), a wpisów sprzed startu zadokować się nie da. Sierpień ma więc 9 000 zł przychodu z
+tradingu, a średnia z 6 miesięcy wynosi 4 500 zł/mies. To zawyża panel „Przychody” i może ukryć ostrzeżenie „pensja
+wyższa niż średnie wpływy”. D81 mówi wprost: trading „bez wypłat z puli Podatek”.
 
 **Poprawka.** W computeFleet dołożyć do incomeContext.tax wpisy ICTTJ z pulą `tax` sparowane z operacją także przed startem (dopasowanie kwoty i okna jak w deliveries, bez dokowania). Wymaga przekazania wpisów ICTTJ do wejścia silnika albo osobnej mapy txId → pula liczonej w rendererze. Prościej: w panelu „Przychody” liczyć trading dopiero od startu budżetu, a dla historii pokazać dopisek, że wypłat sprzed startu nie da się rozdzielić na pule.
 
@@ -439,7 +607,11 @@ Priorytet: niski · obszar: domownicy i ICTTJ
 
 Gdzie: `src/renderer/store/quickHost.ts:159`, `src/renderer/features/quick/QuickApp.tsx:341`, `src/renderer/features/household/MemberPickers.tsx:126`, `src/renderer/features/household/MemberPickers.tsx:155`, `docs/decyzje.md:709`
 
-**Co się dzieje.** Tata ma w Ustawieniach „pytaj”. W szybkim wpisie użytkownik wybiera „Od domownika: Tata”, a przełącznik od razu stoi na „przychód” (advance = inflow === 'advance', czyli false). Użytkownik niczego nie zmienia i zapisuje, a `rememberInflows([t])` wpisuje Tacie `inflow: 'income'`. Od tej pory import nie pyta i jego nadwyżki proponuje jako przychód. W edytorze operacji sam wybór osoby niczego nie zapamiętuje, `rememberInflows` wywołuje dopiero zmiana przełącznika (MemberPickers.tsx:155). T109 mówi o „pierwszej jawnej decyzji”.
+**Co się dzieje.** Tata ma w Ustawieniach „pytaj”. W szybkim wpisie użytkownik wybiera „Od domownika: Tata”, a
+przełącznik od razu stoi na „przychód” (advance = inflow === 'advance', czyli false). Użytkownik niczego nie zmienia i
+zapisuje, a `rememberInflows([t])` wpisuje Tacie `inflow: 'income'`. Od tej pory import nie pyta i jego nadwyżki
+proponuje jako przychód. W edytorze operacji sam wybór osoby niczego nie zapamiętuje, `rememberInflows` wywołuje dopiero
+zmiana przełącznika (MemberPickers.tsx:155). T109 mówi o „pierwszej jawnej decyzji”.
 
 **Poprawka.** W QuickDraft dodać flagę `advanceChosen` ustawianą tylko w onChange Segmented. W quickHost wołać rememberInflows tylko przy fladze albo gdy osoba nie ma 'ask'. Ewentualnie dla osoby z 'ask' pokazać przełącznik bez wyboru i wymagać go przed zapisem.
 
@@ -449,7 +621,11 @@ Priorytet: niski · obszar: domownicy i ICTTJ
 
 Gdzie: `src/renderer/features/household/MemberPickers.tsx:109`, `src/renderer/features/household/MemberPickers.tsx:115`, `src/renderer/features/household/MemberPickers.tsx:123`, `src/renderer/features/household/MemberPickers.tsx:164`, `docs/decyzje.md:734`
 
-**Co się dzieje.** Mama: zakup A 02.10 za 100 zł, zakup B 06.10 za 50 zł, wpłata 09.10 na 100 zł, która spłaca A jako najstarszy. W edytorze tej wpłaty „Pokrywa” pokazuje tylko B, bo w dzisiejszym rejestrze A nie jest już otwarty, choć to właśnie A ta wpłata spłaca. Gdy późniejsza wpłata spłaciła B, lista dla 09.10 jest pusta. T112 mówi o „otwartych zakupach osoby do daty wpłaty”. W tym samym panelu „+ także za” czyta rejestr sprzed wpłaty (`useLedgerBefore`, T118), więc jedna sekcja liczy z dwóch różnych stanów.
+**Co się dzieje.** Mama: zakup A 02.10 za 100 zł, zakup B 06.10 za 50 zł, wpłata 09.10 na 100 zł, która spłaca A jako
+najstarszy. W edytorze tej wpłaty „Pokrywa” pokazuje tylko B, bo w dzisiejszym rejestrze A nie jest już otwarty, choć to
+właśnie A ta wpłata spłaca. Gdy późniejsza wpłata spłaciła B, lista dla 09.10 jest pusta. T112 mówi o „otwartych
+zakupach osoby do daty wpłaty”. W tym samym panelu „+ także za” czyta rejestr sprzed wpłaty (`useLedgerBefore`, T118),
+więc jedna sekcja liczy z dwóch różnych stanów.
 
 **Poprawka.** Liczyć choices z `before` (rejestr bez tej wpłaty, stan tuż przed nią): `before ? balanceOf(before, id).open.filter(o => o.date <= t.date && !isOpeningItem(o.txId))` dla shareMembers, plus t.covers. Wtedy cała sekcja (Pokrywa i „+ także za”) czyta ten sam stan.
 
@@ -459,7 +635,11 @@ Priorytet: niski · obszar: domownicy i ICTTJ
 
 Gdzie: `src/shared/calc/household.ts:207`, `src/renderer/features/household/actions.ts:113`, `src/shared/calc/briefing.ts:216`, `src/shared/calc/briefing.ts:221`
 
-**Co się dzieje.** W 1.3.0 Mama ma do oddania 150 zł za zakup z 03.06, a odprawa i powiadomienie (D80 e) przypominają o tym od lipca. Pierwsze otwarcie 1.4.0 (18.10) zapisuje `opening.owed` 150 zł. Rejestr wstawia je jako otwartą pozycję `opening:<osoba>` z datą `from` = 18.10. `since` osoby to teraz 18.10, więc przypomnienie (> 30 dni) znika do 17.11. Potem mówi „saldo na start rozliczeń z 18.10 (31 dni)”, choć dług ma ponad 4 miesiące. Radar i Mostek też pokazują „od 18.10”. Klucz powiadomienia `house:<osoba>:<since>` się zmienia.
+**Co się dzieje.** W 1.3.0 Mama ma do oddania 150 zł za zakup z 03.06, a odprawa i powiadomienie (D80 e) przypominają o
+tym od lipca. Pierwsze otwarcie 1.4.0 (18.10) zapisuje `opening.owed` 150 zł. Rejestr wstawia je jako otwartą pozycję
+`opening:<osoba>` z datą `from` = 18.10. `since` osoby to teraz 18.10, więc przypomnienie (> 30 dni) znika do 17.11.
+Potem mówi „saldo na start rozliczeń z 18.10 (31 dni)”, choć dług ma ponad 4 miesiące. Radar i Mostek też pokazują „od
+18.10”. Klucz powiadomienia `house:<osoba>:<since>` się zmienia.
 
 **Poprawka.** Dodać addytywnie `opening.since` (data najstarszej otwartej pozycji). Seed bierze ją z `balanceOf(before, id).since`, a `begin()` używa `m.opening.since ?? from` jako daty pozycji `opening:`. Ręczne saldo na start bez daty zostaje przy dniu rozliczeń. Folderom już po seedzie (1.4.0 działa od 18.10) jednorazowo uzupełnić `opening.since`: przeliczyć rejestr 1.3.0 do `since − 1` i wziąć datę jego najstarszej pozycji, jeśli `owed` zgadza się z `opening.owed`.
 
@@ -469,7 +649,11 @@ Priorytet: niski · obszar: domownicy i ICTTJ, Mostek, Radar, Mapa, Ustawienia
 
 Gdzie: `src/shared/calc/goals.ts:117`, `src/renderer/features/starmap/StarMapPage.tsx:34`, `src/renderer/features/starmap/StarMapPage.tsx:37`, `src/shared/calc/fleet.ts:497`, `src/renderer/features/starmap/StarMapPage.tsx:90`
 
-**Co się dzieje.** Lista: 1. „Rower” (własny, 2 000 zł), 2. „Wakacje” (ICTTJ, 5 000 zł). Do celów trafiają w praktyce prawie tylko wypłaty z puli Cele, bo zwykła dostawa dociera do celów dopiero po pełnych osłonach i kadłubie. Te wypłaty idą najpierw do celów ICTTJ (fillGoals, D72 / T65). `goalEtas` wypełnia jednak cele w kolejności listy, więc ETA „Roweru” wychodzi za 1 miesiąc, a w rzeczywistości rower nie dostaje nic, dopóki „Wakacje” nie są pełne. DOL („tu popłynie następna dostawa do celów”) wskazuje „Rower”, a następna wypłata z puli Cele pójdzie do „Wakacji”.
+**Co się dzieje.** Lista: 1. „Rower” (własny, 2 000 zł), 2. „Wakacje” (ICTTJ, 5 000 zł). Do celów trafiają w praktyce
+prawie tylko wypłaty z puli Cele, bo zwykła dostawa dociera do celów dopiero po pełnych osłonach i kadłubie. Te wypłaty
+idą najpierw do celów ICTTJ (fillGoals, D72 / T65). `goalEtas` wypełnia jednak cele w kolejności listy, więc ETA
+„Roweru” wychodzi za 1 miesiąc, a w rzeczywistości rower nie dostaje nic, dopóki „Wakacje” nie są pełne. DOL („tu
+popłynie następna dostawa do celów”) wskazuje „Rower”, a następna wypłata z puli Cele pójdzie do „Wakacji”.
 
 **Poprawka.** Policzyć tempo osobno: wpłaty puli Cele (zdarzenia `trading` z dokowaniem `pool: 'goals'`, z `dockingsByTx`) i resztę. W symulacji ETA co miesiąc rozdzielać najpierw część z puli Cele w kolejności ICTTJ → własne, potem resztę w kolejności listy. W podpowiedzi DOL dopisać, że wypłata z puli Cele trafi najpierw do pierwszego niepełnego celu ICTTJ (albo pokazać drugi znacznik).
 
@@ -481,7 +665,12 @@ Priorytet: niski · obszar: domownicy i ICTTJ
 
 Gdzie: `src/renderer/features/dock/DockingDialog.tsx:156`, `src/renderer/features/dock/DockingDialog.tsx:158`, `src/shared/calc/briefing.ts:121`, `src/shared/notify.ts:100`, `src/renderer/features/dock/DockPanel.tsx:71`, `src/renderer/features/dock/actions.ts:34`, `docs/decyzje.md:454`
 
-**Co się dzieje.** Zwrot do masy bez pary w mBanku (wypływ do XTB) dostaje w oknie dokowania tekst „Wpływ z XTB w mBanku jeszcze nie przyszedł…” albo „W mBanku nie ma tej kwoty od XTB…”, czyli opis odwrotnego kierunku. Zwrot z puli Podatek nie ma firewalla (T65, okno pisze „wraca z rezerwy na PIT-38”), a odprawa i powiadomienie i tak mówią „do potwierdzenia – firewall” / „potwierdź w Financial Intel (firewall)”. Nazwy też się rozjeżdżają: „Wypłata ICTTJ” (panel), „Wypłata z ICTTJ” (okno), „Wypłata z konta tradingowego” i „Zwrot do konta tradingowego” (tytuł operacji Portfela) obok „Zwrot do masy”.
+**Co się dzieje.** Zwrot do masy bez pary w mBanku (wypływ do XTB) dostaje w oknie dokowania tekst „Wpływ z XTB w mBanku
+jeszcze nie przyszedł…” albo „W mBanku nie ma tej kwoty od XTB…”, czyli opis odwrotnego kierunku. Zwrot z puli Podatek
+nie ma firewalla (T65, okno pisze „wraca z rezerwy na PIT-38”), a odprawa i powiadomienie i tak mówią „do potwierdzenia
+– firewall” / „potwierdź w Financial Intel (firewall)”. Nazwy też się rozjeżdżają: „Wypłata ICTTJ” (panel), „Wypłata z
+ICTTJ” (okno), „Wypłata z konta tradingowego” i „Zwrot do konta tradingowego” (tytuł operacji Portfela) obok „Zwrot do
+masy”.
 
 **Poprawka.** Teksty sekcji „Konto” uzależnić od `d.direction`, dla 'out' np. „Wypływu do XTB w mBanku jeszcze nie ma – FI czeka na import do …” / „W mBanku nie ma tego wypływu do XTB po 3 dniach roboczych – najpewniej z Portfela XTB”. W briefing.ts:121 i notify.ts:100 przy `e.pool === 'tax'` pisać „wraca z rezerwy na PIT-38”, bez „firewall”. Nazwy ujednolicić („Wypłata z ICTTJ” / „Zwrot do masy” – także w tytule operacji Portfela).
 
@@ -553,7 +742,14 @@ Priorytet: niski · obszar: Operacje, Plan, Ładownia, kreator, silnik budżetu
 
 Gdzie: `src/shared/operationsView.ts:87`, `src/shared/operationsView.ts:32`, `src/renderer/features/operations/OperationsPage.tsx:402`, `src/renderer/features/operations/OperationsPage.tsx:407`, `src/renderer/features/operations/OperationsPage.tsx:189`, `src/shared/operationsView.ts:89`
 
-**Co się dzieje.** Użytkownik chce dokategoryzować wydatki: w Operacjach wybiera Kategoria → „bez kategorii”. Dostaje też wszystkie wpływy, przelewy własne, operacje XTB, pożyczki, korekty i zakupy finansowane przez domowników (wszystkie mają categoryId = null). Ten sam napis „bez kategorii” w menu Oznaczenia pokazuje tylko własne wydatki bez kategorii (marksOf wyklucza inne rodzaje i domowników). Kolumna Kategoria na liście też pisze „bez kategorii” tylko przy takich wydatkach. W drugą stronę: paragon podzielony z częścią bez kategorii nie ma oznaczenia „bez kategorii”, bo marksOf wymaga braku podziału. Debriefing pokazuje „Bez kategorii 40 zł”, a Oznaczenia → bez kategorii tej operacji nie znajdą. Gdy użytkownik zaznaczy wszystko (TickAll) i da „Ustaw”, toast liczy resztę jako „pominięte”. Powinno być tak, że „bez kategorii” znaczy wszędzie to samo.
+**Co się dzieje.** Użytkownik chce dokategoryzować wydatki: w Operacjach wybiera Kategoria → „bez kategorii”. Dostaje
+też wszystkie wpływy, przelewy własne, operacje XTB, pożyczki, korekty i zakupy finansowane przez domowników (wszystkie
+mają categoryId = null). Ten sam napis „bez kategorii” w menu Oznaczenia pokazuje tylko własne wydatki bez kategorii
+(marksOf wyklucza inne rodzaje i domowników). Kolumna Kategoria na liście też pisze „bez kategorii” tylko przy takich
+wydatkach. W drugą stronę: paragon podzielony z częścią bez kategorii nie ma oznaczenia „bez kategorii”, bo marksOf
+wymaga braku podziału. Debriefing pokazuje „Bez kategorii 40 zł”, a Oznaczenia → bez kategorii tej operacji nie znajdą.
+Gdy użytkownik zaznaczy wszystko (TickAll) i da „Ustaw”, toast liczy resztę jako „pominięte”. Powinno być tak, że „bez
+kategorii” znaczy wszędzie to samo.
 
 **Poprawka.** Najprościej zmienić etykietę opcji filtra kategorii na „brak kategorii (wszystkie rodzaje)” albo „bez kategorii – wszystko”. Pełniej: jedna definicja „do skategoryzowania” (własny wydatek albo jego część bez kategorii, bez refundable) dla obu menu: matchesFilter dla '' bierze tylko takie wydatki i części (partsOf), a marksOf oznacza też podział z częścią bez kategorii.
 
@@ -693,7 +889,12 @@ Priorytet: niski · obszar: gra, Wywiad, raporty
 
 Gdzie: `src/shared/calc/intel.ts:27-88`, `src/shared/calc/intel.ts:330-334`, `src/renderer/features/intel/IntelPage.tsx:41`, `src/renderer/features/intel/IntelPage.tsx:74-86`, `src/renderer/features/reports/ReportsPage.tsx:377-378`, `src/shared/calc/intel.ts:198-199`, `src/shared/calc/fleet.ts:140-143`, `src/shared/calc/fleet.ts:324` …
 
-**Co się dzieje.** Użytkownik bierze pożyczkę 20 000 zł (konto rośnie). Wywiad pokazuje „Majątek” +20 000 zł, wykres dostaje CHoCH w górę, a „Struktura” zmienia się na „bullish – wyższe szczyty”. Na tym samym ekranie „Prognoza zasięgu” (i klasa okrętu) odejmuje dług (D72). Tak samo zaliczka domownika (D80 c: „pieniądze domowników na moim koncie, nie do wydania na siebie”, FleetState: „never the ship's money”) podnosi „Majątek”, a jej wydanie na zakupy domownika robi drawdown. Przegląd roczny („Majątek na początku / na końcu”) ma tę samą wadę. T81 (suma sald kont) powstał przed D80 i nie uwzględnia ani długu, ani depozytu.
+**Co się dzieje.** Użytkownik bierze pożyczkę 20 000 zł (konto rośnie). Wywiad pokazuje „Majątek” +20 000 zł, wykres
+dostaje CHoCH w górę, a „Struktura” zmienia się na „bullish – wyższe szczyty”. Na tym samym ekranie „Prognoza zasięgu”
+(i klasa okrętu) odejmuje dług (D72). Tak samo zaliczka domownika (D80 c: „pieniądze domowników na moim koncie, nie do
+wydania na siebie”, FleetState: „never the ship's money”) podnosi „Majątek”, a jej wydanie na zakupy domownika robi
+drawdown. Przegląd roczny („Majątek na początku / na końcu”) ma tę samą wadę. T81 (suma sald kont) powstał przed D80 i
+nie uwzględnia ani długu, ani depozytu.
 
 **Poprawka.** Opcja minimalna: zmienić etykiety na „Pieniądze na kontach” (Wywiad i przegląd roczny) i dopisać w opisie, że obejmują pożyczone i depozyt domowników. Opcja pełna (zmiana T81, dopisać nową decyzję T): majątek = salda kont − depozyt domowników − pozostały dług z pożyczek zaciągniętych w danym dniu, liczone z tych samych reguł co silnik (np. migawki z fleet.log: suma ruchów bez warstwy deposit i z debt). Wtedy krzywa i przegląd roczny są spójne z zasięgiem i klasą (D72, T71).
 
@@ -703,7 +904,12 @@ Priorytet: niski · obszar: gra, Wywiad, raporty
 
 Gdzie: `src/shared/calc/game.ts:636-643`, `src/renderer/store/game.ts:124`, `src/renderer/features/command/Celebration.tsx:17-19`, `src/renderer/features/command/Celebration.tsx:64-66`, `src/shared/calc/fleet.ts:140-143`, `src/shared/calc/fleet.ts:160-164`, `docs/decyzje.md:171`
 
-**Co się dzieje.** Zasięg krąży wokół granicy klasy, np. 2,95–3,05 mies.: łupy przechodzące do osłon albo dokowanie podnoszą go ponad 3 mies., wydatek ponad energię pobrany z osłon obniża. Każdy zamrożony dzień z klasą wyższą niż dzień wcześniej daje wpis „class up” w dzienniku wachty i osobne święto (klucz `class:<data>`), czyli pełnoekranowy „Nowa klasa: Fregata – Zasięg okrętu wzrósł” z fanfarą za każdym razem, gdy zasięg znów przekroczy 3 mies., także kilka razy w miesiącu. Spadki idą tylko do dziennika, więc użytkownik widzi wielokrotnie „awans” do tej samej klasy. D73 („wyższa z animacją i dźwiękiem, niższa w dzienniku”) nie przewiduje progu ani histerezy – to sama decyzja daje ten efekt.
+**Co się dzieje.** Zasięg krąży wokół granicy klasy, np. 2,95–3,05 mies.: łupy przechodzące do osłon albo dokowanie
+podnoszą go ponad 3 mies., wydatek ponad energię pobrany z osłon obniża. Każdy zamrożony dzień z klasą wyższą niż dzień
+wcześniej daje wpis „class up” w dzienniku wachty i osobne święto (klucz `class:<data>`), czyli pełnoekranowy „Nowa
+klasa: Fregata – Zasięg okrętu wzrósł” z fanfarą za każdym razem, gdy zasięg znów przekroczy 3 mies., także kilka razy w
+miesiącu. Spadki idą tylko do dziennika, więc użytkownik widzi wielokrotnie „awans” do tej samej klasy. D73 („wyższa z
+animacją i dźwiękiem, niższa w dzienniku”) nie przewiduje progu ani histerezy – to sama decyzja daje ten efekt.
 
 **Poprawka.** W celebrationsOf (albo w gameView jako osobna flaga) świętować klasę tylko wtedy, gdy jest wyższa od najwyższej klasy z ostatnich np. 30 zamrożonych dni (albo od najwyższej w historii). Powrót do klasy już mianej zapisywać tylko w dzienniku wachty jako „powrót do klasy”. Zapisać jako T-decyzję doprecyzowującą D73 / T80; zmiana tylko w renderze/święcie, zamrożone dni bez zmian.
 
@@ -723,7 +929,11 @@ Priorytet: niski · obszar: gra, Wywiad, raporty
 
 Gdzie: `src/shared/calc/intel.ts:303-316`, `src/shared/calc/intel.ts:310`, `src/shared/calc/intel.ts:315`, `src/shared/calc/income.ts:79`, `src/renderer/features/reports/ReportsPage.tsx:376`, `src/renderer/features/reports/ReportsPage.tsx:382`
 
-**Co się dzieje.** W styczniu wypłata z XTB 5 000 zł (trading +), w marcu dopłata do XTB 3 000 zł (trading −). „Rok w liczbach → Wpływy” nettuje trading z całego roku (2 000 zł + praca), a tabela „Miesiące” liczy każdy miesiąc osobno z obcięciem tradingu do zera (styczeń +5 000, marzec 0). Suma kolumny „Wpływy” jest o 3 000 zł wyższa niż wiersz „Wpływy” tuż nad nią, w PDF tak samo, bez żadnego wyjaśnienia – reguła jest opisana tylko w komentarzu w kodzie. Użytkownik, który zsumuje miesiące, uzna przegląd za błędny.
+**Co się dzieje.** W styczniu wypłata z XTB 5 000 zł (trading +), w marcu dopłata do XTB 3 000 zł (trading −). „Rok w
+liczbach → Wpływy” nettuje trading z całego roku (2 000 zł + praca), a tabela „Miesiące” liczy każdy miesiąc osobno z
+obcięciem tradingu do zera (styczeń +5 000, marzec 0). Suma kolumny „Wpływy” jest o 3 000 zł wyższa niż wiersz „Wpływy”
+tuż nad nią, w PDF tak samo, bez żadnego wyjaśnienia – reguła jest opisana tylko w komentarzu w kodzie. Użytkownik,
+który zsumuje miesiące, uzna przegląd za błędny.
 
 **Poprawka.** Najtaniej dopisek pod tabelą „Miesiące” i w PDF: „trading netto w każdym miesiącu osobno (dopłaty nie schodzą poniżej zera); wiersz Wpływy roku nettuje dopłaty z całego roku – T119”. Druga możliwość: w tabeli miesięcy pokazywać trading bez obcinania (incomeByMonth, także ujemny), żeby suma zgadzała się z rokiem. Wtedy trzeba zaktualizować T119.
 
@@ -753,7 +963,11 @@ Priorytet: niski · obszar: gra, Wywiad, raporty
 
 Gdzie: `src/shared/calc/game.ts:414-417`, `src/renderer/features/command/CommandPage.tsx:74`, `src/renderer/features/command/CommandPage.tsx:97-101`, `src/renderer/features/reports/ReportsPage.tsx:115`, `src/renderer/features/reports/ReportsPage.tsx:174`
 
-**Co się dzieje.** Misja „Dzień bez wydatków” (co najmniej 2 dni bez wydatku). W poniedziałek o 8:00, przed pierwszym zakupem, panel pokazuje już „Na razie: 1 z 2”. We wtorek rano po wolnym poniedziałku – „Na razie: 2 z 2” w kolorze akcentu, a raport wachty „– na razie na kursie”, choć wtorkowe zakupy (wpisane wieczorem albo z importu z mBanku za 2–3 dni) zwykle ten dzień odbiorą i misja wraca do „1 z 2”. Dzień bieżący liczy się jako wolny, zanim się skończy; rozliczenie po zamrożeniu niedzieli jest poprawne.
+**Co się dzieje.** Misja „Dzień bez wydatków” (co najmniej 2 dni bez wydatku). W poniedziałek o 8:00, przed pierwszym
+zakupem, panel pokazuje już „Na razie: 1 z 2”. We wtorek rano po wolnym poniedziałku – „Na razie: 2 z 2” w kolorze
+akcentu, a raport wachty „– na razie na kursie”, choć wtorkowe zakupy (wpisane wieczorem albo z importu z mBanku za 2–3
+dni) zwykle ten dzień odbiorą i misja wraca do „1 z 2”. Dzień bieżący liczy się jako wolny, zanim się skończy;
+rozliczenie po zamrożeniu niedzieli jest poprawne.
 
 **Poprawka.** W trakcie tygodnia (upTo < niedziela) liczyć dni wolne tylko do wczoraj (d < upTo), a dzisiejszy pokazać osobno, np. „dziś na razie bez wydatków” albo „+1, jeśli dziś bez wydatków”. ok:true tylko wtedy, gdy próg osiągnęły dni zakończone. Przy rozliczeniu (upTo = niedziela, dzień zamrożony) wszystkie dni są zakończone, więc wynik się nie zmienia.
 
@@ -803,7 +1017,11 @@ Priorytet: niski · obszar: import (ekran)
 
 Gdzie: `src/renderer/features/import/DuplicatesPanel.tsx:98`, `src/renderer/features/import/DuplicatesPanel.tsx:150`, `src/renderer/features/settings/ImportTab.tsx:79`, `src/renderer/features/import/rules.ts:190`
 
-**Co się dzieje.** Użytkownik w panelu „Duplikaty operacji” przez pomyłkę klika „to nie duplikat” przy prawdziwym duplikacie: wpisie ręcznym i jego kopii z banku. Para znika na zawsze. Nie ma toastu z „Cofnij” ani żadnego miejsca w Ustawieniach, gdzie można ją przywrócić. Duplikat zostaje w budżecie i podwaja wydatek. Analogiczne „To nie to samo” z „Podobnych nazw” ma w Ustawieniach → Import z banku licznik i przycisk „pokazuj znowu” (T96). D77 każe rozwiązywać duplikaty „jak w ICTTJ” – z „Cofnij”.
+**Co się dzieje.** Użytkownik w panelu „Duplikaty operacji” przez pomyłkę klika „to nie duplikat” przy prawdziwym
+duplikacie: wpisie ręcznym i jego kopii z banku. Para znika na zawsze. Nie ma toastu z „Cofnij” ani żadnego miejsca w
+Ustawieniach, gdzie można ją przywrócić. Duplikat zostaje w budżecie i podwaja wydatek. Analogiczne „To nie to samo” z
+„Podobnych nazw” ma w Ustawieniach → Import z banku licznik i przycisk „pokazuj znowu” (T96). D77 każe rozwiązywać
+duplikaty „jak w ICTTJ” – z „Cofnij”.
 
 **Poprawka.** Po „to nie duplikat” toast z „Cofnij” (usuwa ten klucz z notDuplicates). W Ustawienia → Import z banku, obok „Pary oznaczone „To nie to samo””, dodać „Pary oznaczone „to nie duplikat”: N · pokazuj znowu”, czyszczące settings.import.notDuplicates.
 
@@ -823,7 +1041,14 @@ Priorytet: niski · obszar: import (ekran)
 
 Gdzie: `src/renderer/features/import/ImportPage.tsx:541`, `src/renderer/features/import/ImportPage.tsx:561`, `src/renderer/features/import/options.ts:54`, `src/renderer/features/operations/state.ts:99`, `src/renderer/features/import/KeywordRules.tsx:26`, `src/renderer/features/import/Learning.tsx:135`
 
-**Co się dzieje.** Użytkownik szuka w imporcie „rossmann”, zaznacza znalezione (zakupy i dwa wpływy-zwroty), wybiera „Wydatek / zwrot towaru – kategoria” i zaznacza „zapamiętaj „rossmann” jako słowo kluczowe”. Decyzja trafia do obu kierunków (fits('expense', 'in') = true), ale reguła słowa powstaje z direction 'out'. Przy kolejnym imporcie zwroty-przelewy z tym słowem nie są rozpoznane. W Operacjach ta sama akcja zapisuje słowo dla obu kierunków, gdy wśród zaznaczonych są zwroty (T91; poprawka z przeglądu 1.2.1 „słowo z Operacji w obu kierunkach” objęła tylko Operacje). Do tego przy opcjach „Finansuje: X” i „Od domownika: X” pole „zapamiętaj jako słowo kluczowe” w ogóle znika. Tymczasem KeywordRules oferuje „Finansuje: X – kategoria”, a propozycja słowa (T98) zapisuje także decyzje domownika. Komentarz KEYWORD_KIND twierdzi, że odpowiada KeywordRules.
+**Co się dzieje.** Użytkownik szuka w imporcie „rossmann”, zaznacza znalezione (zakupy i dwa wpływy-zwroty), wybiera
+„Wydatek / zwrot towaru – kategoria” i zaznacza „zapamiętaj „rossmann” jako słowo kluczowe”. Decyzja trafia do obu
+kierunków (fits('expense', 'in') = true), ale reguła słowa powstaje z direction 'out'. Przy kolejnym imporcie
+zwroty-przelewy z tym słowem nie są rozpoznane. W Operacjach ta sama akcja zapisuje słowo dla obu kierunków, gdy wśród
+zaznaczonych są zwroty (T91; poprawka z przeglądu 1.2.1 „słowo z Operacji w obu kierunkach” objęła tylko Operacje). Do
+tego przy opcjach „Finansuje: X” i „Od domownika: X” pole „zapamiętaj jako słowo kluczowe” w ogóle znika. Tymczasem
+KeywordRules oferuje „Finansuje: X – kategoria”, a propozycja słowa (T98) zapisuje także decyzje domownika. Komentarz
+KEYWORD_KIND twierdzi, że odpowiada KeywordRules.
 
 **Poprawka.** W BulkBar liczyć kierunek z zaznaczonych grup i wierszy, do których decyzja pasuje (null, gdy wśród nich jest 'in' przy opcji 'expense'), jak categorizeTicked. Dodać opcje 'refundable:<id>' (kind expense, refundable, memberId) i 'household:<id>:income|advance' (kind income, household, memberId) przekazywane do saveKeywordRule, tak jak w RuleProposal. Poprawić komentarz KEYWORD_KIND.
 
@@ -855,7 +1080,12 @@ Priorytet: niski · obszar: import (ekran)
 
 Gdzie: `src/renderer/features/import/ImportPage.tsx:509`, `src/renderer/features/import/ImportPage.tsx:412`, `src/renderer/features/import/ImportPage.tsx:424`, `src/shared/import/reconcile.ts:602`
 
-**Co się dzieje.** Przelewy z tytułem „za obiad” tworzą temat z propozycją ze słowa w tytule (byTitle; sygnatura z „:t”, więc osobny temat). Użytkownik zmienia kategorię tematu na „Prezenty”. Przy temacie pojawia się zaznaczone „zapamiętaj” z podpowiedzią „Kolejne importy rozpoznają marki tego tematu same”, ale buildImport pomija grupy byTitle i reguła nie powstaje. Przy następnym imporcie znów pojawi się „Jedzenie”. Na poziomie grupy ta sama sytuacja ukrywa „zapamiętaj” i mówi „z tytułu przelewu – bez reguły”. „Przyjmij pewne” (tooltip „zapamiętane dla kolejnych importów”) też obejmuje takie tematy.
+**Co się dzieje.** Przelewy z tytułem „za obiad” tworzą temat z propozycją ze słowa w tytule (byTitle; sygnatura z „:t”,
+więc osobny temat). Użytkownik zmienia kategorię tematu na „Prezenty”. Przy temacie pojawia się zaznaczone „zapamiętaj”
+z podpowiedzią „Kolejne importy rozpoznają marki tego tematu same”, ale buildImport pomija grupy byTitle i reguła nie
+powstaje. Przy następnym imporcie znów pojawi się „Jedzenie”. Na poziomie grupy ta sama sytuacja ukrywa „zapamiętaj” i
+mówi „z tytułu przelewu – bez reguły”. „Przyjmij pewne” (tooltip „zapamiętane dla kolejnych importów”) też obejmuje
+takie tematy.
 
 **Poprawka.** W ThemeRow ukryć „zapamiętaj”, gdy t.groups.every(g => g.byTitle), i pokazać dopisek „z tytułu przelewu – bez reguły” jak przy grupie. W acceptSure pomijać takie tematy albo uzupełnić tooltip o wyjątek.
 
@@ -888,7 +1118,13 @@ Priorytet: niski · obszar: import (ekran)
 
 Gdzie: `src/shared/import/reconcile.ts:411`, `src/renderer/features/import/ImportPage.tsx:588`, `src/renderer/features/import/rules.ts:67`
 
-**Co się dzieje.** Użytkownik ustawia temat „Zakupy bez rozpoznania” na „Kawa i przekąski” i szuka „kawa”. Te grupy nie zostaną znalezione, bo wyszukiwarka sprawdza kategorię propozycji (g.proposed), a nie decyzję widoczną na ekranie. Odwrotnie: wyszukanie „kawa” znajduje wszystkie grupy z propozycją kategorii „Kawa…” (także Costa czy Starbucks bez słowa „kawa” w nazwie) oraz podciągi w środku słów i w powodach („przelew wychodzący – … przelew własny?”). Pasek zbiorczy proponuje potem „zapamiętaj „kawa” jako słowo kluczowe” z podpowiedzią „Kolejne importy rozpoznają operacje z tym słowem w nazwie albo tytule same”. Reguła słowa łapie jednak tylko słowa zaczynające się od „kawa” w nazwie lub tytule, czyli inny zbiór niż ten zaznaczony.
+**Co się dzieje.** Użytkownik ustawia temat „Zakupy bez rozpoznania” na „Kawa i przekąski” i szuka „kawa”. Te grupy nie
+zostaną znalezione, bo wyszukiwarka sprawdza kategorię propozycji (g.proposed), a nie decyzję widoczną na ekranie.
+Odwrotnie: wyszukanie „kawa” znajduje wszystkie grupy z propozycją kategorii „Kawa…” (także Costa czy Starbucks bez
+słowa „kawa” w nazwie) oraz podciągi w środku słów i w powodach („przelew wychodzący – … przelew własny?”). Pasek
+zbiorczy proponuje potem „zapamiętaj „kawa” jako słowo kluczowe” z podpowiedzią „Kolejne importy rozpoznają operacje z
+tym słowem w nazwie albo tytule same”. Reguła słowa łapie jednak tylko słowa zaczynające się od „kawa” w nazwie lub
+tytule, czyli inny zbiór niż ten zaznaczony.
 
 **Poprawka.** W searchGroups przekazywać efektywną kategorię decyzji (wiersz → grupa → temat → propozycja), np. funkcją labelOfGroup(g) z ekranu, zamiast g.proposed. Rozważyć usunięcie g.reason z tekstu wyszukiwania. Przy „zapamiętaj jako słowo kluczowe” opcjonalnie pokazać, ile zaznaczonych operacji słowo faktycznie obejmie.
 
@@ -908,9 +1144,18 @@ Priorytet: niski · obszar: import (ekran)
 
 Gdzie: `src/renderer/features/import/state.ts:484`, `src/renderer/features/household/actions.ts:65`
 
-**Co się dzieje.** Domownik „Tata” ma „pytaj”. W pliku jest 8 jego przelewów w jednej grupie. Użytkownik ustawia grupę na „reszta jako zaliczka” (1 głos), a jeden przelew osobno, przez zaznaczenie i pasek zbiorczy, na „reszta jako przychód” (1 głos). Remis rozstrzyga się na 'income', więc osoba dostaje na stałe „przychód”, choć 7 z 8 wpłat zdecydowano jako zaliczkę. T109 mówi „przy kilku w jednym imporcie – częstsza”. Liczba głosów zależy też od przypadku: decyzja tematu to 1 głos, ale po przeliczeniu planu staje się N głosami grup. Głosują też decyzje grup i wierszy pominiętych („Nie importuj”), dla których nic nie powstaje.
+**Co się dzieje.** Domownik „Tata” ma „pytaj”. W pliku jest 8 jego przelewów w jednej grupie. Użytkownik ustawia grupę
+na „reszta jako zaliczka” (1 głos), a jeden przelew osobno, przez zaznaczenie i pasek zbiorczy, na „reszta jako
+przychód” (1 głos). Remis rozstrzyga się na 'income', więc osoba dostaje na stałe „przychód”, choć 7 z 8 wpłat
+zdecydowano jako zaliczkę. T109 mówi „przy kilku w jednym imporcie – częstsza”. Liczba głosów zależy też od przypadku:
+decyzja tematu to 1 głos, ale po przeliczeniu planu staje się N głosami grup. Głosują też decyzje grup i wierszy
+pominiętych („Nie importuj”), dla których nic nie powstaje.
 
-**Poprawka.** Głosy liczyć na operacje: dla każdego wiersza planu, który powstaje (status new albo przywrócony usunięty, bez choices.skip), wziąć jawną decyzję w kolejności choices.rows → choices.groups[grupa] → choices.themes[temat]. Wiersze, które biorą tylko propozycję, pomijać – inaczej dla osoby z „pytaj” liczyłaby się domyślna propozycja „przychód”, a nie jawna decyzja (T109). Każdą jawną decyzję household przekazać do rememberInflows jako jeden głos. Samo result.create nie wystarczy, bo nie odróżnia decyzji jawnej od propozycji.
+**Poprawka.** Głosy liczyć na operacje: dla każdego wiersza planu, który powstaje (status new albo przywrócony usunięty,
+bez choices.skip), wziąć jawną decyzję w kolejności choices.rows → choices.groups[grupa] → choices.themes[temat].
+Wiersze, które biorą tylko propozycję, pomijać – inaczej dla osoby z „pytaj” liczyłaby się domyślna propozycja
+„przychód”, a nie jawna decyzja (T109). Każdą jawną decyzję household przekazać do rememberInflows jako jeden głos. Samo
+result.create nie wystarczy, bo nie odróżnia decyzji jawnej od propozycji.
 
 ## N85. „+ domownik” zapisuje osobie na stałe „reszta jako przychód”, choć nikt o to nie zapytał (D80 b)
 
@@ -928,7 +1173,11 @@ Priorytet: niski · obszar: import (ekran), import (logika)
 
 Gdzie: `src/shared/import/classify.ts:313`, `src/shared/import/classify.ts:171`, `src/shared/import/classify.ts:177`, `src/renderer/features/import/state.ts:413`, `src/renderer/features/settings/ImportTab.tsx:105`, `src/renderer/features/settings/CategoriesTab.tsx:48`, `src/shared/import/classify.ts:344`, `src/shared/import/classify.ts:171-177` …
 
-**Co się dzieje.** Reguła „sklepalfa → Osobiste · Kosmetyki”. Użytkownik archiwizuje „Kosmetyki” (w Ustawieniach: „Usunięcie to archiwizacja”). Kolejny import: decideRow bierze rule.categoryId bez sprawdzenia archiwum (wbudowane słowa, sieci i podpowiedzi mBanku przechodzą przez usable / placed i zarchiwizowanych nie dają – T37), grupa ma źródło 'rule', temat jest „Gotowe” (zwinięty), więc nowe operacje po cichu lądują w usuniętej kategorii, której nie ma w wyborach. Ustawienia → Reguły importu pokazują ją bez oznaczenia.
+**Co się dzieje.** Reguła „sklepalfa → Osobiste · Kosmetyki”. Użytkownik archiwizuje „Kosmetyki” (w Ustawieniach:
+„Usunięcie to archiwizacja”). Kolejny import: decideRow bierze rule.categoryId bez sprawdzenia archiwum (wbudowane
+słowa, sieci i podpowiedzi mBanku przechodzą przez usable / placed i zarchiwizowanych nie dają – T37), grupa ma źródło
+'rule', temat jest „Gotowe” (zwinięty), więc nowe operacje po cichu lądują w usuniętej kategorii, której nie ma w
+wyborach. Ustawienia → Reguły importu pokazują ją bez oznaczenia.
 
 **Poprawka.** W decideRow kategorię z reguły wydatku przepuszczać przez usable(). Gdy jest zarchiwizowana: source 'none', powód „kategoria reguły zarchiwizowana – wybierz nową”, temat 'todo'. Nowa decyzja użytkownika nadpisze regułę przez upsertRule. W Ustawienia → Reguły importu oznaczać takie reguły (np. „(zarchiwizowana)”). Opcjonalnie przy archiwizacji kategorii pokazać liczbę reguł, które na nią wskazują.
 
@@ -950,7 +1199,13 @@ Priorytet: niski · obszar: import (logika)
 
 Gdzie: `src/shared/import/reconcile.ts:166-186`, `src/shared/import/duplicates.ts:306-329`, `src/renderer/features/import/DuplicatesPanel.tsx:52-57`, `src/renderer/features/import/ImportPage.tsx:229-231`
 
-**Co się dzieje.** Wpis ręczny „Fryzjer” −45 zł z 10.10 (bez kategorii). W imporcie jest wiersz ROSSMANN −45 zł z 13.10, zakup kartą 3 dni później. Import oznacza go jako możliwy duplikat 'name' z ask=true i domyślnie nie łączy (T92: „jak w ICTTJ możliwy duplikat nie jest brany sam”). Użytkownik zostawia odznaczone albo celowo odznacza, bo to dwie różne operacje. Po imporcie panel „Duplikaty operacji” znajduje tę samą parę tym samym looseMatch, ale jako grupę bez konfliktu (wpis ręczny nie ma decyzji). Grupa jest więc zaznaczona domyślnie i „Scal zaznaczone” usuwa operację z banku. Wybór „nie łącz” z importu (noMerge, tylko w sesji) nie trafia do notDuplicates. Dwa ekrany z tej samej reguły (D77, T92 „jedna reguła dla importu i panelu”) mają odwrotne domyślne zachowanie.
+**Co się dzieje.** Wpis ręczny „Fryzjer” −45 zł z 10.10 (bez kategorii). W imporcie jest wiersz ROSSMANN −45 zł z 13.10,
+zakup kartą 3 dni później. Import oznacza go jako możliwy duplikat 'name' z ask=true i domyślnie nie łączy (T92: „jak w
+ICTTJ możliwy duplikat nie jest brany sam”). Użytkownik zostawia odznaczone albo celowo odznacza, bo to dwie różne
+operacje. Po imporcie panel „Duplikaty operacji” znajduje tę samą parę tym samym looseMatch, ale jako grupę bez
+konfliktu (wpis ręczny nie ma decyzji). Grupa jest więc zaznaczona domyślnie i „Scal zaznaczone” usuwa operację z banku.
+Wybór „nie łącz” z importu (noMerge, tylko w sesji) nie trafia do notDuplicates. Dwa ekrany z tej samej reguły (D77, T92
+„jedna reguła dla importu i panelu”) mają odwrotne domyślne zachowanie.
 
 **Poprawka.** Dodać do `DuplicateGroup` flagę `ask` liczoną tą samą regułą co w imporcie (`!(similar || (days <= 1 && zakup kartą))`) i nie zaznaczać takich grup domyślnie (jak konflikt). Odznaczenie „łącz” w imporcie zapisywać po zapisie jako `settings.import.notDuplicates[duplicateKey([tx.id, nowe id])]`.
 
@@ -960,7 +1215,13 @@ Priorytet: niski · obszar: import (logika)
 
 Gdzie: `src/shared/import/reconcile.ts:175`, `src/shared/import/reconcile.ts:46-50`, `src/shared/import/duplicates.ts:310`, `src/shared/import/duplicates.ts:341`
 
-**Co się dzieje.** Wpis ręczny „Kawa na stacji” −5,10 zł z 10.10. W imporcie z 11.10 jest prowizja banku −5,00 zł, bez kontrahenta: operation 'PROWIZJA ZA PRZELEW NATYCHMIASTOWY'. Import porównuje nazwę z opisem (`row.counterparty || row.description`): nazwy nie są podobne, kwota nie jest ta sama, więc wiersz wchodzi jako nowy. Panel duplikatów porównuje z `copy.bank.counterparty || copy.counterparty` = ''. similarCounterparty('', …) zwraca true, a różnica 10 gr ≤ max(1 zł, 3%), więc powstaje grupa „inna kwota” bez konfliktu, zaznaczona domyślnie. Scalenie zostawia „Kawa na stacji” z kwotą −5,00 i wierszem prowizji, a prowizję usuwa. Tak samo działa każda wypłata z bankomatu czy opłata bez nazwy wobec dowolnego wpisu ręcznego o zbliżonej kwocie w ±3 dniach.
+**Co się dzieje.** Wpis ręczny „Kawa na stacji” −5,10 zł z 10.10. W imporcie z 11.10 jest prowizja banku −5,00 zł, bez
+kontrahenta: operation 'PROWIZJA ZA PRZELEW NATYCHMIASTOWY'. Import porównuje nazwę z opisem (`row.counterparty ||
+row.description`): nazwy nie są podobne, kwota nie jest ta sama, więc wiersz wchodzi jako nowy. Panel duplikatów
+porównuje z `copy.bank.counterparty || copy.counterparty` = ''. similarCounterparty('', …) zwraca true, a różnica 10 gr
+≤ max(1 zł, 3%), więc powstaje grupa „inna kwota” bez konfliktu, zaznaczona domyślnie. Scalenie zostawia „Kawa na
+stacji” z kwotą −5,00 i wierszem prowizji, a prowizję usuwa. Tak samo działa każda wypłata z bankomatu czy opłata bez
+nazwy wobec dowolnego wpisu ręcznego o zbliżonej kwocie w ±3 dniach.
 
 **Poprawka.** W `findDuplicates` użyć `name: copy.bank!.counterparty || copy.bank!.description`, tak jak import (`BankRow.description` jest zapisany). Najlepiej wydzielić wspólną funkcję `bankNameOf(row | bank)` dla obu wywołań `looseMatch`.
 
@@ -970,7 +1231,11 @@ Priorytet: niski · obszar: import (logika)
 
 Gdzie: `src/shared/import/reconcile.ts:327`, `src/shared/import/reconcile.ts:554-561`, `src/renderer/features/import/ImportPage.tsx:218`, `src/renderer/features/import/ImportPage.tsx:275`
 
-**Co się dzieje.** Użytkownik usunął zaimportowane operacje (np. żeby zaimportować plik jeszcze raz z innymi decyzjami) i przy kolejnym imporcie zaznacza „importuj mimo to” przy wierszach 'deleted'. importGroups bierze tylko wiersze 'new', więc przywrócone wiersze nie mają na ekranie grupy ani tematu. buildImport daje im decyzję grupy tylko wtedy, gdy w pliku jest też nowy wiersz z tym samym kluczem grupy; inaczej wchodzą z propozycją (bez rozpoznania – wydatek bez kategorii albo wpływ), bez możliwości wyboru decyzji i bez nauki reguł.
+**Co się dzieje.** Użytkownik usunął zaimportowane operacje (np. żeby zaimportować plik jeszcze raz z innymi decyzjami)
+i przy kolejnym imporcie zaznacza „importuj mimo to” przy wierszach 'deleted'. importGroups bierze tylko wiersze 'new',
+więc przywrócone wiersze nie mają na ekranie grupy ani tematu. buildImport daje im decyzję grupy tylko wtedy, gdy w
+pliku jest też nowy wiersz z tym samym kluczem grupy; inaczej wchodzą z propozycją (bez rozpoznania – wydatek bez
+kategorii albo wpływ), bez możliwości wyboru decyzji i bez nauki reguł.
 
 **Poprawka.** Przy wierszach „Usunięte przez Ciebie wcześniej” pokazać propozycję i pozwolić wybrać decyzję (np. `choices.rows[p.key]` z tymi samymi opcjami co w wierszu grupy). Alternatywa: zaznaczone do przywrócenia wiersze dołączać do `importGroups` z flagą `restored`, żeby trafiły do grup i tematów.
 
@@ -980,7 +1245,11 @@ Priorytet: niski · obszar: folder danych i synchronizacja
 
 Gdzie: `src/main/datastore/store.ts:963`, `src/main/datastore/store.ts:971`
 
-**Co się dzieje.** Na komputerze PC użytkownik wybiera „Zachowaj tę wersję” przy kopii transactions/…-LAPTOP.json. resolveConflict podmienia tylko updatedAt, updatedBy zostaje 'LAPTOP' (i schemaVersion kopii). Historia pokazuje „Wersja zapisana … na komputerze LAPTOP”, okno zmian na laptopie mówi „z komputera LAPTOP” o zmianie zrobionej na PC, a pierwsza edycja na PC zawsze odkłada wersję jako „z innego komputera”. Każdy inny zapis main stempluje updatedBy = ten komputer (CLAUDE.md: „updatedBy = nazwa komputera, ustawiane przez main przy zapisie”).
+**Co się dzieje.** Na komputerze PC użytkownik wybiera „Zachowaj tę wersję” przy kopii transactions/…-LAPTOP.json.
+resolveConflict podmienia tylko updatedAt, updatedBy zostaje 'LAPTOP' (i schemaVersion kopii). Historia pokazuje „Wersja
+zapisana … na komputerze LAPTOP”, okno zmian na laptopie mówi „z komputera LAPTOP” o zmianie zrobionej na PC, a pierwsza
+edycja na PC zawsze odkłada wersję jako „z innego komputera”. Każdy inny zapis main stempluje updatedBy = ten komputer
+(CLAUDE.md: „updatedBy = nazwa komputera, ustawiane przez main przy zapisie”).
 
 **Poprawka.** Zapis zachowanej wersji przeprowadzić wspólną ścieżką z saveRecord / saveSettings: `SCHEMAS[kind].parse({...kopia, schemaVersion: SCHEMA_VERSION, updatedAt: now, updatedBy: machineName})`, z wcześniejszym history.snapshot nadpisywanego oryginału (powód 'discarded'). Opcjonalnie w historii odłożyć też kopię z jej oryginalnym updatedBy, żeby nie zgubić informacji, skąd pochodziła treść.
 
@@ -990,9 +1259,21 @@ Priorytet: niski · obszar: folder danych i synchronizacja
 
 Gdzie: `src/shared/merge.ts:155`, `src/shared/merge.ts:224`, `src/renderer/features/history/HistoryDialog.tsx:31`, `src/renderer/features/history/HistoryDialog.tsx:35`
 
-**Co się dzieje.** Polski interfejs pokazuje w Historii i w oknie zmian z drugiego komputera etykiety takie jak „type”, „from”, „until” (kontener), „direction”, „schedule.amount”, „closedAt” (pożyczka), „pool”, „split.hull”, „transactionId” (dokowanie), „correctionId”, „deadline”, „source”, „Podział łupów – shields”, „Dane z banku – counterparty”, „Warstwy – shieldSalaries”, „Rozkazy – firewall”, „Ustawienia – ictj.forecastId”, „Ustawienia – game.promoteDays”. Klucze map po id pokazują surowy ULID kategorii: „Koperty – 01J9ZZZ…” i „Podział łupów – goals.01J9…”. Wartości memberId, containerId, goalId i loanId też są surowymi ULID-ami. dictNames zbiera tylko tablice najwyższego poziomu `fi.settings`, więc domownicy (`settings.household.members`, od 1.3.0) i rekordy (kontenery, cele, pożyczki) nie dostają nazw, a konta i kategorie dostają. Użytkownik nie wie, która koperta czy który domownik się zmienił.
+**Co się dzieje.** Polski interfejs pokazuje w Historii i w oknie zmian z drugiego komputera etykiety takie jak „type”,
+„from”, „until” (kontener), „direction”, „schedule.amount”, „closedAt” (pożyczka), „pool”, „split.hull”, „transactionId”
+(dokowanie), „correctionId”, „deadline”, „source”, „Podział łupów – shields”, „Dane z banku – counterparty”, „Warstwy –
+shieldSalaries”, „Rozkazy – firewall”, „Ustawienia – ictj.forecastId”, „Ustawienia – game.promoteDays”. Klucze map po id
+pokazują surowy ULID kategorii: „Koperty – 01J9ZZZ…” i „Podział łupów – goals.01J9…”. Wartości memberId, containerId,
+goalId i loanId też są surowymi ULID-ami. dictNames zbiera tylko tablice najwyższego poziomu `fi.settings`, więc
+domownicy (`settings.household.members`, od 1.3.0) i rekordy (kontenery, cele, pożyczki) nie dostają nazw, a konta i
+kategorie dostają. Użytkownik nie wie, która koperta czy który domownik się zmienił.
 
-**Poprawka.** Uzupełnić LABELS o pola wszystkich schematów z records.ts i budget.ts (type, from, until, direction, closedAt, pool, split.*, transactionId, source, correctionId, deadline, settings.ictj.*, settings.game.*, settings.layers.*, settings.orders.*, loot.*, bank.counterparty…). Wartości enumów (fixed / subscription / installment itp.) tłumaczyć istniejącymi słownikami etykiet. W fieldLabel przyjmować mapę nazw i zamieniać segment ścieżki będący ULID-em (także po '#') na nazwę. W dictNames dodać settings.household.members oraz nazwy kontenerów, celów i pożyczek z bieżących rekordów store'u.
+**Poprawka.** Uzupełnić LABELS o pola wszystkich schematów z records.ts i budget.ts (type, from, until, direction,
+closedAt, pool, split.*, transactionId, source, correctionId, deadline, settings.ictj.*, settings.game.*,
+settings.layers.*, settings.orders.*, loot.*, bank.counterparty…). Wartości enumów (fixed / subscription / installment
+itp.) tłumaczyć istniejącymi słownikami etykiet. W fieldLabel przyjmować mapę nazw i zamieniać segment ścieżki będący
+ULID-em (także po '#') na nazwę. W dictNames dodać settings.household.members oraz nazwy kontenerów, celów i pożyczek z
+bieżących rekordów store'u.
 
 ## N93. Obecność: komputer z zegarem przestawionym do przodu nigdy nie jest „aktywny” – znika ostrzeżenie o folderze otwartym na dwóch komputerach
 
@@ -1010,7 +1291,13 @@ Priorytet: niski · obszar: folder danych i synchronizacja
 
 Gdzie: `src/renderer/features/sync/SyncPage.tsx:34`, `src/renderer/features/sync/SyncPage.tsx:49`, `src/renderer/features/sync/SyncPage.tsx:129`, `src/main/datastore/store.ts:112`, `src/shared/merge.ts:29`
 
-**Co się dzieje.** Dwa komputery zapisały tę samą treść i OneDrive zrobił kopię `-PC`. Kopie różnią się tylko `updatedBy` (PC-A / PC-B). Karta konfliktu pokazuje wtedy tabelę z jednym wierszem „updatedBy” zamiast obiecanego „Treść identyczna (różni się tylko czas zapisu) – można bezpiecznie zachować oryginał”, bo pomija wyłącznie `updatedAt`. „Tę samą treść” aplikacja definiuje w trzech miejscach na trzy sposoby: STAMP_FIELDS w store, BOOKKEEPING w merge i filtr w SyncPage. Karta używa też własnego `flatten` z kluczami w stylu `splits[0].amount` i `settings.categories[3].name`. Pola idą po indeksie (zmiana kolejności listy = sztuczne różnice), wartości są surowe (ULID kategorii, grosze), a Historia i okno zmian używają fieldLabel, diffRecords po id i nazw.
+**Co się dzieje.** Dwa komputery zapisały tę samą treść i OneDrive zrobił kopię `-PC`. Kopie różnią się tylko
+`updatedBy` (PC-A / PC-B). Karta konfliktu pokazuje wtedy tabelę z jednym wierszem „updatedBy” zamiast obiecanego „Treść
+identyczna (różni się tylko czas zapisu) – można bezpiecznie zachować oryginał”, bo pomija wyłącznie `updatedAt`. „Tę
+samą treść” aplikacja definiuje w trzech miejscach na trzy sposoby: STAMP_FIELDS w store, BOOKKEEPING w merge i filtr w
+SyncPage. Karta używa też własnego `flatten` z kluczami w stylu `splits[0].amount` i `settings.categories[3].name`. Pola
+idą po indeksie (zmiana kolejności listy = sztuczne różnice), wartości są surowe (ULID kategorii, grosze), a Historia i
+okno zmian używają fieldLabel, diffRecords po id i nazw.
 
 **Poprawka.** W ConflictCard: `const changes = diffRecords(c.canonical.record, c.copy.record)` i `<ChangeList changes={changes} beforeLabel="Oryginał" afterLabel="Kopia" />` (BOOKKEEPING pomija updatedAt, updatedBy, schemaVersion i computed). Komunikat „Treść identyczna” pokazywać, gdy `changes.length === 0`. Lokalne flatten usunąć.
 
@@ -1020,7 +1307,12 @@ Priorytet: niski · obszar: folder danych i synchronizacja
 
 Gdzie: `src/renderer/features/sync/SyncPage.tsx:338`, `src/main/datastore/store.ts:990`, `src/main/datastore/store.ts:994`
 
-**Co się dzieje.** Na liście „Pliki z problemami” jest wpis „nowszy format” (plik zapisany przez nowszą wersję FI na drugim komputerze, zanim dotarło jej fi.json) albo „uszkodzony” z błędem odczytu (plik OneDrive tylko online – znalezisko o jednorazowym błędzie odczytu). Jedno kliknięcie „Do Kosza” (bez „Usuń na pewno”, jak w DeleteButton) przenosi plik do Kosza tego komputera, a OneDrive usuwa go na drugim – nowsza wersja aplikacji traci swój rekord, a w drugim przypadku znika poprawna operacja. Tekst strony mówi o „uszkodzonych plikach” do naprawy, nie o danych nowszej wersji.
+**Co się dzieje.** Na liście „Pliki z problemami” jest wpis „nowszy format” (plik zapisany przez nowszą wersję FI na
+drugim komputerze, zanim dotarło jej fi.json) albo „uszkodzony” z błędem odczytu (plik OneDrive tylko online –
+znalezisko o jednorazowym błędzie odczytu). Jedno kliknięcie „Do Kosza” (bez „Usuń na pewno”, jak w DeleteButton)
+przenosi plik do Kosza tego komputera, a OneDrive usuwa go na drugim – nowsza wersja aplikacji traci swój rekord, a w
+drugim przypadku znika poprawna operacja. Tekst strony mówi o „uszkodzonych plikach” do naprawy, nie o danych nowszej
+wersji.
 
 **Poprawka.** Dla błędu odczytu osobny rodzaj problemu (np. 'unreadable' – „nie można odczytać”) z przyciskiem „Wczytaj ponownie” (rescan bez pamięci podręcznej tego pliku) zamiast samego „Do Kosza”. Dla 'too-new' bez przycisku kosza, z podpowiedzią o aktualizacji. Dla pozostałych dwustopniowe potwierdzenie jak DeleteButton („Do Kosza na pewno”).
 
@@ -1030,7 +1322,12 @@ Priorytet: niski · obszar: folder danych i synchronizacja
 
 Gdzie: `src/main/index.ts:571`, `src/main/datastore/backup.ts:19`, `src/renderer/features/settings/SettingsPage.tsx:314`, `src/renderer/features/settings/SettingsPage.tsx:316`, `src/renderer/features/sync/SyncPage.tsx:350`
 
-**Co się dzieje.** Przycisk nazywa się „Eksport: ZIP całego folderu…”, a obok jest instrukcja przywracania: rozpakuj do pustego folderu i otwórz. ZIP powstaje filtrem isDataFile (tylko fi.json i rekordy), bez .history/. Po takim przywróceniu znikają wszystkie wcześniejsze wersje wpisów i lista „Usunięte wpisy” jest pusta (a z nią T39: usunięte operacje wracają z importem), choć specyfikacja mówi o „pełnej kopii danych w ZIP”. Strona Synchronizacja radzi przy tym „przywrócić z kopii w folderze backups/”, a folder kopii może być na tym komputerze ustawiony gdzie indziej („Zmień folder kopii…”). Wtedy w backups/ nic nie ma.
+**Co się dzieje.** Przycisk nazywa się „Eksport: ZIP całego folderu…”, a obok jest instrukcja przywracania: rozpakuj do
+pustego folderu i otwórz. ZIP powstaje filtrem isDataFile (tylko fi.json i rekordy), bez .history/. Po takim
+przywróceniu znikają wszystkie wcześniejsze wersje wpisów i lista „Usunięte wpisy” jest pusta (a z nią T39: usunięte
+operacje wracają z importem), choć specyfikacja mówi o „pełnej kopii danych w ZIP”. Strona Synchronizacja radzi przy tym
+„przywrócić z kopii w folderze backups/”, a folder kopii może być na tym komputerze ustawiony gdzie indziej („Zmień
+folder kopii…”). Wtedy w backups/ nic nie ma.
 
 **Poprawka.** Opcja minimalna: zmienić etykietę na „Eksport: ZIP danych (bez historii zmian)…” i dopisać przy instrukcji przywracania, że usunięte operacje mogą wrócić z importem (T39). Lepiej: w exportZip, i ewentualnie w kopii ręcznej, dołączać .history/ (filtr isDataFile || rel.startsWith('.history/')), a T20 dla kopii dziennych zostawić. W SyncPage pokazywać rzeczywisty folder z api.listBackups().dir zamiast stałego „backups/”.
 
@@ -1040,7 +1337,11 @@ Priorytet: niski · obszar: folder danych i synchronizacja
 
 Gdzie: `src/renderer/features/sync/SyncPage.tsx:259`, `src/renderer/features/sync/RemoteChangesDialog.tsx:253`, `src/renderer/features/sync/RemoteChangesDialog.tsx:29`, `src/renderer/features/sync/RemoteChangesDialog.tsx:135`
 
-**Co się dzieje.** Akcja zbiorcza „weź wersję zmienioną później” ma dwie nazwy: na stronie Synchronizacja „Zachowaj nowsze: zaznaczone / wszystkie”, w oknie zmian „Zaakceptuj nowsze: …”. Dokumenty (decyzje.md:201, 591) i komentarze w data.ts / remoteChanges.ts mówią „Zaakceptuj nowsze / nowszą”. Gdy przychodząca wersja nie ma `updatedBy` (plik pisany ręcznie albo przez starszy format), machineOf zwraca „inny komputer” wstawiane w zdania z dopełniaczem: „Weź z inny komputer”, „z komputera inny komputer”, „Zmiany z inny komputer: 3”.
+**Co się dzieje.** Akcja zbiorcza „weź wersję zmienioną później” ma dwie nazwy: na stronie Synchronizacja „Zachowaj
+nowsze: zaznaczone / wszystkie”, w oknie zmian „Zaakceptuj nowsze: …”. Dokumenty (decyzje.md:201, 591) i komentarze w
+data.ts / remoteChanges.ts mówią „Zaakceptuj nowsze / nowszą”. Gdy przychodząca wersja nie ma `updatedBy` (plik pisany
+ręcznie albo przez starszy format), machineOf zwraca „inny komputer” wstawiane w zdania z dopełniaczem: „Weź z inny
+komputer”, „z komputera inny komputer”, „Zmiany z inny komputer: 3”.
 
 **Poprawka.** Ujednolicić nazwę na „Zaakceptuj nowsze” (jak w docs) na stronie Synchronizacja: przyciski i opis. machineOf przy braku updatedBy niech zwraca null, a teksty mają wtedy osobne warianty: „z innego komputera”, „Weź z drugiego komputera”, „Zmiany z innego komputera: N”.
 
@@ -1050,7 +1351,12 @@ Priorytet: niski · obszar: proces główny i okna
 
 Gdzie: `src/renderer/app/Banners.tsx:43`, `src/renderer/features/settings/UpdatesTab.tsx:73`, `src/renderer/features/settings/UpdatesTab.tsx:150`, `src/renderer/features/settings/UpdatesTab.tsx:228`, `src/main/config.ts:18`, `src/main/index.ts:858`, `src/main/index.ts:910`, `src/main/update/updater.ts:357`
 
-**Co się dzieje.** Domyślna konfiguracja (D64: zamykanie do zasobnika, kreator włącza start z Windows). Aktualizacja pobiera się w tle, baner i Ustawienia mówią „zainstaluje się (sama) po zamknięciu aplikacji”. Użytkownik klika X – okno tylko się chowa (applyOnQuit nie rusza). Wieczorem wyłącza komputer – query-session-end/session-end wołają postponeInstall(), więc applyOnQuit zwraca false („installed at the next close”). Rano aplikacja startuje ukryta w zasobniku i cykl się powtarza. Aktualizacja instaluje się tylko po „Uruchom ponownie teraz” albo „Zakończ” z menu ikony – czego teksty nie mówią. Okno schowane w zasobniku nie dostaje też powiadomienia, że wersja czeka.
+**Co się dzieje.** Domyślna konfiguracja (D64: zamykanie do zasobnika, kreator włącza start z Windows). Aktualizacja
+pobiera się w tle, baner i Ustawienia mówią „zainstaluje się (sama) po zamknięciu aplikacji”. Użytkownik klika X – okno
+tylko się chowa (applyOnQuit nie rusza). Wieczorem wyłącza komputer – query-session-end/session-end wołają
+postponeInstall(), więc applyOnQuit zwraca false („installed at the next close”). Rano aplikacja startuje ukryta w
+zasobniku i cykl się powtarza. Aktualizacja instaluje się tylko po „Uruchom ponownie teraz” albo „Zakończ” z menu ikony
+– czego teksty nie mówią. Okno schowane w zasobniku nie dostaje też powiadomienia, że wersja czeka.
 
 **Poprawka.** Teksty zależne od closeToTray, np. „zainstaluje się po „Zakończ” w menu ikony albo po „Uruchom ponownie teraz””. Opcjonalnie: przy starcie z systemem (startHidden) z gotową aktualizacją zainstalować ją przed pokazaniem czegokolwiek (aplikacja i tak jest ukryta) albo raz pokazać powiadomienie systemowe „Wersja X czeka – uruchom ponownie”, gdy okno jest w zasobniku.
 
@@ -1070,9 +1376,17 @@ Priorytet: niski · obszar: proces główny i okna
 
 Gdzie: `src/renderer/features/wizard/state.ts:57`, `src/renderer/features/wizard/state.ts:125`, `src/renderer/features/wizard/state.ts:127`, `src/main/config.ts:16`, `docs/decyzje.md:101`
 
-**Co się dzieje.** (1) Użytkownik zmienił skrót w Ustawieniach (koliduje z platformą tradingową), potem uruchamia kreator: pole skrótu pokazuje domyślne Ctrl+Alt+B (nie bieżący skrót) i po zakończeniu go przywraca; tak samo `closeToTray: true` nadpisuje świadome wyłączenie. (2) D64: start z Windows „włącza go kreator startu” – kreator działa raz na folder, więc na drugim komputerze (folder z działającym budżetem, bez kreatora) autostart zostaje wyłączony i nic go nie proponuje, a specyfikacja opiera powiadomienia w tle na tym, że „FI startuje z Windows ukryty w zasobniku”.
+**Co się dzieje.** (1) Użytkownik zmienił skrót w Ustawieniach (koliduje z platformą tradingową), potem uruchamia
+kreator: pole skrótu pokazuje domyślne Ctrl+Alt+B (nie bieżący skrót) i po zakończeniu go przywraca; tak samo
+`closeToTray: true` nadpisuje świadome wyłączenie. (2) D64: start z Windows „włącza go kreator startu” – kreator działa
+raz na folder, więc na drugim komputerze (folder z działającym budżetem, bez kreatora) autostart zostaje wyłączony i nic
+go nie proponuje, a specyfikacja opiera powiadomienia w tle na tym, że „FI startuje z Windows ukryty w zasobniku”.
 
-**Poprawka.** W startWizard ustawić shortcut z useMachine.getState().prefs.quickShortcut i autostart z api.trayPrefs() (launchAtLogin albo true, gdy nigdy nie ustawiano). W finishWizard nie wysyłać closeToTray, chyba że kreator ma na to przełącznik. Dla drugiego komputera (D64): przy pierwszym otwarciu folderu z działającym budżetem na komputerze z launchAtLogin=false i bez zapamiętanego wyboru pokazać raz baner „Uruchamiać z Windows?” (wybór zapisany w config.json → tray). Wymaga potwierdzenia użytkownika, bo zmienia D64.
+**Poprawka.** W startWizard ustawić shortcut z useMachine.getState().prefs.quickShortcut i autostart z api.trayPrefs()
+(launchAtLogin albo true, gdy nigdy nie ustawiano). W finishWizard nie wysyłać closeToTray, chyba że kreator ma na to
+przełącznik. Dla drugiego komputera (D64): przy pierwszym otwarciu folderu z działającym budżetem na komputerze z
+launchAtLogin=false i bez zapamiętanego wyboru pokazać raz baner „Uruchamiać z Windows?” (wybór zapisany w config.json →
+tray). Wymaga potwierdzenia użytkownika, bo zmienia D64.
 
 ## N101. Kategoria bez koperty w tym miesiącu: w trakcie „bez limitu”, w debriefingu czerwone „ponad plan”
 
@@ -1090,7 +1404,14 @@ Priorytet: niski · obszar: silnik budżetu
 
 Gdzie: `src/shared/calc/fleet.ts:907`, `src/shared/calc/game.ts:210`, `src/shared/notify.ts:64`, `src/shared/notify.ts:65`, `src/shared/notify.ts:67`, `src/shared/calc/briefing.ts:27`, `src/shared/schema/budget.ts:320`
 
-**Co się dzieje.** (a) W Dowództwie próg poważnego naruszenia ustawiono na 50%. Koperta Auto 100 zł, wydane 130 zł: odprawa pokazuje czerwony alarm (stałe 20% w silniku), a gra liczy zwykłe naruszenie. Przy progu 10% jest odwrotnie: żółty alarm przy poważnym naruszeniu. (b) Jedzenie (koperta codzienna) 1 500 zł, wydane 1 600 zł, Rozrywka niewykorzystana, więc pula dzienna (D16) jest w normie. Przychodzi powiadomienie „Koperta Jedzenie przekroczona” z dźwiękiem alarmu i czerwonym paskiem. Odprawa nie ma alarmu, gra nie liczy naruszenia, a Daily Bias nie może być Bullish, bo `every(e.spent <= e.limit)` obejmuje też koperty codzienne. (c) Koperta planowa z limitem 0 zł („nic na prezenty w tym miesiącu”) i zakup za 50 zł: silnik daje czerwony alarm (50 > 0 × 1,2), gra zwykłe naruszenie (próg tylko przy limit > 0), a powiadomienia nie ma wcale (`if (e.limit <= 0) continue`).
+**Co się dzieje.** (a) W Dowództwie próg poważnego naruszenia ustawiono na 50%. Koperta Auto 100 zł, wydane 130 zł:
+odprawa pokazuje czerwony alarm (stałe 20% w silniku), a gra liczy zwykłe naruszenie. Przy progu 10% jest odwrotnie:
+żółty alarm przy poważnym naruszeniu. (b) Jedzenie (koperta codzienna) 1 500 zł, wydane 1 600 zł, Rozrywka
+niewykorzystana, więc pula dzienna (D16) jest w normie. Przychodzi powiadomienie „Koperta Jedzenie przekroczona” z
+dźwiękiem alarmu i czerwonym paskiem. Odprawa nie ma alarmu, gra nie liczy naruszenia, a Daily Bias nie może być
+Bullish, bo `every(e.spent <= e.limit)` obejmuje też koperty codzienne. (c) Koperta planowa z limitem 0 zł („nic na
+prezenty w tym miesiącu”) i zakup za 50 zł: silnik daje czerwony alarm (50 > 0 × 1,2), gra zwykłe naruszenie (próg tylko
+przy limit > 0), a powiadomienia nie ma wcale (`if (e.limit <= 0) continue`).
 
 **Poprawka.** Jedna funkcja `envelopeOverrun(e, settings.game)` → {over, serious, level} dla silnika (kolor wg seriousEnvelopePct), gry i powiadomień. Limit 0 traktować wszędzie tak samo, czyli przekroczenie powiadamia, a „ponad 80%” pominąć. Dla kopert codziennych trzeba wybrać jedno: albo powiadomienie łagodne (bez dźwięku alarmu, „ponad podział koperty”) i pominięte w Daily Bias, albo alarm w silniku. To decyzja użytkownika, bo D16 i T56 nic o tym nie mówią.
 

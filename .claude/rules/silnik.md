@@ -167,5 +167,5 @@ w drodze), `tags.ts` (tagi i wyprawy), `drill.ts`, `fuel.ts` (bilans paliwa), `n
 (szablony szybkiego wpisu), `effect.ts` (skutek zmiany zbiorczej), `sankey.ts` (Sankey miesiąca – tylko liczby
 debriefingu, Bilansu paliwa i części operacji, każdy węzeł zbilansowany – T490; nowy przepływ z liczby, którą już mają).
 
-Szczegóły funkcji i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji) i `docs/decyzje.md`
-(T-decyzje).
+Szczegóły funkcji i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji), `docs/decyzje.md` (D) i
+`docs/decyzje-techniczne.md` (T).

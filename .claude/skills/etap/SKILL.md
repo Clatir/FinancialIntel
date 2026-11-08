@@ -14,10 +14,10 @@ Dobór modelu (relatywnie: Fable 5.1 ≈ 2,5× Opus 5.5 ≈ 5× Sonnet 5.5; Haik
 
 | Zadanie | Model |
 | --- | --- |
-| Silnik pieniędzy (warstwy, dokowanie, rozliczenia z domownikami, zwroty, plan miesiąca), granica ICTTJ | Opus 5.5 max (D96) |
-| Migracje danych, synchronizacja, folder danych, telefon, reszta logiki | Opus 5.5 xhigh – domyślny poziom (D96) |
-| Projekt reguł o najwyższej stawce, druga opinia przy znalezisku critical / high | Fable 5.1 – rzadko |
-| Ekrany na gotowym silniku, teksty, testy według jasnej specyfikacji | Opus 5.5 high albo Sonnet 5.5 |
+| Kroki, które zmieniają silnik pieniędzy (warstwy, dokowanie, rozliczenia z domownikami, zwroty, plan miesiąca) albo granicę ICTTJ – implementacja i jej przegląd, nigdy cała grupa | Opus 5.5 max (D103) |
+| Migracje danych, synchronizacja, folder danych, telefon, reszta logiki | Opus 5.5 xhigh (D103) |
+| Druga opinia tylko przy znalezisku critical | Fable 5.1 – rzadko (D103) |
+| Ekrany na gotowym silniku, teksty, testy według jasnej specyfikacji – domyślny poziom | Opus 5.5 high albo Sonnet 5.5 (D103) |
 | CHANGELOG, dokumenty, commit, PR, pilnowanie CI | Sonnet 5.5 |
 | Szerokie przeszukiwanie kodu | agent `Explore` z `model: haiku` |
 
@@ -35,9 +35,16 @@ modelu, a stan przenosi `docs/postep.md`.
    `npm run typecheck`, `npm test`, `npm run build`, E2E (`xvfb-run -a npx playwright test` na Linuksie, w tle), przy
    zmianach telefonu `npm run test:e2e:mobile`. Każda poprawka z testem, który bez niej pada; serie mutacji (> 5 prób)
    w subagencie.
-2. `/code-review` high na diffie etapu; znaleziska poprawione z testem.
+2. `/code-review` według D103: poziom według ryzyka – xhigh dla silnika pieniędzy, folderu danych, migracji,
+   synchronizacji, telefonu (sync) i granicy ICTTJ; high dla reszty kodu; medium dla samych dokumentów i konfiguracji.
+   **Najwyżej dwie rundy:** pierwsza na całym diffie, druga tylko na diffie poprawek z pierwszej; trzecia tylko, gdy
+   druga znalazła critical albo high – znowu tylko na nowych poprawkach. Poprawiane: critical i high zawsze (z testem);
+   medium – gdy da się napisać test, który bez poprawki pada (w dokumentach: oczywisty błąd); reszta (low, nit, medium
+   bez testu) → „Uwagi na później” we wpisie w `docs/postep.md`. Z przeglądu nie wchodzi zmiana zachowania widocznego dla
+   użytkownika bez pytania.
 3. Commit + push (gałąź `claude/<wersja>-<krótki-opis>`).
-4. Wpis w `docs/postep.md`: zakres, decyzje (D… / T…), testy, czas faktyczny, rzeczy otwarte. Nowa reguła albo pułapka
+4. Wpis w `docs/postep.md` (cały plik ≤ 20 KB – D103): zakres, decyzje (D… / T…), testy, czas faktyczny, rzeczy otwarte,
+   „Uwagi na później”. `CHANGELOG.md` przy dopisywaniu wersji – Read z `limit` (początek pliku), nigdy całość. Nowa reguła albo pułapka
    modułu → `.claude/rules/<moduł>.md`; zmiany dla użytkownika → `CHANGELOG.md`. Do CLAUDE.md nie dopisuj map kodu.
 5. Zaktualizowana tabela postępu (etap / grupa, model i thinking z górką, szacowany czas, stan).
 6. Pauza – użytkownik zmienia model / thinking. Bez komendy nie zaczynaj kolejnego etapu ani grupy (D67).
@@ -47,13 +54,16 @@ modelu, a stan przenosi `docs/postep.md`.
 - PR grupy scalam sam, gdy CI (Linux i Windows) jest zielone, nie ma konfliktu ani otwartych uwag i nic nie czeka na
   decyzję użytkownika. Po scaleniu sprawdź, czy CI na `main` wydało wersję (wydanie publikuje job Windows; czerwone E2E
   na `main` = brak wydania – tak przepadło 0.3.0).
-- Na CI czekaj jednym poleceniem w tle (`gh run watch <id> --exit-status`), nie wielokrotnym sprawdzaniem.
+- Na CI czekaj jednym poleceniem w tle (`gh run watch <id> --exit-status`), nie wielokrotnym sprawdzaniem; w sesji
+  w chmurze bez `gh` – subskrypcja zdarzeń PR (`subscribe_pr_activity`), nie odpytywanie.
+- **Po scaleniu PR** (i sprawdzeniu wydania) powiedz wprost, że `/clear` jest teraz bezpieczny – wszystko wypchnięte,
+  `docs/postep.md` mówi, co dalej (D103).
 - Po wydaniu: wpisy etapu z `docs/postep.md` przenieś do `docs/archiwum/postep-<zakres>.md` (dopisz na końcu
   właściwego pliku archiwum), w `docs/postep.md` zostaje stan i kolejka.
 
 ## Przeglądy
-- Diff etapu albo poprawki po przeglądzie → `/code-review` high (krytyczne obszary: xhigh).
+- Diff etapu → `/code-review` według D103 (wyżej, „Po etapie” pkt 2); poprawki po przeglądzie → druga runda tylko na nich.
 - Przegląd wieloagentowy (workflow) tylko na komendę użytkownika i tylko dla nowego obszaru albo pierwszego pełnego
   przeglądu. Gdy poprzedni przegląd obszaru dał już tylko uwagi minor / nit – kolejny to `/code-review` na diffie.
-- Weryfikacja sceptyczna tylko dla znalezisk critical / high / medium (druga opinia dla critical / high); niskie ocenia
-  wykonawca przy poprawce. Recenzenci domyślnie Opus 5.5 xhigh, Fable 5.1 tylko do drugiej opinii.
+- Weryfikacja sceptyczna tylko dla znalezisk critical / high / medium; druga opinia (Fable 5.1) tylko dla critical
+  (D103); niskie ocenia wykonawca przy poprawce. Recenzenci na poziomie przeglądu według ryzyka (D103).

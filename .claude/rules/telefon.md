@@ -34,4 +34,4 @@ paths:
 - Instalacja i wydanie: `docs/iphone.md`, CI `ios` / `ios-release` (`.ipa`, `altstore.json`); plan grup iA–iE i
   pozycje IP… w `docs/plan.md`.
 
-Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (sekcje „iA”–„iC”) i `docs/decyzje.md` (D92, D93, T305–T311).
+Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (sekcje „iA”–„iC”) i rejestry decyzji (D92, D93 w `docs/decyzje.md`, T305–T311 w `docs/decyzje-techniczne.md`).
