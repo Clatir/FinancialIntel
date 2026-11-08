@@ -136,4 +136,4 @@ paths:
 - `tests/fixtures/mbank/` – tylko pliki zanonimizowane (T44) albo syntetyczne; nigdy dane użytkownika. Zostają z CRLF
   i BOM jak z banku (`.gitattributes`: `tests/fixtures/** -text`).
 
-Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji) i `docs/decyzje.md`.
+Szczegóły i powody zmian: `docs/archiwum/claude-md-do-1.15.4.md` (Grep po nazwie funkcji), `docs/decyzje.md` (D) i `docs/decyzje-techniczne.md` (T).

@@ -81,7 +81,13 @@ ICT Trade Journal (ICTTJ, repozytorium `Clatir/TradingJournal`) – ten sam auto
 - `src/shared` – czyste TS używane przez main i renderer: `schema/` (zod), `calc/fleet.ts` (warstwy, dokowanie,
   pensja, koperty, przydział, odkładki, zasięg, klasa), `calc/plan.ts` / `start.ts` (plan miesiąca, kreator),
   `calc/briefing.ts` (odprawa, Daily Bias), `calc/dock.ts` (dostawy z ICTTJ), `calc/goals.ts` (cele, ETA), `calc/loans.ts`
-  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90 dni), `calc/scheduled.ts` (boje), `calc/ahead.ts` (salda kont naprzód), `calc/course.ts` (kurs i manewry), `calc/yearPlan.ts` (plan roczny), `calc/cargoWatch.ts` (ceny i ciche kontenery), `calc/anomalies.ts` (radar anomalii), `calc/returns.ts` (zwroty w drodze), `calc/tags.ts` (tagi i wyprawy), `calc/drill.ts` (marki, porównania), `calc/fuel.ts` (bilans paliwa), `calc/netWorth.ts` (majątek netto), `calc/inflation.ts` (osobista inflacja), `calc/why.ts` („skąd ta liczba?”), `glossary.ts` (słowniczek), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia), `machine.ts` (ustawienia komputera),
+  (pożyczki), `calc/household.ts` (rozliczenia z domownikami), `calc/income.ts` (przychody), `calc/radar.ts` (radar 90
+  dni), `calc/scheduled.ts` (boje), `calc/ahead.ts` (salda kont naprzód), `calc/course.ts` (kurs i manewry),
+  `calc/yearPlan.ts` (plan roczny), `calc/cargoWatch.ts` (ceny i ciche kontenery), `calc/anomalies.ts` (radar anomalii),
+  `calc/returns.ts` (zwroty w drodze), `calc/tags.ts` (tagi i wyprawy), `calc/drill.ts` (marki, porównania),
+  `calc/fuel.ts` (bilans paliwa), `calc/netWorth.ts` (majątek netto), `calc/inflation.ts` (osobista inflacja),
+  `calc/why.ts` („skąd ta liczba?”), `glossary.ts` (słowniczek), `ictj.ts` (pliki ICTTJ), `notify.ts` (powiadomienia),
+  `machine.ts` (ustawienia komputera),
   `format.ts` (kwoty), `calc/game.ts` (oceny dni, stopnie, misje), `calc/intel.ts` (analizy ICT), `export/` (CSV, Excel, PDF),
   `import/mbank.ts`, `migrations/`, `paths.ts`, `records.ts`, `api.ts` (kontrakt IPC).
 - `src/main` – jedyny właściciel folderu danych (`datastore/` z ICTTJ), `threadpool.ts` (pula wątków plików), `quick.ts` (szybki wpis i globalny skrót),

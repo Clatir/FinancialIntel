@@ -6,9 +6,20 @@ Lista i kolejność: [README.md](README.md). Propozycje z trzech perspektyw (por
 
 Priorytet: wysoki · nakład: M
 
-Każdy kontener ładowni ma w bieżącym miesiącu stan: zapłacony (połączona operacja – data i kwota), czeka (przed dniem płatności) albo po terminie (minęło dueDay + 3 dni robocze, a import późniejszy niż ten dzień nie przyniósł płatności; bez nowego importu stan to tylko „czeka na import”). Stan widać w Ładowni, w pasie „Kontenery w tym miesiącu” na Mostku i na Radarze – także kontenery miesięczne (czynsz, abonamenty, raty), nie tylko asteroidy. Odprawa i powiadomienie 2 dni przed terminem i przy zaległości: „Kontener niezaładowany: Czynsz 2 000 zł, termin 10.10”. Przycisk „Zapłacone” tworzy operację z kwotą, kontem i kategorią kontenera (np. opłata z Portfela XTB, której import nie widzi), a „Połącz płatność” łączy istniejącą operację bez containerId. Asteroida opłacona przed terminem przestaje być ogłaszana.
+Każdy kontener ładowni ma w bieżącym miesiącu stan: zapłacony (połączona operacja – data i kwota), czeka (przed dniem
+płatności) albo po terminie (minęło dueDay + 3 dni robocze, a import późniejszy niż ten dzień nie przyniósł płatności;
+bez nowego importu stan to tylko „czeka na import”). Stan widać w Ładowni, w pasie „Kontenery w tym miesiącu” na Mostku
+i na Radarze – także kontenery miesięczne (czynsz, abonamenty, raty), nie tylko asteroidy. Odprawa i powiadomienie 2 dni
+przed terminem i przy zaległości: „Kontener niezaładowany: Czynsz 2 000 zł, termin 10.10”. Przycisk „Zapłacone” tworzy
+operację z kwotą, kontem i kategorią kontenera (np. opłata z Portfela XTB, której import nie widzi), a „Połącz płatność”
+łączy istniejącą operację bez containerId. Asteroida opłacona przed terminem przestaje być ogłaszana.
 
-**Po co.** Kryterium sukcesu (D4, specyfikacja): „żadna opłata okresowa nie zaskakuje budżetu”. Radar i odprawa pomijają każdy kontener z cyklem 1 miesiąc (`if (c.cycleMonths <= 1 …) continue` – src/shared/calc/radar.ts:68, src/shared/calc/briefing.ts:161). Czynsz bez płatności po terminie nie daje więc pozycji odprawy, alarmu ani powiadomienia. Lista kontenerów (src/renderer/features/cargo/CargoPage.tsx:90-104) nie pokazuje stanu zapłaty. Asteroida jest ogłaszana według kalendarza (nextPaymentOf), nawet gdy jest już opłacona. Listę rachunków ze stanem i odhaczaniem mają YNAB (Scheduled), Actual Budget (schedules: upcoming / missed), Firefly III (bills), Monarch i Copilot.
+**Po co.** Kryterium sukcesu (D4, specyfikacja): „żadna opłata okresowa nie zaskakuje budżetu”. Radar i odprawa pomijają
+każdy kontener z cyklem 1 miesiąc (`if (c.cycleMonths <= 1 …) continue` – src/shared/calc/radar.ts:68,
+src/shared/calc/briefing.ts:161). Czynsz bez płatności po terminie nie daje więc pozycji odprawy, alarmu ani
+powiadomienia. Lista kontenerów (src/renderer/features/cargo/CargoPage.tsx:90-104) nie pokazuje stanu zapłaty. Asteroida
+jest ogłaszana według kalendarza (nextPaymentOf), nawet gdy jest już opłacona. Listę rachunków ze stanem i odhaczaniem
+mają YNAB (Scheduled), Actual Budget (schedules: upcoming / missed), Firefly III (bills), Monarch i Copilot.
 
 **Na czym oprzeć.** containerId i łączenie po odbiorcy (T49): src/renderer/features/cargo/actions.ts:70 linkPayments, src/shared/calc/plan.ts:393 unlinkedPayments; nextPaymentOf / activeIn w src/shared/calc/fleet.ts:167, :177; radar() w src/shared/calc/radar.ts:52; briefing() w src/shared/calc/briefing.ts:139; dueNotices (tag 'asteroid') w src/shared/notify.ts; CargoPage.tsx, BridgePage.tsx; okno „3 dni robocze + późniejszy import” jak w src/shared/calc/dock.ts (T63).
 
@@ -26,9 +37,19 @@ Proces główny co godzinę i po wybudzeniu komputera (powerMonitor 'resume') sp
 
 Priorytet: wysoki · nakład: M
 
-Ustawienia → Folder i kopie: przy każdej kopii (dziennej, ręcznej, sprzed importu, sprzed migracji) przyciski „Podgląd”, „Przywróć…” i „Otwórz jako osobny folder (tylko do odczytu)”. Podgląd porównuje kopię z bieżącym folderem: ile operacji, planów, kontenerów, celów i pożyczek jest nowych, zmienionych i usuniętych, z listą do przejrzenia. Do wyboru „Przywróć cały folder” albo „Przywróć zaznaczone wpisy”, np. operacje usunięte importem. Przed przywróceniem zawsze powstaje kopia „przed przywróceniem”, a zastąpione wersje trafiają do .history (powód 'restore'). Rozpakowanie jest bezpieczne (yauzl bez ../), a pliki są walidowane jak przy imporcie ZIP w ICTTJ. W metaforze: „Powrót do punktu kontrolnego”.
+Ustawienia → Folder i kopie: przy każdej kopii (dziennej, ręcznej, sprzed importu, sprzed migracji) przyciski „Podgląd”,
+„Przywróć…” i „Otwórz jako osobny folder (tylko do odczytu)”. Podgląd porównuje kopię z bieżącym folderem: ile operacji,
+planów, kontenerów, celów i pożyczek jest nowych, zmienionych i usuniętych, z listą do przejrzenia. Do wyboru „Przywróć
+cały folder” albo „Przywróć zaznaczone wpisy”, np. operacje usunięte importem. Przed przywróceniem zawsze powstaje kopia
+„przed przywróceniem”, a zastąpione wersje trafiają do .history (powód 'restore'). Rozpakowanie jest bezpieczne (yauzl
+bez ../), a pliki są walidowane jak przy imporcie ZIP w ICTTJ. W metaforze: „Powrót do punktu kontrolnego”.
 
-**Po co.** Kopie powstają (D31, T20, T42), ale API ma tylko listBackups / backupNow / importBackup (src/shared/api.ts:238-241). Panel mówi wprost: „Przywracanie: rozpakuj ZIP do pustego folderu i wskaż go wyżej” (src/renderer/features/settings/SettingsPage.tsx:315). Po złym imporcie, pomyłce przy decyzji zbiorczej albo uszkodzeniu przez synchronizację OneDrive zostaje ręczna praca na plikach JSON w folderze chmury, przy której łatwo nadpisać dobre dane. Przywracanie z podglądem mają YNAB, Actual i GnuCash, a ICTTJ ma import folderu lub ZIP z wyborem „scal” albo „otwórz jako osobny”.
+**Po co.** Kopie powstają (D31, T20, T42), ale API ma tylko listBackups / backupNow / importBackup
+(src/shared/api.ts:238-241). Panel mówi wprost: „Przywracanie: rozpakuj ZIP do pustego folderu i wskaż go wyżej”
+(src/renderer/features/settings/SettingsPage.tsx:315). Po złym imporcie, pomyłce przy decyzji zbiorczej albo uszkodzeniu
+przez synchronizację OneDrive zostaje ręczna praca na plikach JSON w folderze chmury, przy której łatwo nadpisać dobre
+dane. Przywracanie z podglądem mają YNAB, Actual i GnuCash, a ICTTJ ma import folderu lub ZIP z wyborem „scal” albo
+„otwórz jako osobny”.
 
 **Na czym oprzeć.** src/main/datastore/backup.ts (listBackups :82, isDataFile :19, importBackup :78), src/main/datastore/zip.ts, src/main/datastore/history.ts (powód 'restore'), SettingsPage.tsx:249-318, yauzl już w package.json; wzór: ICTTJ src/main/datastore/transfer.ts (import folderu / ZIP z walidacją i polityką kolizji).
 
@@ -36,9 +57,18 @@ Ustawienia → Folder i kopie: przy każdej kopii (dziennej, ręcznej, sprzed im
 
 Priorytet: wysoki · nakład: M · konflikt z decyzją: T39 (operacja usunięta przez użytkownika nie wraca z kolejnym importem): usunięcie przy cofnięciu importu nie może być liczone jako „usunięte przez użytkownika”, inaczej ponowny import pominie te wiersze.
 
-Każdy import zapisuje paczkę: identyfikator importu w operacjach (np. bank.importId), listę operacji utworzonych, połączonych z wpisami ręcznymi i rozliczonych, poprzednie wersje rekordów, które zmienił, oraz reguły, których się nauczył. W Ustawienia → Import z banku i na ekranie wyniku jest lista „Ostatnie importy” (data, konto, plik, liczby) z przyciskiem „Cofnij import”. Usuwa on utworzone operacje, przywraca zmienione wpisy ręczne i poprzednie reguły – z jednym „Cofnij” w toaście. Zapobieganie: numer rachunku z nagłówka CSV zapamiętany przy koncie. Plik z innego rachunku albo okres już w całości zaimportowany daje ostrzeżenie przed importem.
+Każdy import zapisuje paczkę: identyfikator importu w operacjach (np. bank.importId), listę operacji utworzonych,
+połączonych z wpisami ręcznymi i rozliczonych, poprzednie wersje rekordów, które zmienił, oraz reguły, których się
+nauczył. W Ustawienia → Import z banku i na ekranie wyniku jest lista „Ostatnie importy” (data, konto, plik, liczby) z
+przyciskiem „Cofnij import”. Usuwa on utworzone operacje, przywraca zmienione wpisy ręczne i poprzednie reguły – z
+jednym „Cofnij” w toaście. Zapobieganie: numer rachunku z nagłówka CSV zapamiętany przy koncie. Plik z innego rachunku
+albo okres już w całości zaimportowany daje ostrzeżenie przed importem.
 
-**Po co.** runImport (src/renderer/features/import/state.ts:446) tworzy, łączy, rozlicza i usuwa operacje oraz uczy reguł. Cofnąć to można tylko ręcznie z kopii ZIP, a tej z aplikacji też nie da się przywrócić. Masowa pomyłka (zła decyzja tematu, plik złego konta, podwójny plik) to dziesiątki operacji do poprawy po kolei. Parser czyta numer rachunku (src/shared/import/mbank.ts:177, pole `account`), ale nic go nie sprawdza. Cofnięcie całej paczki importu mają Firefly III (grupy importu), YNAB i Spendee.
+**Po co.** runImport (src/renderer/features/import/state.ts:446) tworzy, łączy, rozlicza i usuwa operacje oraz uczy
+reguł. Cofnąć to można tylko ręcznie z kopii ZIP, a tej z aplikacji też nie da się przywrócić. Masowa pomyłka (zła
+decyzja tematu, plik złego konta, podwójny plik) to dziesiątki operacji do poprawy po kolei. Parser czyta numer rachunku
+(src/shared/import/mbank.ts:177, pole `account`), ale nic go nie sprawdza. Cofnięcie całej paczki importu mają Firefly
+III (grupy importu), YNAB i Spendee.
 
 **Na czym oprzeć.** src/renderer/features/import/state.ts:446-500 (runImport, settings.import.log), src/shared/import/reconcile.ts buildImport (create / update / remove), src/shared/import/mbank.ts:177, src/renderer/features/history/actions.ts deleteManyWithUndo, api.importBackup (backups/pre-import).
 
@@ -46,9 +76,19 @@ Każdy import zapisuje paczkę: identyfikator importu w operacjach (np. bank.imp
 
 Priorytet: wysoki · nakład: M · konflikt z decyzją: D73: misja „Inwentaryzacja” liczy potwierdzenia sald, więc potwierdzenie z pliku zaliczy ją dla mBanku samo – trzeba zdecydować, czy tak ma być.
 
-Historia rachunku z mBanku ma w każdym wierszu „Saldo po operacji”. Po imporcie FI bierze saldo po ostatniej zaksięgowanej operacji pliku (bez nierozliczonych) i porównuje je z saldem FI na ten dzień. Gdy się zgadza, zapisuje potwierdzenie salda (rekord 'confirmation' z tą datą) bez ręcznego przepisywania liczby. Gdy się różni, zamiast od razu tworzyć korektę pokazuje pierwszy dzień, od którego salda się rozjeżdżają, i operacje tego dnia („brak wpisu? podwójny wpis? zła kwota?”); korekta zostaje ostatnią opcją. Łańcuch sald w pliku (saldo poprzedniego wiersza + kwota ≠ saldo wiersza) ostrzega o luce albo przefiltrowanej liście. Ręczne „Potwierdź” zostaje dla Portfela XTB i dla „Listy operacji”, która salda nie ma. W metaforze: „Telemetria z banku – kadłub zgodny z odczytem”.
+Historia rachunku z mBanku ma w każdym wierszu „Saldo po operacji”. Po imporcie FI bierze saldo po ostatniej
+zaksięgowanej operacji pliku (bez nierozliczonych) i porównuje je z saldem FI na ten dzień. Gdy się zgadza, zapisuje
+potwierdzenie salda (rekord 'confirmation' z tą datą) bez ręcznego przepisywania liczby. Gdy się różni, zamiast od razu
+tworzyć korektę pokazuje pierwszy dzień, od którego salda się rozjeżdżają, i operacje tego dnia („brak wpisu? podwójny
+wpis? zła kwota?”); korekta zostaje ostatnią opcją. Łańcuch sald w pliku (saldo poprzedniego wiersza + kwota ≠ saldo
+wiersza) ostrzega o luce albo przefiltrowanej liście. Ręczne „Potwierdź” zostaje dla Portfela XTB i dla „Listy
+operacji”, która salda nie ma. W metaforze: „Telemetria z banku – kadłub zgodny z odczytem”.
 
-**Po co.** MbankRow.balanceAfter jest czytane (src/shared/import/mbank.ts:39, :215), ale poza parserem nic go nie używa (sprawdzone grepem). Potwierdzenie salda (BalanceCheck, src/renderer/features/import/ImportPage.tsx:717) wymaga przepisania dzisiejszego salda z aplikacji banku. To saldo zawiera już operacje spoza pliku, więc łatwo o fałszywą korektę i alarm „Rozbieżność w ładowni”. Gdy saldo się nie zgadza, nic nie podpowiada, gdzie szukać błędu. Uzgodnienie z saldem banku (reconcile) mają YNAB, GnuCash, Firefly III i Monarch.
+**Po co.** MbankRow.balanceAfter jest czytane (src/shared/import/mbank.ts:39, :215), ale poza parserem nic go nie używa
+(sprawdzone grepem). Potwierdzenie salda (BalanceCheck, src/renderer/features/import/ImportPage.tsx:717) wymaga
+przepisania dzisiejszego salda z aplikacji banku. To saldo zawiera już operacje spoza pliku, więc łatwo o fałszywą
+korektę i alarm „Rozbieżność w ładowni”. Gdy saldo się nie zgadza, nic nie podpowiada, gdzie szukać błędu. Uzgodnienie z
+saldem banku (reconcile) mają YNAB, GnuCash, Firefly III i Monarch.
 
 **Na czym oprzeć.** src/shared/import/mbank.ts:38-39, :215; ImportPage.tsx:717 BalanceCheck; src/renderer/features/balances/actions.ts confirmBalance; src/shared/calc/balances.ts planConfirmation / balanceAt / lastConfirmation; runImport w src/renderer/features/import/state.ts:446.
 
@@ -68,7 +108,13 @@ Panel na Mostku i licznik przy „Operacje” w menu bocznym zbierają to, co cz
 - luki w imporcie – okresy plików (`#Za okres`) zapamiętane przy koncie, np. „brak danych 03.04–17.04”.
 Każda pozycja otwiera Operacje z gotowym filtrem albo od razu edytor. Raz dziennie trafia też jedną linią do odprawy. Przypomnienie o zaległym imporcie liczy się od końca okresu ostatniego pliku, a nie od chwili importu.
 
-**Po co.** Import celowo zostawia tematy bez decyzji, a wydatek bez kategorii liczy się do energii jako codzienny (T30) i psuje koperty. Odprawa nie zna ani braku kategorii, ani braku odpowiedzi w dzienniku (rodzaje pozycji w src/shared/calc/briefing.ts:36). Na liście „bez kategorii” to tylko przygaszony tekst w kolumnie (src/renderer/features/operations/OperationsPage.tsx:189), a filtr znaczników trzeba ustawić samemu. Okres pliku jest czytany, ale nie zapisywany – służy tylko do zniknięć (src/shared/import/reconcile.ts:210). Przypomnienie o imporcie liczy od czasu importu (briefing.ts:176-179), więc import starego pliku je wycisza. Skrzynkę „do przejrzenia” mają YNAB (Unapproved / Uncategorized), Monarch („Needs review”) i Copilot („To review”).
+**Po co.** Import celowo zostawia tematy bez decyzji, a wydatek bez kategorii liczy się do energii jako codzienny (T30)
+i psuje koperty. Odprawa nie zna ani braku kategorii, ani braku odpowiedzi w dzienniku (rodzaje pozycji w
+src/shared/calc/briefing.ts:36). Na liście „bez kategorii” to tylko przygaszony tekst w kolumnie
+(src/renderer/features/operations/OperationsPage.tsx:189), a filtr znaczników trzeba ustawić samemu. Okres pliku jest
+czytany, ale nie zapisywany – służy tylko do zniknięć (src/shared/import/reconcile.ts:210). Przypomnienie o imporcie
+liczy od czasu importu (briefing.ts:176-179), więc import starego pliku je wycisza. Skrzynkę „do przejrzenia” mają YNAB
+(Unapproved / Uncategorized), Monarch („Needs review”) i Copilot („To review”).
 
 **Na czym oprzeć.** src/shared/operationsView.ts marksOf / needsLog / OPERATION_MARKS, src/shared/calc/briefing.ts:36, :176, src/renderer/features/bridge/BridgePage.tsx, OperationsPage.tsx:189, src/renderer/features/import/DuplicatesPanel.tsx useDuplicates, src/renderer/app/App.tsx SideMenu, settings.import.lastImport / log w src/shared/schema/budget.ts, src/shared/calc/fleet.ts:722 (przelew).
 
@@ -84,7 +130,13 @@ W oknie szybkiego wpisu (Ctrl+Alt+B):
 - Data przyjmuje „wcz”, „-1” albo sam dzień („15”).
 - Szkic zostaje po przypadkowym Esc i wraca przy kolejnym otwarciu (z przyciskiem „Wyczyść”).
 
-**Po co.** Wieczorne dopisywanie kilku zakupów to rdzeń codziennego rytmu (D26). Każdy zapis zamyka jednak okno po 450 ms (src/renderer/features/quick/QuickApp.tsx:88), a każde otwarcie zeruje formularz (onQuickData → blank, :72-76), więc Esc gubi np. rozpisany paragon. Oficer podpowiada tylko kontrahenta (40 nazw) i jego ostatnią kategorię (src/renderer/store/quickHost.ts:43-67) – kwotę, konto i notatkę trzeba wpisać za każdym razem. Sonda: parseAmountInput('12,50+8,30') daje undefined (wartość niepoprawna), a parseDateInput('wcz') i parseDateInput('15') dają null (src/renderer/lib/format.ts:101, :130). Szablony i powtórzenie ostatniego wpisu mają Wallet by BudgetBakers, Spendee i Monefy.
+**Po co.** Wieczorne dopisywanie kilku zakupów to rdzeń codziennego rytmu (D26). Każdy zapis zamyka jednak okno po 450
+ms (src/renderer/features/quick/QuickApp.tsx:88), a każde otwarcie zeruje formularz (onQuickData → blank, :72-76), więc
+Esc gubi np. rozpisany paragon. Oficer podpowiada tylko kontrahenta (40 nazw) i jego ostatnią kategorię
+(src/renderer/store/quickHost.ts:43-67) – kwotę, konto i notatkę trzeba wpisać za każdym razem. Sonda:
+parseAmountInput('12,50+8,30') daje undefined (wartość niepoprawna), a parseDateInput('wcz') i parseDateInput('15') dają
+null (src/renderer/lib/format.ts:101, :130). Szablony i powtórzenie ostatniego wpisu mają Wallet by BudgetBakers,
+Spendee i Monefy.
 
 **Na czym oprzeć.** QuickApp.tsx:21-24, :72-90; src/renderer/lib/format.ts parseAmountInput / parseDateInput; src/renderer/components/fields.tsx AmountField / DateField; src/renderer/store/quickHost.ts quickData / quickTransaction; ustawienia folderu w src/shared/schema/budget.ts.
 
@@ -102,9 +154,19 @@ Podpowiedź kategorii w szybkim wpisie i w edytorze operacji korzysta z brandOf 
 
 Priorytet: średni · nakład: M
 
-Dla kontenera z odbiorcą FI porównuje połączone płatności z kwotą kontenera. Gdy dwie ostatnie płatności różnią się od niej o ponad ±5% (albo ±2 zł), odprawa melduje: „Netflix: 43 → 49 zł/mies. (+14%, +72 zł rocznie) – zaktualizuj kontener?”. „Zaktualizuj” zmienia kwotę od bieżącego miesiąca – historia kwot w kontenerze, addytywnie, więc wcześniejsze miesiące liczą się starą kwotą. Przed zapisem pokazuje symulację linii zanurzenia i zasięgu (jak T50). Przy kontenerze widać mini-historię kwot. Brak płatności przez 2–3 cykle daje propozycję zrzutu („subskrypcja anulowana?”). Media o zmiennej kwocie dostają kwotę = średnia albo p75 z 12 miesięcy. W metaforze: „Kontener cięższy niż w manifeście”.
+Dla kontenera z odbiorcą FI porównuje połączone płatności z kwotą kontenera. Gdy dwie ostatnie płatności różnią się od
+niej o ponad ±5% (albo ±2 zł), odprawa melduje: „Netflix: 43 → 49 zł/mies. (+14%, +72 zł rocznie) – zaktualizuj
+kontener?”. „Zaktualizuj” zmienia kwotę od bieżącego miesiąca – historia kwot w kontenerze, addytywnie, więc
+wcześniejsze miesiące liczą się starą kwotą. Przed zapisem pokazuje symulację linii zanurzenia i zasięgu (jak T50). Przy
+kontenerze widać mini-historię kwot. Brak płatności przez 2–3 cykle daje propozycję zrzutu („subskrypcja anulowana?”).
+Media o zmiennej kwocie dostają kwotę = średnia albo p75 z 12 miesięcy. W metaforze: „Kontener cięższy niż w
+manifeście”.
 
-**Po co.** Linia zanurzenia, odkładki, Radar i symulacja liczą kwotę z kontenera (cargoMass src/shared/calc/fleet.ts:180, radar.ts:72, sinkingInstallment fleet.ts:108). Po podwyżce zaniżają więc koszty, a droższa polisa daje tylko żółte „za mało w zbiorniku”. recurringPayments pomija kontrahentów ładowni (src/shared/calc/plan.ts:151-157), a wśród alarmów nie ma rodzaju „zmiana ceny” (AlarmKind, fleet.ts:251). Ostrzeżenia o podwyżkach subskrypcji mają Rocket Money, Emma i Copilot; w Lunch Money to częsta prośba użytkowników.
+**Po co.** Linia zanurzenia, odkładki, Radar i symulacja liczą kwotę z kontenera (cargoMass
+src/shared/calc/fleet.ts:180, radar.ts:72, sinkingInstallment fleet.ts:108). Po podwyżce zaniżają więc koszty, a droższa
+polisa daje tylko żółte „za mało w zbiorniku”. recurringPayments pomija kontrahentów ładowni
+(src/shared/calc/plan.ts:151-157), a wśród alarmów nie ma rodzaju „zmiana ceny” (AlarmKind, fleet.ts:251). Ostrzeżenia o
+podwyżkach subskrypcji mają Rocket Money, Emma i Copilot; w Lunch Money to częsta prośba użytkowników.
 
 **Na czym oprzeć.** src/shared/calc/plan.ts:72 payeeKey, :151 recurringPayments, :355 monthlyShare, :370 simulateCargo; src/shared/calc/fleet.ts:180 cargoMass, :603-640 płatności kontenerów i 'sinking-short'; briefing() w src/shared/calc/briefing.ts; ContainerEditor / SimulationLine w src/renderer/features/cargo/CargoPage.tsx; containerSchema w src/shared/schema/records.ts:135.
 
@@ -114,7 +176,11 @@ Priorytet: średni · nakład: M
 
 Przelew własny z kontem docelowym w budżecie (np. mBank → Portfel XTB) tworzy w edytorze drugą nogę na koncie docelowym. Import z mBanku przy takim przelewie pyta: „Dopisać wpływ na Portfelu XTB?”. Nogi są połączone, więc zmiana kwoty i daty obejmuje obie, a usunięcie usuwa parę z „Cofnij”. Noga bez pary trafia do „Meldunków do rozpatrzenia”, a panel duplikatów nie łączy nóg ze sobą.
 
-**Po co.** Każda noga przelewu działa osobno – case 'transfer' to addShields(amount) (src/shared/calc/fleet.ts:722). Ani import, ani edytor nie tworzą drugiej nogi: counterAccountId jest tylko zapisywany (src/shared/import/reconcile.ts:584, src/renderer/features/operations/OperationEditor.tsx:267). Zaimportowane −500 zł do Portfela XTB zmniejsza więc osłony, sumę kont i krzywą majątku, dopóki wpływ na Portfelu nie zostanie wpisany ręcznie, a Portfel XTB nie ma eksportu (D9). Actual Budget i Firefly III zapisują przelew jako jedną operację z dwoma kontami.
+**Po co.** Każda noga przelewu działa osobno – case 'transfer' to addShields(amount) (src/shared/calc/fleet.ts:722). Ani
+import, ani edytor nie tworzą drugiej nogi: counterAccountId jest tylko zapisywany (src/shared/import/reconcile.ts:584,
+src/renderer/features/operations/OperationEditor.tsx:267). Zaimportowane −500 zł do Portfela XTB zmniejsza więc osłony,
+sumę kont i krzywą majątku, dopóki wpływ na Portfelu nie zostanie wpisany ręcznie, a Portfel XTB nie ma eksportu (D9).
+Actual Budget i Firefly III zapisują przelew jako jedną operację z dwoma kontami.
 
 **Na czym oprzeć.** src/shared/calc/fleet.ts:722 (T31: para się znosi), OperationEditor.tsx:200, :267, src/shared/import/classify.ts:319, buildImport w src/shared/import/reconcile.ts, src/shared/import/duplicates.ts:63, deleteOperation / deleteManyWithUndo.
 
@@ -159,7 +225,11 @@ Priorytet: średni · nakład: S
 
 Ustawienie komputera: FI obserwuje folder Pobrane albo ostatni folder, z którego wybrano plik. Nowy CSV mBanku (nagłówek `#Klient`, „Lista operacji” albo „Historia rachunku”) daje toast i powiadomienie: „Nowy meldunek z mBanku (12–18.10) – importuj”. Kliknięcie otwiera Import z wczytanym plikiem. Po imporcie FI proponuje przeniesienie pliku do kosza (plik zawiera dane konta). Przypomnienie o zaległym imporcie podaje krótką instrukcję eksportu w mBanku.
 
-**Po co.** Import co 2–3 dni (D26, D27) to główny obowiązek użytkownika. Dziś to: pobierz plik w banku, otwórz FI, Import, wybierz plik (dialog fi:pickImportFile, src/main/index.ts:608). Każdy krok mniej zwiększa regularność, od której zależą silnik i misja „Łączność z bazą”. Proces główny ma już obserwację plików (src/main/datastore/watch.ts). Automatyczną synchronizację z bankiem (Kontomierz, Monarch, Actual przez GoCardless) wyklucza zasada „sieć tylko do aktualizacji” (D74), więc to bezsieciowa namiastka.
+**Po co.** Import co 2–3 dni (D26, D27) to główny obowiązek użytkownika. Dziś to: pobierz plik w banku, otwórz FI,
+Import, wybierz plik (dialog fi:pickImportFile, src/main/index.ts:608). Każdy krok mniej zwiększa regularność, od której
+zależą silnik i misja „Łączność z bazą”. Proces główny ma już obserwację plików (src/main/datastore/watch.ts).
+Automatyczną synchronizację z bankiem (Kontomierz, Monarch, Actual przez GoCardless) wyklucza zasada „sieć tylko do
+aktualizacji” (D74), więc to bezsieciowa namiastka.
 
 **Na czym oprzeć.** src/main/datastore/watch.ts, src/main/index.ts:608 pickImportFile (CSV do 20 MB), parseMbank / decodeText w src/shared/import/mbank.ts i text.ts, src/renderer/features/import/ImportPage.tsx, ustawienie komputera w src/shared/machine.ts, IMPORT_DUE_DAYS w src/shared/calc/briefing.ts:134.
 
@@ -181,9 +251,17 @@ Nowy rodzaj wpisu „zaplanowane”:
 - wydatek: wesele 12.06 – 1 500 zł, przegląd auta, wakacje;
 - wpływ: premia, zwrot PIT-37, spłata od znajomego bez harmonogramu;
 - termin bez kwoty: wymiana dowodu, koniec promocji internetu („od 03.2027 cena 89 zł”), odnowienie domeny.
-Każdy ma datę, opcjonalnie kwotę, kategorię i konto oraz powtarzanie co rok. Wpis widać na Radarze 90 dni, w odprawie i w powiadomieniu N dni przed terminem (domyślnie 14 i 3), a w prognozie zasięgu jako wariant „z planami”. Do tego przypomnienie o końcu kontenera (until): ostatnia rata zwalnia miejsce w ładowni, koniec promocji to nowa kwota. Import z mBanku dopasowuje plan do prawdziwej operacji (kwota ±, data ±3 dni, jak looseMatch), a „Wykonaj teraz” zamienia go w operację. W metaforze: „Boje nawigacyjne”.
+Każdy ma datę, opcjonalnie kwotę, kategorię i konto oraz powtarzanie co rok. Wpis widać na Radarze 90 dni, w odprawie i
+w powiadomieniu N dni przed terminem (domyślnie 14 i 3), a w prognozie zasięgu jako wariant „z planami”. Do tego
+przypomnienie o końcu kontenera (until): ostatnia rata zwalnia miejsce w ładowni, koniec promocji to nowa kwota. Import
+z mBanku dopasowuje plan do prawdziwej operacji (kwota ±, data ±3 dni, jak looseMatch), a „Wykonaj teraz” zamienia go w
+operację. W metaforze: „Boje nawigacyjne”.
 
-**Po co.** Radar zna tylko pensje, asteroidy, raty i PIT-38 (RadarKind, src/shared/calc/radar.ts:15), a plan miesiąca – tylko pensję, koperty i łupy (monthPlanSchema). Większego wydatku jednorazowego, niecyklicznego wpływu ani terminu umowy nie da się zapisać z wyprzedzeniem, więc i tak zaskakują budżet. Koniec kontenera (container.until) przechodzi bez słowa. Zaplanowane transakcje i przypomnienia mają YNAB (scheduled), Actual (schedules), Firefly III (recurring), Wallet (planned payments) i Monarch (bills & reminders).
+**Po co.** Radar zna tylko pensje, asteroidy, raty i PIT-38 (RadarKind, src/shared/calc/radar.ts:15), a plan miesiąca –
+tylko pensję, koperty i łupy (monthPlanSchema). Większego wydatku jednorazowego, niecyklicznego wpływu ani terminu umowy
+nie da się zapisać z wyprzedzeniem, więc i tak zaskakują budżet. Koniec kontenera (container.until) przechodzi bez
+słowa. Zaplanowane transakcje i przypomnienia mają YNAB (scheduled), Actual (schedules), Firefly III (recurring), Wallet
+(planned payments) i Monarch (bills & reminders).
 
 **Na czym oprzeć.** radar() / RadarKind w src/shared/calc/radar.ts; briefing() w src/shared/calc/briefing.ts:139; tagi w src/shared/notify.ts:19; rangeForecast w src/shared/calc/intel.ts:198; looseMatch / planImport w src/shared/import/reconcile.ts; newOperation w src/renderer/features/operations/state.ts; container.until w src/shared/schema/records.ts; nowa kolekcja w src/shared/paths.ts COLLECTIONS / LAYOUTS (T18).
 
@@ -191,7 +269,11 @@ Każdy ma datę, opcjonalnie kwotę, kategorię i konto oraz powtarzanie co rok.
 
 Priorytet: średni · nakład: M
 
-Operacja i każda część paragonu mogą mieć tagi, np. „Wakacje Chorwacja 2027”, „Remont łazienki”, „Prezent ślubny”. Tagi działają w szybkim wpisie (#słowo albo pole; ostatni tag podpowiadany przez kilka dni), w filtrze Operacji, w regułach importu („Netia → #ulga-internet”) i w eksporcie CSV (kolumna „Tagi”). Tag ma kartę z sumą, podziałem na kategorie i miesiące oraz opcjonalnym powiązaniem z celem z Mapy gwiezdnej („Ekspedycja: wydano 4 320 z 5 000 zł celu”). Pole jest addytywne (looseObject), bez podbijania SCHEMA_VERSION.
+Operacja i każda część paragonu mogą mieć tagi, np. „Wakacje Chorwacja 2027”, „Remont łazienki”, „Prezent ślubny”. Tagi
+działają w szybkim wpisie (#słowo albo pole; ostatni tag podpowiadany przez kilka dni), w filtrze Operacji, w regułach
+importu („Netia → #ulga-internet”) i w eksporcie CSV (kolumna „Tagi”). Tag ma kartę z sumą, podziałem na kategorie i
+miesiące oraz opcjonalnym powiązaniem z celem z Mapy gwiezdnej („Ekspedycja: wydano 4 320 z 5 000 zł celu”). Pole jest
+addytywne (looseObject), bez podbijania SCHEMA_VERSION.
 
 **Po co.** Kategorie mówią „na co”, a nie „po co”: kosztu urlopu albo remontu rozłożonego na paliwo, jedzenie, noclegi i wyposażenie nie da się dziś policzyć. transactionSchema i splitSchema nie mają tagów (src/shared/schema/records.ts:77-121) – tagi są tylko w dniach gry (:302) – a filtr zna tylko kategorie główne (src/shared/operationsView.ts:44-51). Etykiety mają Wallet (labels), Spendee, Toshl, Firefly III, Monarch, YNAB (flags) i Actual.
 
@@ -207,7 +289,12 @@ W Operacjach dochodzą:
 - zapisane widoki jako chipy nad listą („Jedzenie na mieście > 50 zł”, „Mama – ten rok”), wspólne dla komputerów w fi.json – jak savedFilters w ICTTJ;
 - przycisk „CSV / Excel widocznych”, który eksportuje dokładnie to, co pokazuje lista.
 
-**Po co.** OperationsFilter (src/shared/operationsView.ts:44-51) zna tylko okres, konta, rodzaje, kategorie główne, znaczniki i tekst, a kolejność listy jest stała (compareOperations, src/renderer/features/operations/OperationsPage.tsx:333). Pytań „największe wydatki w październiku”, „co zapłaciłem za Mamę” czy „ile wydałem na weterynarza” nie da się zadać bez eksportu i Excela, a eksport w Raportach bierze tylko zakres dat (src/renderer/features/reports/ReportsPage.tsx:447). ICTTJ ma zapisane filtry (settings.savedFilters) i exportCsv(ids). Zaawansowane filtry i zapisane widoki mają YNAB, Actual, Firefly III i Monarch.
+**Po co.** OperationsFilter (src/shared/operationsView.ts:44-51) zna tylko okres, konta, rodzaje, kategorie główne,
+znaczniki i tekst, a kolejność listy jest stała (compareOperations,
+src/renderer/features/operations/OperationsPage.tsx:333). Pytań „największe wydatki w październiku”, „co zapłaciłem za
+Mamę” czy „ile wydałem na weterynarza” nie da się zadać bez eksportu i Excela, a eksport w Raportach bierze tylko zakres
+dat (src/renderer/features/reports/ReportsPage.tsx:447). ICTTJ ma zapisane filtry (settings.savedFilters) i
+exportCsv(ids). Zaawansowane filtry i zapisane widoki mają YNAB, Actual, Firefly III i Monarch.
 
 **Na czym oprzeć.** matchesFilter / compareOperations w src/shared/operationsView.ts; filtr w localStorage fi.operations.filter (src/renderer/features/operations/state.ts); OperationsPage.tsx:313-340; operationRows / operationsCsv / operationsSheet w src/shared/export/budget.ts; wzór: ICTTJ src/shared/schema/journal.ts:565 savedFilters.
 
@@ -225,9 +312,18 @@ Wpisanie w palecie „mokka”, „czynsz” albo „1240” pokazuje pasujące 
 
 Priorytet: średni · nakład: M
 
-Tabela „Wydatki w czasie” rozwija kategorię do podkategorii (Jedzenie → zakupy spożywcze / na mieście / kawa i przekąski), a kliknięcie komórki otwiera Operacje z tym filtrem. Nowy panel „Namierzone cele” po marce (brandOf + połączone nazwy) pokazuje dla każdej: sumę, liczbę wizyt, średni paragon, trend, udział w kategorii i ostatnią wizytę. Porównania: miesiąc wobec średniej z 3 i 12 miesięcy oraz rok do roku, z kolorem tylko dla przekroczeń. W edytorze operacji linijka „u tego kontrahenta w 2026: 34 operacje, 1 240 zł, średnio 36 zł”. W metaforze: „Rozpoznanie celu – Biedronka, 23 kontakty, 1 840 zł”.
+Tabela „Wydatki w czasie” rozwija kategorię do podkategorii (Jedzenie → zakupy spożywcze / na mieście / kawa i
+przekąski), a kliknięcie komórki otwiera Operacje z tym filtrem. Nowy panel „Namierzone cele” po marce (brandOf +
+połączone nazwy) pokazuje dla każdej: sumę, liczbę wizyt, średni paragon, trend, udział w kategorii i ostatnią wizytę.
+Porównania: miesiąc wobec średniej z 3 i 12 miesięcy oraz rok do roku, z kolorem tylko dla przekroczeń. W edytorze
+operacji linijka „u tego kontrahenta w 2026: 34 operacje, 1 240 zł, średnio 36 zł”. W metaforze: „Rozpoznanie celu –
+Biedronka, 23 kontakty, 1 840 zł”.
 
-**Po co.** spendingByMonth liczy tylko kategorie główne (cats.mainOf, src/shared/calc/intel.ts:169-195), więc podkategorie z D25 / D68 nie są używane w żadnej analizie. Panele Wywiadu nie są klikalne (src/renderer/features/intel/IntelPage.tsx), a analizy po kontrahentach nie ma, choć klucze marek i połączenia nazw istnieją od 1.2.x. Pytanie „ile rocznie zostawiam w Żabce” wymaga ręcznego sumowania. Drążenie i raporty kontrahentów mają YNAB Reflect, Monarch (Merchants), Copilot, Actual (custom reports) i Wallet.
+**Po co.** spendingByMonth liczy tylko kategorie główne (cats.mainOf, src/shared/calc/intel.ts:169-195), więc
+podkategorie z D25 / D68 nie są używane w żadnej analizie. Panele Wywiadu nie są klikalne
+(src/renderer/features/intel/IntelPage.tsx), a analizy po kontrahentach nie ma, choć klucze marek i połączenia nazw
+istnieją od 1.2.x. Pytanie „ile rocznie zostawiam w Żabce” wymaga ręcznego sumowania. Drążenie i raporty kontrahentów
+mają YNAB Reflect, Monarch (Merchants), Copilot, Actual (custom reports) i Wallet.
 
 **Na czym oprzeć.** spendingByMonth / weekNumbers / yearNumbers w src/shared/calc/intel.ts; categoryIndex (childrenOf / mainOf) w src/shared/calc/operations.ts:81; brandOf w src/shared/import/brands.ts; resolveBrand w src/shared/import/aliases.ts; IntelPage.tsx (SpendRow); filtr Operacji w src/renderer/features/operations/state.ts.
 
@@ -235,9 +331,18 @@ Tabela „Wydatki w czasie” rozwija kategorię do podkategorii (Jedzenie → z
 
 Priorytet: średni · nakład: M
 
-Obecność rozróżnia komputer „w użyciu” (okno pokazane albo ruch w ostatnich minutach) od komputera „w zasobniku”. Gdy inny komputer jest w użyciu, komputer w zasobniku wstrzymuje zapisy w tle: zamrażanie dni gry, synchronizację celów ICTTJ, zasiew salda domowników i rozliczenie łupów. Wstrzymuje też powiadomienia, które pokazał już komputer w użyciu – tak jak beta ICTTJ przy świeżym heartbeacie zwykłej wersji (main/sibling.ts). Baner „Ten folder jest też otwarty na…” pojawia się tylko wtedy, gdy oba komputery są w użyciu. Strona Synchronizacja pokazuje, z którego komputera i kiedy przyszła ostatnia zmiana.
+Obecność rozróżnia komputer „w użyciu” (okno pokazane albo ruch w ostatnich minutach) od komputera „w zasobniku”. Gdy
+inny komputer jest w użyciu, komputer w zasobniku wstrzymuje zapisy w tle: zamrażanie dni gry, synchronizację celów
+ICTTJ, zasiew salda domowników i rozliczenie łupów. Wstrzymuje też powiadomienia, które pokazał już komputer w użyciu –
+tak jak beta ICTTJ przy świeżym heartbeacie zwykłej wersji (main/sibling.ts). Baner „Ten folder jest też otwarty na…”
+pojawia się tylko wtedy, gdy oba komputery są w użyciu. Strona Synchronizacja pokazuje, z którego komputera i kiedy
+przyszła ostatnia zmiana.
 
-**Po co.** Według D46 i D64 FI startuje z Windows i chowa się do zasobnika, więc przy dwóch włączonych komputerach działa na obu naraz. Heartbeat leci co minutę także z zasobnika (src/main/index.ts:410), a baner każe wtedy „zamknąć tam aplikację” (src/renderer/app/Banners.tsx:83-88), choć użytkownik nie pracuje na obu. Oba komputery liczą i zapisują w tle stan gry (src/renderer/store/game.ts:37-55) i cele ICTTJ (src/renderer/features/starmap/sync.ts), co grozi kopiami konfliktów OneDrive. Pokazują też te same przypomnienia, bo klucze wysłanych są tylko w localStorage danego komputera.
+**Po co.** Według D46 i D64 FI startuje z Windows i chowa się do zasobnika, więc przy dwóch włączonych komputerach
+działa na obu naraz. Heartbeat leci co minutę także z zasobnika (src/main/index.ts:410), a baner każe wtedy „zamknąć tam
+aplikację” (src/renderer/app/Banners.tsx:83-88), choć użytkownik nie pracuje na obu. Oba komputery liczą i zapisują w
+tle stan gry (src/renderer/store/game.ts:37-55) i cele ICTTJ (src/renderer/features/starmap/sync.ts), co grozi kopiami
+konfliktów OneDrive. Pokazują też te same przypomnienia, bo klucze wysłanych są tylko w localStorage danego komputera.
 
 **Na czym oprzeć.** src/main/datastore/presence.ts, src/main/index.ts:268-281, :410, Banners.tsx:83-88, store/game.ts:37-55 useGameAdvance, features/starmap/sync.ts, useHouseholdSinceSeed w src/renderer/features/household/actions.ts, src/renderer/store/notifier.ts (fi.notify.sent); wzór: ICTTJ src/main/sibling.ts.
 
@@ -252,7 +357,11 @@ Ustawienia → Import z banku:
 - „Zastosuj do historii”: podgląd zmian, potem zapis z „Cofnij” (jak decyzja zbiorcza w Operacjach);
 - opcjonalny warunek kwoty albo konta w regule, np. Orlen ≤ 40 zł → „kawa i przekąski”, inaczej „paliwo”; marka z różnymi kategoriami podsuwa taki próg.
 
-**Po co.** Reguły uczą się z każdej decyzji, ale po miesiącach nie ma ich jak przejrzeć ani poprawić. Lista ma tylko „usuń” (src/renderer/features/settings/ImportTab.tsx:120-132). Zmieniona decyzja nie przechodzi na wcześniejsze operacje, a sklep wielobranżowy (Orlen, Allegro, Rossmann) zawsze dostaje jedną kategorię: importRuleSchema nie ma warunku kwoty (src/shared/schema/budget.ts:159-184), a findRule (src/shared/import/classify.ts:69) dopasowuje tylko nazwę i kierunek. Reguły z warunkiem kwoty i „apply to existing” mają YNAB, Monarch i Firefly III.
+**Po co.** Reguły uczą się z każdej decyzji, ale po miesiącach nie ma ich jak przejrzeć ani poprawić. Lista ma tylko
+„usuń” (src/renderer/features/settings/ImportTab.tsx:120-132). Zmieniona decyzja nie przechodzi na wcześniejsze
+operacje, a sklep wielobranżowy (Orlen, Allegro, Rossmann) zawsze dostaje jedną kategorię: importRuleSchema nie ma
+warunku kwoty (src/shared/schema/budget.ts:159-184), a findRule (src/shared/import/classify.ts:69) dopasowuje tylko
+nazwę i kierunek. Reguły z warunkiem kwoty i „apply to existing” mają YNAB, Monarch i Firefly III.
 
 **Na czym oprzeć.** ImportTab.tsx:96-132; importRuleSchema w src/shared/schema/budget.ts:159; upsertRule (:28) i findRule (:69) w src/shared/import/classify.ts; categorizeTicked w src/renderer/features/operations/state.ts (wzór „Cofnij”); src/renderer/features/import/rules.ts.
 
@@ -284,7 +393,11 @@ Obok obecnej krzywej (suma sald kont) druga linia „Majątek netto” = salda k
 
 Priorytet: średni · nakład: S
 
-W Wywiadzie, debriefingu i Raportach: przychód (incomeOfPeriod – praca i trading netto, bez pieniędzy domowników) minus koszty netto, czyli ile miesiąc dołożył do okrętu, oraz stopa oszczędności w %, z trendem 12 miesięcy i medianą. Osobno wariant „bez tradingu” – czy praca sama pokrywa koszty. W debriefingu jedna linia: „Stopa oszczędności 23% (mediana 6 mies.: 18%)”. Eksport „Miesiące” dostaje kolumny „Bilans” i „Stopa oszczędności”. Opcjonalnie wykres przepływu (Sankey): przychód → osłony / kadłub / cele, pensja → ładownia / odkładki / koperty. W metaforze: „Bilans paliwa”.
+W Wywiadzie, debriefingu i Raportach: przychód (incomeOfPeriod – praca i trading netto, bez pieniędzy domowników) minus
+koszty netto, czyli ile miesiąc dołożył do okrętu, oraz stopa oszczędności w %, z trendem 12 miesięcy i medianą. Osobno
+wariant „bez tradingu” – czy praca sama pokrywa koszty. W debriefingu jedna linia: „Stopa oszczędności 23% (mediana 6
+mies.: 18%)”. Eksport „Miesiące” dostaje kolumny „Bilans” i „Stopa oszczędności”. Opcjonalnie wykres przepływu (Sankey):
+przychód → osłony / kadłub / cele, pensja → ładownia / odkładki / koperty. W metaforze: „Bilans paliwa”.
 
 **Po co.** Kryterium sukcesu „osłony i kadłub rosną z miesiąca na miesiąc” nie ma dziś jednej miary miesięcznej. Debriefing porównuje koszty z pensją, panel „Przychody” – średnie z pensją, a eksport ma przychód i koszty bez różnicy (monthRows, src/shared/export/budget.ts:129). W kodzie nie ma stopy oszczędności, choć dane są gotowe (incomeByMonth, costsByMonth, dziennik silnika z moves). Stopę oszczędności i cash flow mają Monarch, Copilot, Emma i YNAB Reflect.
 
@@ -320,7 +433,11 @@ Priorytet: średni · nakład: M · konflikt z decyzją: D18 (łupy: osłony / c
 
 Na debriefingu łupy z koperty planowej (Zdrowie, Auto, Zwierzęta) można przenieść do tej samej koperty w następnym miesiącu, jak rollover w YNAB. Niewydane 200 zł na lekarza zostaje wtedy na Zdrowiu, a koperta pokazuje „limit 300 + 200 z zapasu”. W trakcie miesiąca przy przekroczonej kopercie planowej przycisk „Pokryj z koperty…” przesuwa limit z koperty, w której jest zapas. To dwie zmiany planu naraz, z „Cofnij” i wpisem w dzienniku wachty.
 
-**Po co.** Dziś „na następny miesiąc” to jedna kwota dokładana do kopert codziennych (T28, T52), a lootSchema zna tylko shields, nextMonth i goals (src/shared/schema/records.ts, lootDecision w src/shared/calc/plan.ts:336). Koperty planowe z nieregularnymi wydatkami (weterynarz, serwis) co miesiąc oddają zapas do osłon albo do energii dnia, a w miesiącu wydatku są przekroczone. Rollover kategorii i przesuwanie pieniędzy między kategoriami to podstawa YNAB i Actual (tryb rollover); Monarch ma rollover budżetu.
+**Po co.** Dziś „na następny miesiąc” to jedna kwota dokładana do kopert codziennych (T28, T52), a lootSchema zna tylko
+shields, nextMonth i goals (src/shared/schema/records.ts, lootDecision w src/shared/calc/plan.ts:336). Koperty planowe z
+nieregularnymi wydatkami (weterynarz, serwis) co miesiąc oddają zapas do osłon albo do energii dnia, a w miesiącu
+wydatku są przekroczone. Rollover kategorii i przesuwanie pieniędzy między kategoriami to podstawa YNAB i Actual (tryb
+rollover); Monarch ma rollover budżetu.
 
 **Na czym oprzeć.** lootSchema / lootDecision / lootDeadline w src/shared/calc/plan.ts:336-350; debriefing() w plan.ts:276; setEnvelope / decideLoot w src/renderer/features/month/actions.ts; EnvelopeBars.tsx; alarm envelope-over w src/shared/calc/fleet.ts; rateDay w src/shared/calc/game.ts.
 
@@ -369,9 +486,19 @@ Oznaczenie „nietypowa” w Operacjach (filtr), pozycja „info” w odprawie, 
 
 Priorytet: średni · nakład: L · konflikt z decyzją: D10 (jeden zbiór kont, podział wirtualny) i T31 – aktywa wychodzą poza warstwy, więc nie zmieniają osłon ani zasięgu. D73 / T81 – krzywa majątku jako suma sald kont budżetu. D54 – konto tradingowe (maklerskie) XTB nie może tu trafić. Jeśli IKE / IKZE są w XTB, trzeba potwierdzić, że to nie konto tradingowe.
 
-Nowy rodzaj konta: „aktywo poza budżetem” (IKE, IKZE, PPK, obligacje skarbowe EDO / COI, lokata, auto, mieszkanie). Takie konto nie należy do warstw, a jego wartość aktualizuje się ręcznie wyceną z datą – bez korekty i alarmu „Rozbieżność w ładowni”. Wpłata na nie (przelew własny) to „odłożone do hangaru”: nie jest decyzją dnia w grze ani spadkiem majątku netto. Wpłaty roku pokazane są wobec limitu ustawowego IKE / IKZE (limit roku wpisywany w ustawieniach), z przypomnieniem w grudniu. Przy IKZE dopisek, że odliczenie dotyczy PIT-36/37, a nie PIT-38. Majątek netto = konta budżetu + hangar + należności − dług. W metaforze: „Flota rezerwowa w hangarze”.
+Nowy rodzaj konta: „aktywo poza budżetem” (IKE, IKZE, PPK, obligacje skarbowe EDO / COI, lokata, auto, mieszkanie).
+Takie konto nie należy do warstw, a jego wartość aktualizuje się ręcznie wyceną z datą – bez korekty i alarmu
+„Rozbieżność w ładowni”. Wpłata na nie (przelew własny) to „odłożone do hangaru”: nie jest decyzją dnia w grze ani
+spadkiem majątku netto. Wpłaty roku pokazane są wobec limitu ustawowego IKE / IKZE (limit roku wpisywany w
+ustawieniach), z przypomnieniem w grudniu. Przy IKZE dopisek, że odliczenie dotyczy PIT-36/37, a nie PIT-38. Majątek
+netto = konta budżetu + hangar + należności − dług. W metaforze: „Flota rezerwowa w hangarze”.
 
-**Po co.** Dziś przelew na IKE albo lokatę spoza budżetu to przelew własny, który zabiera z osłon (src/shared/calc/fleet.ts:722, T31). Jest też decyzją dnia w grze (DECISIONS, src/shared/calc/game.ts:187), więc może dać poważne naruszenie „osłony poniżej minimum”. Krzywa majątku spada, np. 8 000 zł wpłacone na IKE obniża ją z 30 000 do 22 000 zł. Takie konto dodane do budżetu przy każdej wycenie robi korektę z alarmem. Oszczędności poza mBankiem i Portfelem XTB są niewidoczne. IKE / IKZE z limitami śledzą myfund.pl i Portfel Inwestycyjny, a aktywa w majątku netto liczą Monarch i Empower.
+**Po co.** Dziś przelew na IKE albo lokatę spoza budżetu to przelew własny, który zabiera z osłon
+(src/shared/calc/fleet.ts:722, T31). Jest też decyzją dnia w grze (DECISIONS, src/shared/calc/game.ts:187), więc może
+dać poważne naruszenie „osłony poniżej minimum”. Krzywa majątku spada, np. 8 000 zł wpłacone na IKE obniża ją z 30 000
+do 22 000 zł. Takie konto dodane do budżetu przy każdej wycenie robi korektę z alarmem. Oszczędności poza mBankiem i
+Portfelem XTB są niewidoczne. IKE / IKZE z limitami śledzą myfund.pl i Portfel Inwestycyjny, a aktywa w majątku netto
+liczą Monarch i Empower.
 
 **Na czym oprzeć.** ACCOUNT_KINDS w src/shared/schema/budget.ts:29; fleet.ts:722 (transfer / correction); DECISIONS w src/shared/calc/game.ts:187; balancesAt / wealthCurve w src/shared/calc/intel.ts:27, :76; balanceSchema w src/shared/schema/records.ts; src/renderer/features/settings/AccountsTab.tsx.
 
@@ -381,7 +508,11 @@ Priorytet: niski · nakład: M
 
 Na stronie Synchronizacja oś czasu ostatnich zmian wszystkich wpisów: operacji, planów miesięcy, kopert, celów, pożyczek, kontenerów i ustawień. Każda pozycja pokazuje rodzaj zmiany, komputer (updatedBy), pola przed i po oraz przycisk „Przywróć poprzednią”. Filtry: dziś / tydzień, komputer, rodzaj. Do tego przycisk „Historia” także przy planie miesiąca, celu i pożyczce.
 
-**Po co.** Historia istnieje (.history, HistoryDialog), ale tylko pojedynczo przy wpisie. Nie da się zobaczyć, co zmieniło się „dziś rano na laptopie” albo po zbiorczej kategorii, ani sprawdzić, czemu nagle zmieniła się energia. HistoryButton jest tylko w edytorze operacji, Ładowni i Synchronizacji (ustawienia), więc zmiana kopert w planie miesiąca, celu albo pożyczki nie ma widocznej historii – choć D28 mówi o „pełnej edycji z dziennikiem zmian”. Dziennik zmian mają Firefly III (audit log), Notion i Google Sheets.
+**Po co.** Historia istnieje (.history, HistoryDialog), ale tylko pojedynczo przy wpisie. Nie da się zobaczyć, co
+zmieniło się „dziś rano na laptopie” albo po zbiorczej kategorii, ani sprawdzić, czemu nagle zmieniła się energia.
+HistoryButton jest tylko w edytorze operacji, Ładowni i Synchronizacji (ustawienia), więc zmiana kopert w planie
+miesiąca, celu albo pożyczki nie ma widocznej historii – choć D28 mówi o „pełnej edycji z dziennikiem zmian”. Dziennik
+zmian mają Firefly III (audit log), Notion i Google Sheets.
 
 **Na czym oprzeć.** src/main/datastore/history.ts; src/renderer/features/history/HistoryDialog.tsx; src/renderer/features/sync/SyncPage.tsx:150-200 (Usunięte wpisy); src/renderer/lib/recordTitle.ts; etykiety pól w src/shared/merge.ts; MonthPage.tsx, StarMapPage.tsx, RadarPage.tsx.
 
@@ -399,7 +530,12 @@ Przy wydatku opcja „czekam na zwrot” (oddany towar, reklamacja, anulowana re
 
 Priorytet: niski · nakład: M
 
-Panel w Planie miesiąca albo w Wywiadzie z polami: zmiana pensji, jednorazowy zakup (z osłon albo z celu) w wybranym miesiącu, brak wypłat z XTB przez N miesięcy, wzrost kosztów o X%, nowy cel albo nowy kontener. Wynik obok stanu bieżącego: zasięg i klasa okrętu, miesiąc pełnych osłon i kadłuba, ETA każdego celu, miesiące poniżej minimum osłon, ewentualne „pensja z kadłuba”. Liczone na kopii danych silnikiem z propozycji „Kurs na 12 miesięcy”; nic się nie zapisuje. „Zastosuj” jest tylko tam, gdzie to zwykła edycja (np. pensja w planie). W metaforze: „Symulator manewrów na mostku”.
+Panel w Planie miesiąca albo w Wywiadzie z polami: zmiana pensji, jednorazowy zakup (z osłon albo z celu) w wybranym
+miesiącu, brak wypłat z XTB przez N miesięcy, wzrost kosztów o X%, nowy cel albo nowy kontener. Wynik obok stanu
+bieżącego: zasięg i klasa okrętu, miesiąc pełnych osłon i kadłuba, ETA każdego celu, miesiące poniżej minimum osłon,
+ewentualne „pensja z kadłuba”. Liczone na kopii danych silnikiem z propozycji „Kurs na 12 miesięcy”; nic się nie
+zapisuje. „Zastosuj” jest tylko tam, gdzie to zwykła edycja (np. pensja w planie). W metaforze: „Symulator manewrów na
+mostku”.
 
 **Po co.** Przy nieregularnych wypłatach kluczowe pytania to „czy stać mnie na laptopa teraz?” i „co, jeśli przez pół roku nie wypłacę z XTB?”. Dziś jest tylko symulacja dodania albo zrzutu kontenera (simulateCargo, src/shared/calc/plan.ts:370) i stała prognoza zasięgu bez wpływów (src/shared/calc/intel.ts:198). Scenariusze „what-if” mają PocketSmith, ProjectionLab i Monarch.
 
@@ -434,7 +570,11 @@ Widok „Plan kampanii” w Planie miesiąca: wiersze to koperty i pensja, kolum
 
 Priorytet: niski · nakład: M · konflikt z decyzją: Brak sprzeczności z decyzją użytkownika. Trzeba zmienić decyzje techniczne T22 („bez protokołu plików – FI nie ma screenów”) i T20 (kopia „folder FI jest mały, bez screenów”) – kopie bez załączników albo tygodniowe, pilnowanie rozmiaru folderu na OneDrive.
 
-W edytorze operacji, przy kontenerze i w szybkim wpisie można wkleić (Ctrl+V) albo upuścić zdjęcie lub PDF: paragon, fakturę, kartę gwarancyjną, umowę. Obraz jest kompresowany do WebP potokiem screenów z ICTTJ i zapisywany w receipts/RRRR/MM/ULID.webp, z miniaturą i podglądem; na liście operacji pojawia się znacznik „z paragonem” (także w filtrze). Opcjonalne pole „zwrot do” albo „gwarancja / rękojmia do 18.10.2028” daje pozycję na Radarze i przypomnienie 14 dni wcześniej („Rękojmia odkurzacza mija za 30 dni”).
+W edytorze operacji, przy kontenerze i w szybkim wpisie można wkleić (Ctrl+V) albo upuścić zdjęcie lub PDF: paragon,
+fakturę, kartę gwarancyjną, umowę. Obraz jest kompresowany do WebP potokiem screenów z ICTTJ i zapisywany w
+receipts/RRRR/MM/ULID.webp, z miniaturą i podglądem; na liście operacji pojawia się znacznik „z paragonem” (także w
+filtrze). Opcjonalne pole „zwrot do” albo „gwarancja / rękojmia do 18.10.2028” daje pozycję na Radarze i przypomnienie
+14 dni wcześniej („Rękojmia odkurzacza mija za 30 dni”).
 
 **Po co.** Paragony termiczne blakną, a reklamacja (rękojmia 2 lata, zwrot zakupu online 14 dni) wymaga dowodu zakupu. Podział paragonu na kategorie i domowników też bywa sporny. Operacja nie ma dziś pola na załącznik (transactionSchema, src/shared/schema/records.ts:77-121). Załączniki mają Firefly III, Monarch, Spendee, Wallet i Monefy; Wallet ma też gwarancje.
 
@@ -444,7 +584,11 @@ W edytorze operacji, przy kontenerze i w szybkim wpisie można wkleić (Ctrl+V) 
 
 Priorytet: niski · nakład: M · konflikt z decyzją: D58 dotyczy tylko PIT-38 (termin bez kwoty) – PIT-37/36 to nowa sprawa. D8 (trading bez ZUS) sugeruje, że dochodu z PIT-37 może nie być – do potwierdzenia przez użytkownika.
 
-Oznaczenie „do ulgi” przy wydatku albo w regule importu (najprościej jako tag): internet (do 760 zł rocznie), darowizny (do 6% dochodu), ulga rehabilitacyjna, termomodernizacyjna, wpłaty IKZE. Suma roku pokazana jest wobec limitu wpisanego w ustawieniach. W przeglądzie rocznym sekcja „Do zeznania” z listą operacji i CSV. W lutym przypomnienie na Radarze „zbierz faktury do ulg” i termin 30 kwietnia także dla PIT-37/36. Dopisek, że w PIT-38 (trading, kwota w ICTTJ) tych ulg nie ma. FI nie liczy podatku – kwoty są informacyjne.
+Oznaczenie „do ulgi” przy wydatku albo w regule importu (najprościej jako tag): internet (do 760 zł rocznie), darowizny
+(do 6% dochodu), ulga rehabilitacyjna, termomodernizacyjna, wpłaty IKZE. Suma roku pokazana jest wobec limitu wpisanego
+w ustawieniach. W przeglądzie rocznym sekcja „Do zeznania” z listą operacji i CSV. W lutym przypomnienie na Radarze
+„zbierz faktury do ulg” i termin 30 kwietnia także dla PIT-37/36. Dopisek, że w PIT-38 (trading, kwota w ICTTJ) tych ulg
+nie ma. FI nie liczy podatku – kwoty są informacyjne.
 
 **Po co.** Ulgi przepadają, bo faktury i przelewy trzeba w kwietniu zbierać z całego roku, a tytuły przelewów bywają nieczytelne. FI ma te operacje skategoryzowane. Panel „Przychody” rozróżnia „Pracę i inne” (D81), więc przy dochodach z pracy lub umów ma to sens. Programy podatkowe (e-pity, PITax) zbierają ulgi dopiero przy zeznaniu, a budżet może zbierać je przez cały rok.
 
@@ -486,6 +630,10 @@ Priorytet: niski · nakład: L · konflikt z decyzją: Brak sprzeczności z decy
 
 W Raportach → Przegląd roczny przycisk „Zamknij rok 2025”. Operacje, dokowania i salda roku są pakowane do archive/2025.json.gz (albo jednego pliku na miesiąc), tylko do odczytu, i nadal liczone przez silnik i Wywiad. Rok można „Otworzyć ponownie”. Panel „Zajętość folderu” pokazuje liczbę plików, rozmiar .history i kopii, z przyciskami „Wyczyść historię starszą niż rok” i „Usuń kopie sprzed…”.
 
-**Po co.** Każda operacja to osobny plik (T2), a na nowym komputerze OneDrive pobiera każdy plik przy pierwszym odczycie. To właśnie zawieszało otwieranie folderu (D82, T123), a problem rośnie z każdym rokiem pełnej historii z mBanku. Zamknięty rok to kilkanaście plików zamiast tysięcy i ochrona starych danych przed przypadkową edycją. Zamykanie lat mają GnuCash i programy księgowe. Uwaga: to nie naprawia znanego przepełnienia stosu przy ponad ok. 120 tys. plików (src/main/datastore/store.ts:271).
+**Po co.** Każda operacja to osobny plik (T2), a na nowym komputerze OneDrive pobiera każdy plik przy pierwszym
+odczycie. To właśnie zawieszało otwieranie folderu (D82, T123), a problem rośnie z każdym rokiem pełnej historii z
+mBanku. Zamknięty rok to kilkanaście plików zamiast tysięcy i ochrona starych danych przed przypadkową edycją. Zamykanie
+lat mają GnuCash i programy księgowe. Uwaga: to nie naprawia znanego przepełnienia stosu przy ponad ok. 120 tys. plików
+(src/main/datastore/store.ts:271).
 
 **Na czym oprzeć.** src/main/datastore/store.ts (walkFiles, open), COLLECTIONS / LAYOUTS w src/shared/paths.ts, src/main/datastore/backup.ts, src/main/datastore/history.ts, src/main/datastore/progress.ts, przegląd roczny w src/renderer/features/reports/ReportsPage.tsx.

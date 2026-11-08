@@ -5,6 +5,16 @@ paths:
 
 # Okno (renderer)
 
+- Wygląd = ICTTJ (przeniesione z CLAUDE.md 08.11.2026, T527): tokeny z jego `src/renderer/styles/index.css` (tło `#0b0d10`,
+  panel `#111418`, podniesione `#161b21`, linia `#1e232a`, tekst `#c3cbd4` / `#e8edf2`, przygaszony `#7a838e`, akcent
+  `#e8a33d`, plus `#2ebd85`, minus `#f6465d`); liczby `.num` (JetBrains Mono, cyfry tabelaryczne); jeden akcent; zieleń /
+  czerwień tylko dla kwot na plus / minus; bez gradientów i cieni; panele z nagłówkiem, linie 1 px; animacje 120–160 ms
+  (zdarzenia: dokowanie, awans, „miesiąc na plus” – dłużej, ale bez efekciarstwa).
+- Nawigacja: menu boczne (D44, inaczej niż pasek u góry w ICTTJ); reszta komponentów jak ICTTJ (`components/`).
+- Metafora zawsze z prawdziwą nazwą i kwotą obok („Osłony · bufor 8 640 zł”).
+- Nowy wpis jest szkicem do pierwszej edycji; opuszczenie ekranu nigdy nie gubi zmian. Sklepy w `store/` (zustand,
+  autozapis jak ICTTJ), ekrany w `features/<ekran>/`.
+
 - Pola kwot, dat, godzin, miesięcy i nazw zapisują po wyjściu z pola (`AmountField`, `DateField`, `TimeField`,
   `MonthField`, `NameInput`); teksty przez `useTextDraft` (Enter / Ctrl+Enter zatwierdza, Esc cofa). Akcja czytająca
   formularz woła najpierw `commitActiveField` (`store/ui.ts`, T34).

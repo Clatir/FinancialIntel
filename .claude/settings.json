@@ -3,7 +3,16 @@
     "deny": [
       "Read(./package-lock.json)",
       "Read(./release/**)",
-      "Read(./release-next/**)"
+      "Read(./release-next/**)",
+      "Read(./out/**)",
+      "Read(./dist/**)",
+      "Read(./playwright-report/**)",
+      "Read(./coverage/**)",
+      "Read(./ios/App/build/**)",
+      "Read(./ios/App/Pods/**)",
+      "Read(./ios/DerivedData/**)",
+      "Read(./ios/App/output/**)",
+      "Read(./ios/App/App/public/**)"
     ]
   }
 }
