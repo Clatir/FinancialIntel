@@ -22,8 +22,8 @@ wykonawcy (agenci widoczni od nowej sesji). PR dopiero w B4 – jedna runda CI.
 | B0 | Kontrakt B1–B3 (niżej) | sesja główna | Opus 5.5 · high | 15–20 min | ✅ 15.11 |
 | B1 | Zaznaczanie (Ctrl / Shift / Shift+strzałki / Ctrl+A / Esc) na `ticked` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–25 min | ✅ 15.11 (≈ 5 min wykonawcy; `a44e3e5`; 29 testów) |
 | B2 | Nowe zmiany zbiorcze (dzień, tagi, plan / impuls, wyjaśniona, ładownia, cel, pożyczka), `opState`, skutek ładowni i pożyczek | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | ✅ 15.11 (≈ 14 min wykonawcy; scalenie `364ada1`; 3 pliki testów) |
-| B3 | Menu PPM, kalendarz, wspólny podgląd, E2E | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 25–35 min | 🔄 15.11 |
-| B4 | Pełne testy + E2E, `/code-review` xhigh całości, `ui.md`, CHANGELOG `## 1.20.0`, wersja, PR, CI, scalenie, wydanie | sesja główna | Opus 5.5 · high | 30–45 min + CI | ⬜ |
+| B3 | Menu PPM, kalendarz, wspólny podgląd, E2E | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 25–35 min | ✅ 15.11 (≈ 15 min wykonawcy + 3 rundy poprawek; E2E `operations-bulk-menu.spec.ts`) |
+| B4 | Pełne testy + E2E, `/code-review` xhigh całości, `ui.md`, CHANGELOG `## 1.20.0`, wersja, PR, CI, scalenie, wydanie | sesja główna | Opus 5.5 · high | 30–45 min + CI | 🔄 15.11 (przegląd xhigh + 2 rundy high, poprawki B2 / B3; testy; `.exe` lokalnie zbudowane; PR i CI) |
 
 ### Decyzje w trakcie grupy
 - Użytkownik (15.11): jedna grupa A+B; kroki „max” – `wykonawca-opus` z effort max w wywołaniu; menu obok pasków;
@@ -45,6 +45,22 @@ wykonawcy (agenci widoczni od nowej sesji). PR dopiero w B4 – jedna runda CI.
 ode-v24.21.0-win-x64`) – przy zmianie `.node-version` poprawić.
 - Bez CI do PR grupy: po scaleniu B1 + B2 lokalnie pełny `typecheck` i `npm test`; w razie wątpliwości ręczny
   `gh workflow run ci.yml --ref claude/1.20.0-zmiany-grupowe`.
+
+### Przeglądy i testy (B4)
+- `/code-review` xhigh całości (15 uwag) – poprawione: menu wisiało po przełączniku ukrywającym wiersze, „Cofnij” tagu
+  po jednym tagu, brak „nie” w powodach, limit nowego tagu, Enter w widżetach, id tagów, Shift na polu zaznaczenia,
+  jedno przejście `bulkProbe`, minus „−”, zbiornik ładowni po jednej stronie, `keepTicked`. Runda 2 (high, 10): pole
+  zaznaczenia z Shift / Ctrl (React #9023), przycinanie przy pustej liście, klatka ze starym `ticked`, „Cofnij” tagu na
+  innym rodzaju / wpisie nowszej wersji (także ścieżka ogólna), „o 0 dni”. Runda 3 (high, 6): regresja `tagUndone`
+  (jedyny tag przelewu), przycinanie raz i tylko zmienionych, Esc na widocznych.
+- Testy lokalne: `typecheck`, unit 2051 (padają tylko 2 w `tests/fs/bank-files.test.ts` – w głównym folderze repo; w świeżym
+  drzewie na `main` i na gałęzi grupy przechodzą 4/4), E2E 146 / 147 (`ictj.spec.ts:172` – ICTTJ zainstalowany na tym
+  komputerze, „Nie znaleziono ICT Trade Journal” się nie pokazuje). Ściągawka F1: sekcja „Lista operacji”.
+- Uwagi na później (przeglądy B4): tagi linii paragonu nie liczą się w menu (tylko tagi operacji – kontrakt); najechanie
+  na wyłączoną pozycję menu psuje kolejność strzałek; pola dni bez `NumberField` (ciche przycięcie ±366, jak wcześniej
+  w pasku); `tanksEffect` zakłada, że brak zbiornika = 0 zł; pole zaznaczenia czyta modyfikatory z `nativeEvent` (zależne
+  od Reacta); trzy filtry „zaznaczone widoczne” (`tickedIn`, `tickedEntries`, `BulkBar`) do scalenia; powtórzona logika
+  znacznika w `operationsMenuModel.ts`.
 
 ### Kontrakt B0
 Wspólne dla wykonawców: baza `git fetch origin && git merge --ff-only origin/claude/1.20.0-zmiany-grupowe` (hash HEAD
