@@ -104,27 +104,49 @@ describe('grupy menu', () => {
   })
 })
 
+describe('powody wyłączenia – pełne zdania', () => {
+  it('każdy mówi „nie”', () => {
+    const menu = buildMenu(input([tx({ kind: 'transfer', counterAccountId: XTB_WALLET_ACCOUNT_ID })]))
+    expect((group(menu, 'impulse') as MenuSub).disabled).toBe('Żadna z zaznaczonych operacji nie jest wydatkiem.')
+    expect((group(menu, 'explained') as MenuLeaf).disabled).toBe('Żadna z zaznaczonych operacji nie jest korektą.')
+    expect((group(menu, 'container') as MenuSub).disabled).toBe('Żadna z zaznaczonych operacji nie przyjmie ładowni (tylko wydatki – wypływ, bez podziału paragonu).')
+    expect((group(menu, 'goal') as MenuSub).disabled).toBe('Żadna z zaznaczonych operacji nie przyjmie celu (tylko wydatki, bez podziału paragonu).')
+    expect((group(menu, 'loan') as MenuSub).disabled).toBe('Żadna z zaznaczonych operacji nie jest operacją pożyczki (bez podziału paragonu).')
+    const docked = tx()
+    const kinds = sub(buildMenu(input([docked], { docked: new Set([docked.id]) })), 'kind').items
+    expect(leaf(kinds, 'kind-income').disabled).toBe('Żadna z zaznaczonych operacji nie przyjmie tej zmiany.')
+  })
+})
+
+describe('id tagów nie zderzają się z pozycjami menu', () => {
+  it('tag „Clear”, „New”, „Sep” ma własne id', () => {
+    const ids = sub(buildMenu(input([tx()], { tags: ['Clear', 'New', 'Sep'] })), 'tags').items.map((n) => n.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids).toEqual(expect.arrayContaining(['tags-tag-clear', 'tags-tag-new', 'tags-tag-sep', 'tags-new', 'tags-clear', 'tags-sep']))
+  })
+})
+
 describe('zaznaczenia ✓ / „—”', () => {
   it('tag: wszystkie mają – ✓ i zdjęcie; część – „—” i dołożenie; żadna – bez znaku i dołożenie', () => {
     const a = tx({ tags: ['Remont'] })
     const b = tx({ tags: ['Remont'] })
     const c = tx()
     const all = sub(buildMenu(input([a, b])), 'tags')
-    const on = leaf(all.items, 'tags-remont')
+    const on = leaf(all.items, 'tags-tag-remont')
     expect(on.mark).toBe('on')
     expect(on.command).toEqual({ type: 'apply', change: { kind: 'tag', tag: 'Remont', on: false }, what: '#Remont' })
     expect(on.keepOpen).toBe(true)
-    const mixed = leaf(sub(buildMenu(input([a, c])), 'tags').items, 'tags-remont')
+    const mixed = leaf(sub(buildMenu(input([a, c])), 'tags').items, 'tags-tag-remont')
     expect(mixed.mark).toBe('mixed')
     expect(mixed.command).toEqual({ type: 'apply', change: { kind: 'tag', tag: 'Remont', on: true }, what: '#Remont' })
-    const off = leaf(sub(buildMenu(input([c])), 'tags').items, 'tags-wakacje')
+    const off = leaf(sub(buildMenu(input([c])), 'tags').items, 'tags-tag-wakacje')
     expect(off.mark).toBeUndefined()
     expect(off.command).toEqual({ type: 'apply', change: { kind: 'tag', tag: 'Wakacje', on: true }, what: '#Wakacje' })
   })
 
   it('tag, którego żadna operacja nie przyjmie (przelew bez tagów) – pozycja wyłączona z powodem', () => {
     const t = tx({ kind: 'transfer', counterAccountId: XTB_WALLET_ACCOUNT_ID })
-    const item = leaf(sub(buildMenu(input([t])), 'tags').items, 'tags-remont')
+    const item = leaf(sub(buildMenu(input([t])), 'tags').items, 'tags-tag-remont')
     expect(item.disabled).toMatch(/nie przyjmie/)
   })
 
@@ -242,7 +264,8 @@ describe('data', () => {
   it('whatOf: dzień przez plDate, przesunięcie ze znakiem i liczebnikiem', () => {
     expect(whatOf({ kind: 'day', date: '2026-10-02' })).toBe('na 02.10.2026')
     expect(whatOf({ kind: 'shift', days: 3 })).toBe('o +3 dni')
-    expect(whatOf({ kind: 'shift', days: -1 })).toBe('o -1 dzień')
+    expect(whatOf({ kind: 'shift', days: -1 })).toBe('o −1 dzień')
+    expect(whatOf({ kind: 'shift', days: -3 })).toBe('o −3 dni')
     expect(whatOf({ kind: 'shift', days: 5 })).toBe('o +5 dni')
     expect(whatOf({ kind: 'delete' })).toBe('')
   })

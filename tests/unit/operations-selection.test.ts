@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clickTick, extendTick, tickAll, type Selection } from '../../src/renderer/features/operations/rangeSelect'
+import { clickTick, extendTick, pruneTicked, tickAll, type Selection } from '../../src/renderer/features/operations/rangeSelect'
 
 // The store half talks to window.fi through the stores it imports; nothing is written here.
 const storage = new Map<string, string>()
@@ -226,5 +226,28 @@ describe('zaznaczenie w stanie listy (`tickAnchor`)', () => {
     ops.useOperationsUi.setState({ ticked: { a: true }, tickAnchor: 'a' })
     ops.followCurrentMonth('2099-02')
     expect(st().tickAnchor).toBeNull()
+  })
+})
+
+describe('pruneTicked – zaznaczone, które zmiana ukryła, odpadają', () => {
+  it('zostają tylko widoczne; gdy nic nie odpada – ta sama referencja', () => {
+    const next = pruneTicked(sel(['a', 'c', 'x']).ticked, ORDER)
+    expect(keys({ ticked: next })).toEqual(['a', 'c'])
+    const same = sel(['a', 'c']).ticked
+    expect(pruneTicked(same, ORDER)).toBe(same)
+  })
+
+  it('wszystko ukryte – puste zaznaczenie', () => {
+    expect(keys({ ticked: pruneTicked(sel(['x', 'y']).ticked, ORDER) })).toEqual([])
+  })
+
+  it('sklep: pruneTickedTo odrzuca ukryte; nic do odrzucenia – to samo zaznaczenie', () => {
+    ops.useOperationsUi.setState({ ticked: { a: true, x: true }, tickAnchor: 'a' })
+    ops.pruneTickedTo(ORDER)
+    expect(Object.keys(ops.useOperationsUi.getState().ticked)).toEqual(['a'])
+    const ref = ops.useOperationsUi.getState().ticked
+    ops.pruneTickedTo(ORDER)
+    expect(ops.useOperationsUi.getState().ticked).toBe(ref)
+    ops.clearTicked()
   })
 })

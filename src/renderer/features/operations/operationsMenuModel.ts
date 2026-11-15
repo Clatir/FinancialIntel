@@ -1,14 +1,14 @@
 /**
  * Operacje: the right-click menu of the ticked operations (D105) – pure, tested in node. What the groups and their items
  * are, which are marked (✓ / „—”) or off and why, the keys that walk them, where the boxes stand on the screen, the
- * calendar's grid. The marks and the groups' fitting come from `bulkModel.ts` (`opState`, `bulkApplies`) – no rule of
+ * calendar's grid. The marks and the groups' fitting come from `bulkModel.ts` (`bulkProbe` – `opState` and `bulkApplies` in one pass) – no rule of
  * its own; the component only draws what comes out and runs the commands.
  */
 import { addDays, daysInMonth, firstDayOf, monthOf, weekdayOf } from '@shared/calc/dates'
 import { tagKey } from '@shared/calc/tags'
 import { plDate, plural } from '@shared/format'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction } from '@shared/schema'
-import { bulkApplies, opState, type BulkChange, type OpState } from './bulkModel'
+import { bulkProbe, type BulkChange, type OpState } from './bulkModel'
 
 /** What an item does when chosen: the old actions of the bar, a change with its preview, a change at once. */
 export type MenuCommand =
@@ -72,12 +72,12 @@ export interface MenuInput {
 }
 
 const NEWER = 'Zaznaczone operacje zapisała nowsza wersja aplikacji – ta ich nie zmienia.'
-const noFit = (what: string) => `Żadna z zaznaczonych operacji ${what}.`
+const noFit = (what: string) => `Żadna z zaznaczonych operacji nie ${what}.`
 
 /** What the toast and the preview's title say after the words of a change: „na 02.10.2026”, „o +3 dni”. */
 export function whatOf(c: BulkChange): string {
   if (c.kind === 'day') return `na ${plDate(c.date)}`
-  if (c.kind === 'shift') return `o ${c.days > 0 ? '+' : ''}${c.days} ${plural(Math.abs(c.days), 'dzień', 'dni', 'dni')}`
+  if (c.kind === 'shift') return `o ${c.days > 0 ? '+' : '−'}${Math.abs(c.days)} ${plural(Math.abs(c.days), 'dzień', 'dni', 'dni')}`
   return ''
 }
 
@@ -106,19 +106,19 @@ const quoted = (s: string) => `„${s}”`
 export function buildMenu(input: MenuInput): MenuNode[] {
   const { records, docked } = input
   const off = input.readOnly ?? (records.length ? null : NEWER)
-  const mark = (c: BulkChange): OpState | undefined => {
-    const s = opState(records, c, docked)
-    return s === 'off' ? undefined : s
+  /** One pass over the operations per item: does the change fit any, and the ✓ / „—” (none – no mark). */
+  const probe = (c: BulkChange): { fit: boolean; mark: OpState | undefined; on: boolean } => {
+    const p = bulkProbe(records, c, docked)
+    return { fit: p.fit > 0, mark: p.state === 'off' ? undefined : p.state, on: p.state === 'on' }
   }
-  const fits = (c: BulkChange) => bulkApplies(records, c, docked) > 0
+  const fits = (c: BulkChange) => probe(c).fit
   const withOff = <T extends object>(node: T, reason: string | null | undefined): T => (reason ? { ...node, disabled: reason } : node)
+
+  const changeLeafOf = (p: ReturnType<typeof probe>, leaf: MenuLeaf): MenuLeaf => withOff({ ...leaf, ...(p.mark ? { mark: p.mark } : {}) }, off ?? (p.fit ? null : noFit('przyjmie tej zmiany')))
 
   /** A leaf for a change: the state mark, off when it fits none of the operations. */
   const changeLeaf = (id: string, label: string, change: BulkChange, what: string, mode: 'preview' | 'apply', extra: Partial<MenuLeaf> = {}): MenuLeaf =>
-    withOff(
-      { type: 'leaf', id, label, command: { type: mode, change, what }, ...(mark(change) ? { mark: mark(change) } : {}), ...extra } as MenuLeaf,
-      off ?? (fits(change) ? null : noFit('przyjmie tej zmiany'))
-    )
+    changeLeafOf(probe(change), { type: 'leaf', id, label, command: { type: mode, change, what }, ...extra })
 
   const group = (id: string, label: string, items: MenuNode[], reason: string | null): MenuSub => withOff({ type: 'sub', id, label, items } as MenuSub, off ?? reason)
 
@@ -185,15 +185,15 @@ export function buildMenu(input: MenuInput): MenuNode[] {
   )
 
   const tagLeaf = (tag: string): MenuLeaf => {
-    const on = mark({ kind: 'tag', tag, on: true }) === 'on'
-    const change: BulkChange = { kind: 'tag', tag, on: !on }
-    const fit = fits({ kind: 'tag', tag, on: true }) || on
+    const p = probe({ kind: 'tag', tag, on: true })
+    const change: BulkChange = { kind: 'tag', tag, on: !p.on }
+    // „tags-tag-…”: a tag's id never meets „tags-new”, „tags-clear” or „tags-sep” (a tag may be called „Clear”).
     return withOff(
-      { type: 'leaf', id: `tags-${tagKey(tag)}`, label: tag, command: { type: 'apply', change, what: `#${tag}` }, keepOpen: true, ...(mark({ kind: 'tag', tag, on: true }) ? { mark: mark({ kind: 'tag', tag, on: true }) } : {}) } as MenuLeaf,
-      off ?? (fit ? null : 'Tag nie przyjmie się w żadnej z zaznaczonych operacji (rodzaj bez tagów albo pełna lista).')
+      { type: 'leaf', id: `tags-tag-${tagKey(tag)}`, label: tag, command: { type: 'apply', change, what: `#${tag}` }, keepOpen: true, ...(p.mark ? { mark: p.mark } : {}) } as MenuLeaf,
+      off ?? (p.fit ? null : 'Tag nie przyjmie się w żadnej z zaznaczonych operacji (rodzaj bez tagów albo pełna lista).')
     )
   }
-  const hasTags = opState(records, { kind: 'tagsClear' }, docked) !== 'on'
+  const hasTags = !probe({ kind: 'tagsClear' }).on
   const tags = group(
     'tags',
     'Tagi',
@@ -215,17 +215,17 @@ export function buildMenu(input: MenuInput): MenuNode[] {
   }
   const impulse = group('impulse', 'Plan / impuls', [pick('plan', 'plan'), pick('impulse', 'impuls'), pick('none', 'bez oznaczenia')], fits({ kind: 'impulse', to: null }) ? null : noFit('jest wydatkiem'))
 
-  const explainedOn = mark({ kind: 'explained', on: true }) === 'on'
+  const explainedProbe = probe({ kind: 'explained', on: true })
   const explained: MenuLeaf = withOff(
     {
       type: 'leaf',
       id: 'explained',
       label: 'Wyjaśniona korekta',
-      command: { type: 'apply', change: { kind: 'explained', on: !explainedOn }, what: '' },
+      command: { type: 'apply', change: { kind: 'explained', on: !explainedProbe.on }, what: '' },
       keepOpen: true,
-      ...(mark({ kind: 'explained', on: true }) ? { mark: mark({ kind: 'explained', on: true }) } : {})
+      ...(explainedProbe.mark ? { mark: explainedProbe.mark } : {})
     } as MenuLeaf,
-    off ?? (fits({ kind: 'explained', on: true }) ? null : noFit('jest korektą'))
+    off ?? (explainedProbe.fit ? null : noFit('jest korektą'))
   )
 
   const usedContainers = new Set(records.flatMap((t) => (t.containerId ? [t.containerId] : [])))

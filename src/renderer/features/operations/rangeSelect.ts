@@ -59,6 +59,17 @@ export function extendTick(state: Selection, order: readonly string[], cursorId:
   return { ticked: withAdded(state.ticked, ids), anchor: state.anchor ?? (at < 0 ? cursor : order[at]!), cursor }
 }
 
+/** `ticked` without the rows no longer in `order` (a change hid them from the list); the same object when none is. */
+export function pruneTicked(ticked: Ticked, order: readonly string[]): Ticked {
+  const ids = Object.keys(ticked)
+  if (!ids.length) return ticked
+  const shown = new Set(order)
+  if (ids.every((id) => shown.has(id))) return ticked
+  const next: Record<string, true> = {}
+  for (const id of ids) if (shown.has(id)) next[id] = true
+  return next
+}
+
 /** Ctrl+A: every row shown is ticked, the ticked ones stay. */
 export function tickAll(ticked: Ticked, order: readonly string[]): Ticked {
   return withAdded(ticked, order)

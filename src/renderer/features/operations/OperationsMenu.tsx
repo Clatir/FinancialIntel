@@ -9,10 +9,10 @@ import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type
 import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 import { addDays, addMonths, monthOf, warsawNow } from '@shared/calc/dates'
-import { tagKey, tagLabel } from '@shared/calc/tags'
+import { MAX_TAG_LENGTH, tagKey, tagLabel } from '@shared/calc/tags'
 import { CompactContext } from '../../components/compact'
 import { IconBack, IconNext } from '../../components/icons'
-import { cx } from '../../components/ui'
+import { LimitHint, cx } from '../../components/ui'
 import { WEEKDAY_PL, monthLabel, plural } from '../../lib/format'
 import { useData, useFolderLocked } from '../../store/data'
 import { useFleet } from '../../store/fleet'
@@ -119,10 +119,9 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
   }, [transactions, ticked, order, cats, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason, count])
   const root = useMemo(() => buildMenu(input), [input])
 
-  // What was ticked goes: nothing left to change – except while a switch of the menu has the ticks back to put (below).
-  const keeping = useRef(false)
+  // Nothing ticked is left to change (the list unticks what a change hid from it): the menu goes.
   useEffect(() => {
-    if (!count && !keeping.current) closeOperationsMenu()
+    if (!count) closeOperationsMenu()
   }, [count])
 
   // The calendar's month is the menu's (it survives the submenu closing).
@@ -147,16 +146,9 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
         toast('Bez zmian – zaznaczone operacje są już takie.', 'info')
         return
       }
-      const { ticked: keep, tickAnchor } = useOperationsUi.getState()
       if (!leaf.keepOpen) closeOperationsMenu()
-      // A switch leaves the menu open and the ticks as they were (the change clears them): the next one works on the same operations.
-      keeping.current = !!leaf.keepOpen
-      try {
-        await applyBulk(plan, c.what)
-        if (leaf.keepOpen) useOperationsUi.setState({ ticked: keep, tickAnchor })
-      } finally {
-        keeping.current = false
-      }
+      // A switch leaves the menu open and the ticks as they were: the next one works on the same operations.
+      await applyBulk(plan, c.what, { keepTicked: !!leaf.keepOpen })
     }
   }
   const runRef = useRef(run)
@@ -187,6 +179,8 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       const field = target instanceof HTMLInputElement && target.type !== 'checkbox' && target.type !== 'button'
       // The calendar's grid walks its days itself.
       if (target?.closest('[data-menu-grid]')) return
+      // Enter on a button of a widget (the month's arrows, „Podgląd…” of the shift) presses it – only an item of the menu is run by the keys.
+      if (e.key === 'Enter' && target instanceof HTMLButtonElement && target.getAttribute('role') !== 'menuitem') return
       const keys: readonly string[] = field ? ['ArrowDown', 'ArrowUp'] : ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter', 'Home', 'End']
       if (!keys.includes(e.key)) return
       e.preventDefault()
@@ -468,7 +462,7 @@ function MenuNewTag({ node, records, docked, onAdd }: { node: Extract<MenuWidget
         placeholder="nowy tag…  (Enter)"
         value={text}
         disabled={!!node.disabled}
-        maxLength={60}
+        maxLength={MAX_TAG_LENGTH}
         data-menu-focus=""
         onChange={(e) => {
           setText(e.currentTarget.value)
@@ -483,6 +477,7 @@ function MenuNewTag({ node, records, docked, onAdd }: { node: Extract<MenuWidget
         aria-label="Nowy tag dla zaznaczonych"
         data-testid="operations-menu-tags-new"
       />
+      <LimitHint length={text.length} max={MAX_TAG_LENGTH} />
       {error && (
         <span className="text-[11px] text-accent" data-testid="operations-menu-tags-error">
           {error}

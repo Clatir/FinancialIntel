@@ -13,7 +13,8 @@ const CARGO = '01KCNT00000000000000000001'
 
 // D105 (grupa 1.20.0): the selection with Ctrl / Shift / Ctrl+A / Esc and the menu under the right button – the same
 // changes as the bar's, the same preview and „Cofnij”.
-function seed() {
+function seed(tagged: readonly string[] = ['Sklep Alfa']) {
+  const tagsFor = (name: string) => (tagged.includes(name) ? { tags: ['Remont'] } : {})
   const { date: today, month } = warsawNow()
   const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-bulk-menu-')), 'FinancialIntel')
   seedFolder(dataDir, {
@@ -22,8 +23,8 @@ function seed() {
       balances: [{ date: `${month}-01`, accountId: MBANK, kind: 'opening', amount: zl(20000) }],
       containers: [{ id: CARGO, name: 'Czynsz', amount: zl(100), cycleMonths: 1, dueMonth: month }],
       transactions: [
-        { date: addDays(today, -1), accountId: MBANK, amount: -zl(10), categoryId: GROCERIES, counterparty: 'Sklep Alfa', tags: ['Remont'] },
-        { date: addDays(today, -2), accountId: MBANK, amount: -zl(20), categoryId: GROCERIES, counterparty: 'Sklep Beta' },
+        { date: addDays(today, -1), accountId: MBANK, amount: -zl(10), categoryId: GROCERIES, counterparty: 'Sklep Alfa', ...tagsFor('Sklep Alfa') },
+        { date: addDays(today, -2), accountId: MBANK, amount: -zl(20), categoryId: GROCERIES, counterparty: 'Sklep Beta', ...tagsFor('Sklep Beta') },
         { date: addDays(today, -3), accountId: MBANK, amount: -zl(30), categoryId: GROCERIES, counterparty: 'Sklep Gamma' },
         { date: addDays(today, -4), accountId: MBANK, amount: -zl(40), categoryId: GROCERIES, counterparty: 'Sklep Delta' }
       ]
@@ -62,6 +63,13 @@ test('zaznaczanie: Ctrl+klik, Shift+klik, Ctrl+A, Esc', async () => {
     await expect(ticked).toHaveCount(4)
     await page.keyboard.press('Escape')
     await expect(ticked).toHaveCount(0)
+    // Shift / Ctrl on the box of a row do what they do on the row: a range from the anchor.
+    await row(page, 'Sklep Alfa').getByTestId('operation-tick').click()
+    await row(page, 'Sklep Gamma').getByTestId('operation-tick').click({ modifiers: ['Shift'] })
+    await expect(ticked).toHaveCount(3)
+    await expect(row(page, 'Sklep Beta')).toHaveAttribute('data-ticked', '1')
+    await row(page, 'Sklep Beta').getByTestId('operation-tick').click({ modifiers: ['Control'] })
+    await expect(ticked).toHaveCount(2)
     expect(errors).toEqual([])
   } finally {
     await app.close()
@@ -87,11 +95,13 @@ test('menu pod prawym przyciskiem: tag (✓ / „—”), Esc, ładownia przez p
     await expect(ticked).toHaveCount(1)
 
     await page.keyboard.press('Control+a')
+    // The bar's chosen change must survive the menu's switches (the ticks are never emptied on the way).
+    await page.getByTestId('operations-bulk-change').selectOption('shift')
     await row(page, 'Sklep Alfa').click({ button: 'right' })
     await expect(page.getByTestId('operations-menu-header')).toHaveText('Zmień 4 operacje')
     await page.getByTestId('operations-menu-tags').hover()
     // One of the four has the tag: „—”; a click puts it on all four – and the menu stays open.
-    const tag = page.getByTestId('operations-menu-tags-remont')
+    const tag = page.getByTestId('operations-menu-tags-tag-remont')
     await expect(tag).toHaveAttribute('data-state', 'mixed')
     await expect(tag).toContainText('—')
     await tag.click()
@@ -99,6 +109,7 @@ test('menu pod prawym przyciskiem: tag (✓ / „—”), Esc, ładownia przez p
     await expect(tag).toContainText('✓')
     await expect(menu).toBeVisible()
     await expect(ticked).toHaveCount(4)
+    await expect(page.getByTestId('operations-bulk-change')).toHaveValue('shift')
     await expect.poll(tagsOf).toEqual({ 'Sklep Alfa': 1, 'Sklep Beta': 1, 'Sklep Gamma': 1, 'Sklep Delta': 1 })
     // On all of them it takes the tag off – no operation has it now, so the history's list of tags no longer knows it.
     await tag.click()
@@ -153,6 +164,77 @@ test('menu: data z kalendarza i konto przez wspólny podgląd; pasek zaznaczonyc
     await expect(page.getByTestId('operations-bulk-dialog')).toHaveCount(1)
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('operations-bulk-dialog')).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('lista filtrowana tagiem: zdjęcie tagu chowa wiersze, zaznaczenie odpada, a menu się zamyka', async () => {
+  const { dataDir } = seed(['Sklep Alfa', 'Sklep Beta'])
+  const { app, page, dataDir: dir, errors } = await launch({ dataDir })
+  try {
+    await openList(page)
+    await page.getByTestId('operations-search').fill('#Remont')
+    await expect(page.getByTestId('operation-row')).toHaveCount(2)
+    // The focus leaves the search field (Ctrl+A there selects its text).
+    await row(page, 'Sklep Alfa').click()
+    await page.keyboard.press('Control+a')
+    await expect(page.locator('[data-testid="operation-row"][data-ticked="1"]')).toHaveCount(2)
+    await row(page, 'Sklep Alfa').click({ button: 'right' })
+    await page.getByTestId('operations-menu-tags').hover()
+    const tag = page.getByTestId('operations-menu-tags-tag-remont')
+    await expect(tag).toHaveAttribute('data-state', 'on')
+    await tag.click()
+    await expect.poll(async () => (await records(dir, 'transactions')).filter((t) => ((t.tags as string[] | undefined) ?? []).length > 0).length).toBe(0)
+    // The rows left the list: nothing hidden stays ticked, no menu hangs over „0 operacji”, the bar is gone.
+    await expect(page.getByTestId('operation-row')).toHaveCount(0)
+    await expect(page.getByTestId('operations-menu')).toHaveCount(0)
+    await expect(page.getByTestId('operations-bulk')).toHaveCount(0)
+    // „Cofnij” brings the rows back – and they come back unticked (what a change hid was dropped from the ticks).
+    await page.getByRole('button', { name: 'Cofnij', exact: true }).last().click()
+    await expect(page.getByTestId('operation-row')).toHaveCount(2)
+    await expect(page.locator('[data-testid="operation-row"][data-ticked="1"]')).toHaveCount(0)
+    await expect(page.getByTestId('operations-bulk')).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('menu: Enter na przyciskach widżetów działa jak klik; limit nazwy nowego tagu mówi o sobie', async () => {
+  const { dataDir } = seed()
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await openList(page)
+    await row(page, 'Sklep Beta').click({ button: 'right' })
+    await page.getByTestId('operations-menu-date').hover()
+    const month = page.getByTestId('operations-menu-date-month')
+    const before = await month.textContent()
+    const next = page.getByTestId('operations-menu-date-next-month')
+    await expect(next).toBeVisible()
+    await next.focus()
+    await expect(next).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(month).not.toHaveText(before ?? '')
+    await page.getByTestId('operations-menu-date-shift-days').fill('2')
+    const apply = page.getByTestId('operations-menu-date-shift-apply')
+    await apply.focus()
+    await expect(apply).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('operations-bulk-dialog')).toContainText('Przesuń datę o +2 dni')
+    await page.keyboard.press('Escape')
+
+    // The new tag's field stops at the tag's limit and says so.
+    await row(page, 'Sklep Beta').click({ button: 'right' })
+    await page.getByTestId('operations-menu-tags').hover()
+    const field = page.getByTestId('operations-menu-tags-new')
+    await expect(field).toBeVisible()
+    await field.focus()
+    await expect(field).toBeFocused()
+    await field.pressSequentially('a'.repeat(41))
+    await expect(field).toHaveValue('a'.repeat(40))
+    await expect(page.getByTestId('limit-hint')).toHaveAttribute('data-full', 'true')
     expect(errors).toEqual([])
   } finally {
     await app.close()
