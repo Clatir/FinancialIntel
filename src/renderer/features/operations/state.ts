@@ -22,6 +22,7 @@ import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
+import { clickTick, extendTick, tickAll, type Modifiers } from './rangeSelect'
 
 /** Filters of this computer (the search starts fresh; the period – when it is the whole history or a range, AP-34). */
 const FILTER_KEY = 'fi.operations.filter'
@@ -58,6 +59,8 @@ interface OperationsUi {
   selectedId: string | null
   /** Operations ticked for a bulk change (D76); another filter clears them – nothing hidden is changed. */
   ticked: Record<string, true>
+  /** The row a Shift+click range starts from (D105): the last one clicked or ticked with its box; cleared with `ticked`. */
+  tickAnchor: string | null
   /**
    * A view asked from elsewhere (B88: a notification, the bridge, the inbox, a jump to an operation, a new entry) that
    * hides the filter stored on this computer: changes made in it stay the view's – the stored filter is one click away
@@ -81,6 +84,7 @@ export const useOperationsUi = create<OperationsUi>(() => ({
   filter: { ...emptyFilter(currentMonth), ...readStored() },
   selectedId: null,
   ticked: {},
+  tickAnchor: null,
   shown: false,
   keptId: null
 }))
@@ -90,7 +94,7 @@ export function setFilter(patch: Partial<OperationsFilter>): void {
     const filter = { ...s.filter, ...patch }
     // In a view asked from elsewhere the change is the view's (B88): the stored filter stays as it was.
     if (!s.shown) store(filter)
-    return { filter, ticked: {}, keptId: sameValue(filter, s.filter) ? s.keptId : null }
+    return { filter, ticked: {}, tickAnchor: null, keptId: sameValue(filter, s.filter) ? s.keptId : null }
   })
 }
 
@@ -106,6 +110,7 @@ export function showFilter(patch: Partial<OperationsFilter>): void {
     return {
       filter,
       ticked: {},
+      tickAnchor: null,
       shown: s.shown || STORED_KEYS.some((k) => k in patch && !sameValue(patch[k], s.filter[k])),
       keptId: sameValue(filter, s.filter) ? s.keptId : null
     }
@@ -119,7 +124,7 @@ export function showFilter(patch: Partial<OperationsFilter>): void {
 export function showStoredFilter(): void {
   useOperationsUi.setState((s) => {
     const empty = emptyFilter(currentMonth)
-    return { filter: { ...s.filter, ...Object.fromEntries(STORED_KEYS.map((k) => [k, empty[k]])), period: empty.period, ...readStored() }, ticked: {}, shown: false, keptId: null }
+    return { filter: { ...s.filter, ...Object.fromEntries(STORED_KEYS.map((k) => [k, empty[k]])), period: empty.period, ...readStored() }, ticked: {}, tickAnchor: null, shown: false, keptId: null }
   })
 }
 
@@ -128,7 +133,7 @@ export function resetFilter(): void {
   const filter = emptyFilter(warsawNow().month)
   const { shown } = useOperationsUi.getState()
   if (!shown) store(filter)
-  useOperationsUi.setState({ filter, ticked: {}, keptId: null })
+  useOperationsUi.setState({ filter, ticked: {}, tickAnchor: null, keptId: null })
 }
 
 /**
@@ -140,7 +145,7 @@ export function followCurrentMonth(now: string = warsawNow().month): void {
   const was = currentMonth
   currentMonth = now
   const p = useOperationsUi.getState().filter.period
-  if (p.kind === 'month' && p.month === was) useOperationsUi.setState((s) => ({ filter: { ...s.filter, period: { kind: 'month', month: now } }, ticked: {} }))
+  if (p.kind === 'month' && p.month === was) useOperationsUi.setState((s) => ({ filter: { ...s.filter, period: { kind: 'month', month: now } }, ticked: {}, tickAnchor: null }))
 }
 
 export function tickOperations(ids: readonly string[], on: boolean): void {
@@ -152,7 +157,40 @@ export function tickOperations(ids: readonly string[], on: boolean): void {
   })
 }
 
-export const clearTicked = () => useOperationsUi.setState({ ticked: {} })
+export const clearTicked = () => useOperationsUi.setState({ ticked: {}, tickAnchor: null })
+
+/** The box of one row: ticks or unticks it and makes it the anchor of a range (D105). */
+export function tickRow(id: string, on: boolean): void {
+  tickOperations([id], on)
+  useOperationsUi.setState({ tickAnchor: id })
+}
+
+/** A plain click on a row: the anchor moves, the ticked set stays as it is (D105). */
+export function anchorTick(id: string): void {
+  if (useOperationsUi.getState().tickAnchor !== id) useOperationsUi.setState({ tickAnchor: id })
+}
+
+/** Ctrl+click toggles a row, Shift+click adds the range from the anchor; `order` = the rows shown, no drafts. */
+export function clickTickRow(order: readonly string[], id: string, mods: Modifiers): void {
+  const { ticked, tickAnchor } = useOperationsUi.getState()
+  const next = clickTick({ ticked, anchor: tickAnchor }, order, id, mods)
+  useOperationsUi.setState({ ticked: next.ticked as Record<string, true>, tickAnchor: next.anchor })
+}
+
+/** Shift+arrow: the cursor (the selected row) moves one row and the rows it left and reached are ticked; returns the new cursor. */
+export function extendTickFromCursor(order: readonly string[], dir: 1 | -1): string | null {
+  const { ticked, tickAnchor, selectedId } = useOperationsUi.getState()
+  const next = extendTick({ ticked, anchor: tickAnchor }, order, selectedId, dir)
+  useOperationsUi.setState({ ticked: next.ticked as Record<string, true>, tickAnchor: next.anchor })
+  return next.cursor
+}
+
+/** Ctrl+A: every row shown is ticked. */
+export function tickAllVisible(order: readonly string[]): void {
+  const { ticked } = useOperationsUi.getState()
+  const next = tickAll(ticked, order)
+  if (next !== ticked) useOperationsUi.setState({ ticked: next as Record<string, true> })
+}
 
 /**
  * One category for the ticked expenses the list shows (D76; operations split into parts and other kinds stay –
