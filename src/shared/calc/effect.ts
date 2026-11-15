@@ -36,6 +36,22 @@ export interface Effect {
 
 const change = (before: number, after: number): Change | null => (before === after ? null : { before, after })
 
+/**
+ * The tanks whose money changes. A container no longer in the hold keeps its tank in the state only while it holds money –
+ * a tank on one side only is 0 on the other (a payment taken off it: 200 zł → 0; put on it: 0 → its rest), as an account.
+ */
+function tanksEffect(before: FleetState['tanks'], after: FleetState['tanks']): Effect['cargo'] {
+  const out: Effect['cargo'] = []
+  const was = new Map(before.map((t) => [t.containerId, t.amount]))
+  const is = new Map(after.map((t) => [t.containerId, t.amount]))
+  for (const t of after) {
+    const b = was.get(t.containerId) ?? 0
+    if (b !== t.amount) out.push({ id: t.containerId, name: t.name, before: b, after: t.amount })
+  }
+  for (const t of before) if (!is.has(t.containerId) && t.amount) out.push({ id: t.containerId, name: t.name, before: t.amount, after: 0 })
+  return out
+}
+
 export function effectOf(before: FleetState, after: FleetState): Effect {
   const envelopes: Effect['envelopes'] = []
   const afterEnvelopes = new Map(after.envelopes.map((e) => [e.categoryId, e.left]))
@@ -60,10 +76,7 @@ export function effectOf(before: FleetState, after: FleetState): Effect {
       const was = before.goals.find((b) => b.id === g.id)
       return was && was.amount !== g.amount ? [{ id: g.id, name: g.name, before: was.amount, after: g.amount }] : []
     }),
-    cargo: after.tanks.flatMap((t) => {
-      const was = before.tanks.find((b) => b.containerId === t.containerId)
-      return was && was.amount !== t.amount ? [{ id: t.containerId, name: t.name, before: was.amount, after: t.amount }] : []
-    }),
+    cargo: tanksEffect(before.tanks, after.tanks),
     loans: after.loans.flatMap((l) => {
       const was = before.loans.find((b) => b.loan.id === l.loan.id)
       return was && was.open !== l.open ? [{ id: l.loan.id, name: l.loan.name, before: was.open, after: l.open }] : []

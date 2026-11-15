@@ -376,7 +376,7 @@ describe('zmiany grupowe – nowe pola z „Cofnij” (1.20.0, D105)', () => {
   const cases: Array<{ name: string; over: Partial<Transaction>; change: BulkChange; set: Partial<Transaction>; was: Partial<Transaction>; toast: string; since: Partial<Transaction> }> = [
     { name: 'dzień', over: {}, change: { kind: 'day', date: '2026-10-02' }, set: { date: '2026-10-02' }, was: { date: '2026-10-14' }, toast: 'Zmieniono datę', since: { date: '2026-10-20' } },
     { name: 'tag – dołóż', over: { tags: ['A'] }, change: { kind: 'tag', tag: 'B', on: true }, set: { tags: ['A', 'B'] }, was: { tags: ['A'] }, toast: 'Dodano tag', since: { tags: ['Z'] } },
-    { name: 'tag – zdejmij', over: { tags: ['A', 'B'] }, change: { kind: 'tag', tag: '#a', on: false }, set: { tags: ['B'] }, was: { tags: ['A', 'B'] }, toast: 'Zdjęto tag', since: { tags: ['Z'] } },
+    { name: 'tag – zdejmij', over: { tags: ['A', 'B'] }, change: { kind: 'tag', tag: '#a', on: false }, set: { tags: ['B'] }, was: { tags: ['A', 'B'] }, toast: 'Zdjęto tag', since: { tags: ['A', 'Z'] } },
     { name: 'wyczyść tagi', over: { tags: ['A'] }, change: { kind: 'tagsClear' }, set: { tags: undefined }, was: { tags: ['A'] }, toast: 'Wyczyszczono tagi', since: { tags: ['Z'] } },
     { name: 'impuls', over: {}, change: { kind: 'impulse', to: 'impulse' }, set: { impulse: 'impulse' }, was: { impulse: null }, toast: 'Oznaczono jako impuls', since: { impulse: 'plan' } },
     { name: 'wyjaśniona', over: CORRECTION, change: { kind: 'explained', on: true }, set: { explained: true }, was: { explained: undefined }, toast: 'Oznaczono korekty jako wyjaśnione', since: { explained: false } },
@@ -458,5 +458,85 @@ describe('zmiany grupowe – nowe pola z „Cofnij” (1.20.0, D105)', () => {
     const { records, docked: dockedIds } = ops.bulkTargets([a.id, docked.id, newer.id, draft])
     expect(records.map((t) => t.id)).toEqual([a.id, docked.id])
     expect([...dockedIds]).toEqual([docked.id])
+  })
+})
+
+describe('poprawki po przeglądzie 1.20.0: „Cofnij” tagu po jednym tagu, zaznaczenie przy przełącznikach menu', () => {
+  const undoOf = (text: string) => ui.useUi.getState().toasts.find((t) => t.text.startsWith(text))!.action!.run
+  const tags = (id: string) => current(id).tags
+
+  it('dwa przełączenia po sobie: „Cofnij” pierwszego zdejmuje tylko jego tag, drugi zostaje; potem drugi', async () => {
+    const a = tx({ counterparty: 'A', tags: ['A'] })
+    const b = tx({ counterparty: 'B', tags: ['A'] })
+    load([a, b])
+    const ids = [a.id, b.id]
+    ops.tickOperations(ids, true)
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'tag', tag: 'X', on: true }), '#X', { keepTicked: true })
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'tag', tag: 'Y', on: true }), '#Y', { keepTicked: true })
+    expect([tags(a.id), tags(b.id)]).toEqual([
+      ['A', 'X', 'Y'],
+      ['A', 'X', 'Y']
+    ])
+    const toasts = ui.useUi.getState().toasts.length
+    undoOf('Dodano tag #X')()
+    expect([tags(a.id), tags(b.id)]).toEqual([
+      ['A', 'Y'],
+      ['A', 'Y']
+    ])
+    // All taken back: no word of operations changed since.
+    expect(ui.useUi.getState().toasts.length).toBe(toasts)
+    undoOf('Dodano tag #Y')()
+    expect([tags(a.id), tags(b.id)]).toEqual([['A'], ['A']])
+  })
+
+  it('tag zdjęty w międzyczasie – pominięty ze słowem; zdjęty zbiorczo wraca na swoje miejsce, dołożone później zostają', async () => {
+    const a = tx({ counterparty: 'A', tags: ['A'] })
+    const b = tx({ counterparty: 'B', tags: ['A'] })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'tag', tag: 'X', on: true }), '#X')
+    data.updateRecord('transactions', a.id, (r) => ({ ...r, tags: ['A'] }))
+    undoOf('Dodano tag #X')()
+    expect([tags(a.id), tags(b.id)]).toEqual([['A'], ['A']])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+
+    const c = tx({ counterparty: 'C', tags: ['A', 'Wakacje', 'B'] })
+    const d = tx({ counterparty: 'D', tags: ['Wakacje'] })
+    load([c, d])
+    ops.tickOperations([c.id, d.id], true)
+    await ops.applyBulk(ops.bulkPlan([c.id, d.id], { kind: 'tag', tag: '#wakacje', on: false }), '#wakacje')
+    expect([tags(c.id), tags(d.id)]).toEqual([['A', 'B'], undefined])
+    data.updateRecord('transactions', c.id, (r) => ({ ...r, tags: ['A', 'B', 'C'] }))
+    undoOf('Zdjęto tag #wakacje')()
+    expect([tags(c.id), tags(d.id)]).toEqual([['A', 'Wakacje', 'B', 'C'], ['Wakacje']])
+  })
+
+  it('wyczyść tagi: „Cofnij” nadal całą listę – tylko póki jest pusta', async () => {
+    const a = tx({ counterparty: 'A', tags: ['A', 'B'] })
+    const b = tx({ counterparty: 'B', tags: ['A'] })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'tagsClear' }))
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, tags: ['Nowy'] }))
+    lastUndo()()
+    expect([tags(a.id), tags(b.id)]).toEqual([['A', 'B'], ['Nowy']])
+  })
+
+  it('keepTicked zostawia zaznaczenie i kotwicę; domyślnie i przy usuwaniu – czyści jak dotąd', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    const ids = [a.id, b.id]
+    ops.tickOperations(ids, true)
+    ops.useOperationsUi.setState({ tickAnchor: b.id })
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'impulse', to: 'plan' }), '', { keepTicked: true })
+    expect(ops.useOperationsUi.getState()).toMatchObject({ ticked: { [a.id]: true, [b.id]: true }, tickAnchor: b.id })
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'impulse', to: 'impulse' }))
+    expect(ops.useOperationsUi.getState()).toMatchObject({ ticked: {}, tickAnchor: null })
+    api.deleteRecords.mockImplementation(async (_c: string, del: string[]) => del.map((id) => ({ id })))
+    ops.tickOperations(ids, true)
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'delete' }), '', { keepTicked: true })
+    expect(ops.useOperationsUi.getState().ticked).toEqual({})
+    api.deleteRecords.mockReset()
   })
 })

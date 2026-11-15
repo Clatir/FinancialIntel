@@ -6,7 +6,7 @@
 import { addDays, daysBetween } from '@shared/calc/dates'
 import { withKind } from '@shared/calc/kinds'
 import { shareOf } from '@shared/calc/share'
-import { tagKey, tagsOf, withTags } from '@shared/calc/tags'
+import { MAX_TAGS, tagKey, tagsOf, withTags } from '@shared/calc/tags'
 import type { Transaction, TxKind } from '@shared/schema'
 
 /**
@@ -127,6 +127,30 @@ export function changedBy(t: Transaction, c: BulkChange, docked: ReadonlySet<str
       if (t.kind !== 'loan' || splitReceipt(t)) return null
       return t.loanId === c.loanId ? t : { ...t, loanId: c.loanId }
   }
+}
+
+/**
+ * „Cofnij” of one tag put on or taken off (B66 – the change's own field is the one tag, not the list): the operation as it
+ * is now with that tag taken off again (or put back where it was – the others, those added since too, stay); null – the
+ * tag is no longer as the change left it (taken off or put back meanwhile), or there is no room for it any more.
+ */
+export function tagUndone(current: Transaction, before: Transaction, c: Extract<BulkChange, { kind: 'tag' }>): Transaction | null {
+  const key = tagKey(c.tag)
+  const tags = tagsOf(current)
+  if (tags.some((x) => tagKey(x) === key) !== c.on) return null
+  if (c.on) {
+    const rest = tags.filter((x) => tagKey(x) !== key)
+    return rest.length ? { ...current, tags: rest } : without(current, 'tags')
+  }
+  if (tags.length >= MAX_TAGS) return null
+  const was = tagsOf(before)
+  const at = was.findIndex((x) => tagKey(x) === key)
+  if (at < 0) return null
+  // Its place among the tags that were before it and are still there.
+  const ahead = new Set(was.slice(0, at).map(tagKey))
+  let i = 0
+  while (i < tags.length && ahead.has(tagKey(tags[i]!))) i++
+  return { ...current, tags: [...tags.slice(0, i), was[at]!, ...tags.slice(i)] }
 }
 
 /** How many of the operations the change fits – the ones it changes and the ones already as it leaves them. */

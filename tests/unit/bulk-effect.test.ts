@@ -33,6 +33,16 @@ describe('skutek zmiany zbiorczej: ładownia i pożyczki', () => {
     expect(effectOf(before, before).cargo).toEqual([])
   })
 
+  it('zbiornik, który pojawia się albo znika (nieaktywny kontener ma zbiornik tylko z pieniędzmi) – brakujący po jednej stronie = 0', () => {
+    const state = computeFleet({ settings, transactions: [], months: plans, balances, now: NOW })
+    const tank = { containerId: 'C2', name: 'Stare OC', amount: zl(200), dueMonth: '2026-03', paidDue: null, due: zl(900) }
+    const full: FleetState = { ...state, tanks: [tank] }
+    const none: FleetState = { ...state, tanks: [] }
+    expect(effectOf(full, none).cargo).toEqual([{ id: 'C2', name: 'Stare OC', before: zl(200), after: 0 }])
+    expect(effectOf(none, full).cargo).toEqual([{ id: 'C2', name: 'Stare OC', before: 0, after: zl(200) }])
+    expect(effectOf(none, none).cargo).toEqual([])
+  })
+
   it('pożyczka, której zostało do spłaty mniej albo więcej – przed i po', () => {
     const state = computeFleet({ settings, transactions: [], months: plans, balances, now: NOW })
     const loan = loanSchema.parse({ ...base(), name: 'Dla brata', direction: 'given', amount: zl(1000), date: '2026-09-05' })

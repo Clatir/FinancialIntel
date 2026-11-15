@@ -23,7 +23,7 @@ import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
 import { clickTick, extendTick, tickAll, type Modifiers } from './rangeSelect'
-import { changedBy, type BulkChange } from './bulkModel'
+import { changedBy, tagUndone, type BulkChange } from './bulkModel'
 
 /** Filters of this computer (the search starts fresh; the period – when it is the whole history or a range, AP-34). */
 const FILTER_KEY = 'fi.operations.filter'
@@ -689,12 +689,15 @@ function bulkLabel(c: BulkChange): string {
   return BULK_LABEL[c.kind]
 }
 
-/** The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields. */
-export async function applyBulk(plan: BulkPlan, what = ''): Promise<void> {
+/**
+ * The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields.
+ * `keepTicked` – the menu's toggles, which stay open on the same ticked operations (D105); a deletion clears them anyway.
+ */
+export async function applyBulk(plan: BulkPlan, what = '', opts: { keepTicked?: boolean } = {}): Promise<void> {
   if (!plan.before.length || !canWrite()) return
   const n = plan.before.length
   const tail = `${plan.skipped ? `, pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : ''}${newerNote(plan.newer)}`
-  clearTicked()
+  if (!opts.keepTicked || plan.change.kind === 'delete') clearTicked()
   if (plan.change.kind === 'delete') {
     const ids = plan.before.map((t) => t.id)
     if (ids.includes(useOperationsUi.getState().selectedId ?? '')) useOperationsUi.setState({ selectedId: null })
@@ -725,9 +728,16 @@ export async function applyBulk(plan: BulkPlan, what = ''): Promise<void> {
   }
   if (!replaceRecords('transactions', plan.after)) return
   const pairs = plan.before.map((b, i) => ({ before: b, after: plan.after[i]!, fields: setFields(b, plan.after[i]!) }))
+  const change = plan.change
   const undo = () => {
     const now = useData.getState().records.transactions
     const back = pairs.flatMap(({ before, after, fields }) => {
+      // One tag is the change's field (the menu's toggles one after another): the other tags – set since too – stay.
+      if (change.kind === 'tag') {
+        const cur = now[before.id]?.record
+        const out = cur ? tagUndone(cur, before, change) : null
+        return out ? [out] : []
+      }
       const cur = now[before.id]?.record as Record<string, unknown> | undefined
       if (!cur || !fields.every((k) => deepEqual(cur[k], (after as Record<string, unknown>)[k]))) return []
       const out: Record<string, unknown> = { ...cur }
