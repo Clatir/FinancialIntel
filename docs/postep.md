@@ -53,7 +53,7 @@ ode-v24.21.0-win-x64`) – przy zmianie `.node-version` poprawić.
   zaznaczenia z Shift / Ctrl (React #9023), przycinanie przy pustej liście, klatka ze starym `ticked`, „Cofnij” tagu na
   innym rodzaju / wpisie nowszej wersji (także ścieżka ogólna), „o 0 dni”. Runda 3 (high, 6): regresja `tagUndone`
   (jedyny tag przelewu), przycinanie raz i tylko zmienionych, Esc na widocznych.
-- Testy lokalne: `typecheck`, unit 2051 (padają tylko 2 w `tests/fs/bank-files.test.ts` – w głównym folderze repo; w świeżym
+- Testy lokalne: `typecheck`, unit 2061 (padają tylko 2 w `tests/fs/bank-files.test.ts` – w głównym folderze repo; w świeżym
   drzewie na `main` i na gałęzi grupy przechodzą 4/4), E2E 146 / 147 (`ictj.spec.ts:172` – ICTTJ zainstalowany na tym
   komputerze, „Nie znaleziono ICT Trade Journal” się nie pokazuje). Ściągawka F1: sekcja „Lista operacji”.
 - Uwagi na później (przeglądy B4): tagi linii paragonu nie liczą się w menu (tylko tagi operacji – kontrakt); najechanie
