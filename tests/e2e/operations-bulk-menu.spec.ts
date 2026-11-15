@@ -229,10 +229,50 @@ test('edycja, która wyprowadza zaznaczony wiersz poza filtr, nie rusza zaznacze
     await counterparty.fill('Kiosk')
     await counterparty.press('Enter')
     await expect(page.getByTestId('operation-row')).toHaveCount(0)
+    // Esc with nothing visible ticked leaves the hidden tick alone (and does not swallow the key).
+    await page.getByTestId('operations-sums').click()
+    await page.keyboard.press('Escape')
     await counterparty.fill('Sklep Alfa')
     await counterparty.press('Enter')
     await expect(page.getByTestId('operation-row')).toHaveCount(1)
     // It left the list and came back: still ticked, as before – no edit silently unticks.
+    await expect(row(page, 'Sklep Alfa')).toHaveAttribute('data-ticked', '1')
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('przełącznik menu przycina tylko to, co sam ukrył – wcześniej ukryte zostaje zaznaczone', async () => {
+  const { dataDir } = seed()
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await openList(page)
+    await page.getByTestId('operations-search').fill('Sklep')
+    await expect(page.getByTestId('operation-row')).toHaveCount(4)
+    await row(page, 'Sklep Delta').click()
+    await page.keyboard.press('Control+a')
+    await expect(page.locator('[data-testid="operation-row"][data-ticked="1"]')).toHaveCount(4)
+    // An edit takes Alfa out of the search – still ticked, hidden.
+    await row(page, 'Sklep Alfa').click()
+    const counterparty = page.getByTestId('operation-counterparty')
+    await counterparty.fill('Kiosk')
+    await counterparty.press('Enter')
+    await expect(page.getByTestId('operation-row')).toHaveCount(3)
+    // A switch on the others hides nothing: Alfa stays ticked.
+    await row(page, 'Sklep Beta').click({ button: 'right' })
+    await expect(page.getByTestId('operations-menu-header')).toHaveText('Zmień 3 operacje')
+    await page.getByTestId('operations-menu-tags').hover()
+    const tag = page.getByTestId('operations-menu-tags-tag-remont')
+    await expect(tag).toBeVisible()
+    await expect(tag).toHaveAttribute('data-state', 'off')
+    await tag.click()
+    await expect(tag).toHaveAttribute('data-state', 'on')
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('operations-menu')).toHaveCount(0)
+    await counterparty.fill('Sklep Alfa')
+    await counterparty.press('Enter')
+    await expect(page.getByTestId('operation-row')).toHaveCount(4)
     await expect(row(page, 'Sklep Alfa')).toHaveAttribute('data-ticked', '1')
     expect(errors).toEqual([])
   } finally {

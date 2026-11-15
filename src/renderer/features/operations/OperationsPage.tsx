@@ -8,6 +8,7 @@ import { MARK_LABEL, OPERATION_MARKS, amountTone, asideOfOperations, marksOf, ma
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { BulkChangeBar, BulkPreviewHost } from './BulkChange'
 import { OperationsMenu, openOperationsMenu } from './OperationsMenu'
+import { tickedIn } from './rangeSelect'
 import { CompactContext } from '../../components/compact'
 import { ColumnsMenu, ExportVisible, MoreFilters, SortHeader, ViewsBar, viewable } from './ListTools'
 import { columnsTemplate, useOperationColumns, type OperationColumn } from './columns'
@@ -529,7 +530,8 @@ export function OperationsPage() {
           return
         }
         if (e.key === 'Escape' && !mod && !e.shiftKey) {
-          if (Object.keys(useOperationsUi.getState().ticked).length) {
+          // Only what the list shows counts (as in the menu and the bar): with none of it ticked Esc is left to others.
+          if (tickedIn(order, useOperationsUi.getState().ticked).length) {
             e.preventDefault()
             clearTicked()
           }

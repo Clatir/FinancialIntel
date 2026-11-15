@@ -42,7 +42,7 @@ import {
   type Place
 } from './operationsMenuModel'
 import { useAccounts, useCategories } from './pickers'
-import { tickedIn } from './rangeSelect'
+import { pruneDue, tickedIn, type PruneArm } from './rangeSelect'
 import { applyBulk, bulkPlan, bulkTargets, categorizeTicked, financeTicked, pruneTickedTo, useOperationsUi } from './state'
 
 // ------------------------------------------------------------------ the store: where the menu stands
@@ -95,7 +95,8 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
   const box = useRef<HTMLDivElement>(null)
 
   const input = useMemo<MenuInput>(() => {
-    // `transactions` and `ticked` (the dependencies) are what `bulkTargets` reads – the menu follows a change made in it.
+    // `bulkTargets` reads the operations and the docking from the data (`transactions` is a dependency for that: the menu follows
+    // a change made in it) of the ticked rows shown (`ids`).
     const { records, docked } = bulkTargets(ids)
     const categories = cats.mains
       .filter((c) => !c.archived)
@@ -107,7 +108,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
           .map((x) => ({ id: x.id, name: x.name, label: cats.label(x.id), sub: true }))
       ])
     return {
-      count,
+      count: ids.length,
       records,
       docked,
       readOnly: folderLocked ? (lockedReason ?? 'Folder jest tylko do odczytu – zmiany nie są zapisywane.') : null,
@@ -120,14 +121,18 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       goals: fleet?.goals ?? [],
       loans
     }
-  }, [transactions, ids, cats, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason, count])
+  }, [transactions, ids, cats, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason])
   const root = useMemo(() => buildMenu(input), [input])
 
-  // A switch of the menu has changed the data (`afterSwitch` = the operations before it): what it hid from the list is no
-  // longer ticked (D76). Only the menu's own change prunes – an edit elsewhere, or a list empty for want of data, never does.
-  const afterSwitch = useRef<unknown>(null)
+  // A switch of the menu has written (`afterSwitch`: the operations before it and the ones it touched): of these, the ones it
+  // hid from the list are no longer ticked (D76) – once, when the list has followed the data. Nothing else prunes: not an edit
+  // elsewhere, not a list empty for want of data, not a switch that wrote nothing, not what was hidden before by something else.
+  const afterSwitch = useRef<PruneArm | null>(null)
   useEffect(() => {
-    if (afterSwitch.current && transactions !== afterSwitch.current) pruneTickedTo(order)
+    const due = pruneDue(afterSwitch.current, transactions)
+    if (!due) return
+    afterSwitch.current = null
+    pruneTickedTo(order, due)
   }, [order, transactions])
 
   // Nothing ticked is left to change: the menu goes.
@@ -160,8 +165,11 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       if (!leaf.keepOpen) closeOperationsMenu()
       // A switch leaves the menu open and the ticks as they were: the next one works on the same operations – the ones
       // the change hid from the list are unticked once the list has followed the data (the effect above).
-      if (leaf.keepOpen) afterSwitch.current = useData.getState().records.transactions
+      // Armed before the write (the list may render at once), disarmed when it wrote nothing (`canWrite()` false).
+      const from = useData.getState().records.transactions
+      if (leaf.keepOpen) afterSwitch.current = { from, ids: new Set(plan.before.map((t) => t.id)) }
       await applyBulk(plan, c.what, { keepTicked: !!leaf.keepOpen })
+      if (useData.getState().records.transactions === from) afterSwitch.current = null
     }
   }
   const runRef = useRef(run)
