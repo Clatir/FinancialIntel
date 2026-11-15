@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clickTick, extendTick, pruneTicked, tickAll, type Selection } from '../../src/renderer/features/operations/rangeSelect'
+import { clickTick, extendTick, pruneTicked, tickAll, tickedIn, type Selection } from '../../src/renderer/features/operations/rangeSelect'
 
 // The store half talks to window.fi through the stores it imports; nothing is written here.
 const storage = new Map<string, string>()
@@ -226,6 +226,14 @@ describe('zaznaczenie w stanie listy (`tickAnchor`)', () => {
     ops.useOperationsUi.setState({ ticked: { a: true }, tickAnchor: 'a' })
     ops.followCurrentMonth('2099-02')
     expect(st().tickAnchor).toBeNull()
+  })
+})
+
+describe('tickedIn – zaznaczone widoczne, w kolejności listy', () => {
+  it('zaznaczone spoza listy (ukryte) nie wchodzą; kolejność jak na liście', () => {
+    expect(tickedIn(ORDER, sel(['d', 'x', 'b']).ticked)).toEqual(['b', 'd'])
+    expect(tickedIn(ORDER, {})).toEqual([])
+    expect(tickedIn([], sel(['a']).ticked)).toEqual([])
   })
 })
 

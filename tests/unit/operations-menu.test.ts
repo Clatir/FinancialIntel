@@ -266,6 +266,8 @@ describe('data', () => {
     expect(whatOf({ kind: 'shift', days: 3 })).toBe('o +3 dni')
     expect(whatOf({ kind: 'shift', days: -1 })).toBe('o −1 dzień')
     expect(whatOf({ kind: 'shift', days: -3 })).toBe('o −3 dni')
+    // No sign at zero.
+    expect(whatOf({ kind: 'shift', days: 0 })).toBe('o 0 dni')
     expect(whatOf({ kind: 'shift', days: 5 })).toBe('o +5 dni')
     expect(whatOf({ kind: 'delete' })).toBe('')
   })

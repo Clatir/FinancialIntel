@@ -28,7 +28,7 @@ import { WEEKDAY_PL, periodLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { operationRowText } from './rowText'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
-import { anchorTick, categorizeTicked, clearTicked, clickTickRow, extendTickFromCursor, financeTicked, followCurrentMonth, newOperation, pruneTickedTo, resetFilter, selectOperation, setFilter, showStoredFilter, tickAllVisible, tickOperations, tickRow, useOperationsUi } from './state'
+import { anchorTick, categorizeTicked, clearTicked, clickTickRow, extendTickFromCursor, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickAllVisible, tickOperations, tickRow, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
 import { useRecordList } from '../../store/records'
 import { SHARE_MODES } from '@shared/schema'
@@ -244,13 +244,15 @@ function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: T
         disabled={draft}
         onClick={(e) => {
           e.stopPropagation()
-          // Shift / Ctrl on the box: what it does on the row – a range from the anchor, one row toggled (D105).
-          if (e.shiftKey || e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            clickTickRow(getOrder(), t.id, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey })
-          }
+          // Shift / Ctrl on the box: exactly what it does on the row – a range from the anchor, one row toggled (D105).
+          // The box is controlled by `ticked`: the browser's own toggle is put back to it, `onChange` leaves these clicks alone.
+          if (e.shiftKey || e.ctrlKey || e.metaKey) clickTickRow(getOrder(), t.id, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey })
         }}
-        onChange={(e) => tickRow(t.id, e.currentTarget.checked)}
+        onChange={(e) => {
+          const mods = e.nativeEvent as MouseEvent
+          if (mods.shiftKey || mods.ctrlKey || mods.metaKey) return
+          tickRow(t.id, e.currentTarget.checked)
+        }}
         aria-label="Zaznacz operację"
         data-testid="operation-tick"
       />
@@ -494,8 +496,6 @@ export function OperationsPage() {
   const order = useMemo(() => rows.filter((t) => !drafts[t.id]).map((t) => t.id), [rows, drafts])
   const orderRef = useRef(order)
   orderRef.current = order
-  // A change that hides ticked rows from the list (a tag taken off a list filtered by it) unticks them (D76: nothing hidden is changed).
-  useEffect(() => pruneTickedTo(order), [order])
   const getOrder = useCallback(() => orderRef.current, [])
   const sums = useMemo(() => sumOperations(rows), [rows])
   const view = deferred.accounts.length === 1 ? deferred.accounts[0]! : null
