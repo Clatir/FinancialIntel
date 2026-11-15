@@ -3931,3 +3931,12 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T531** `ci.yml`: `push` tylko na `main` (wydania), poza tym `pull_request` i ręcznie – kroki grupy na gałęzi
   roboczej nie uruchamiają CI, bez znacznika `[skip ci]` (D104; w ICTTJ `[skip ci]` – tu prościej, bez pułapki opisu
   commitu scalającego i bez podwójnej rundy Linux przy ostatnim pushu z otwartym PR). PR grupy otwierany na końcu.
+- **T532** Zaznaczanie listy Operacji (D105): Ctrl+klik i Shift+klik nie przesuwają kursora (edytor bez zmian); kotwica
+  = ostatni wiersz klikany (także zwykłym klikiem) albo zaznaczony polem; Shift+strzałki przesuwają kursor i dokładają jego
+  wiersz (powrót nie zdejmuje); „wspólnie…” finansującego tylko w pasku; menu tylko na komputerze (`CompactContext`).
+- **T533** Zmiany zbiorcze (`bulkModel.ts`): nowe najpierw sprawdzają, czy pasują, potem czy zmieniają (`bulkApplies` /
+  `opState` liczą tylko pasujące); „bez ładowni” pomija zwrot towaru z kontenerem (edytor nie pokazuje tam ładowni);
+  podgląd liczy też zbiorniki ładowni (`Effect.cargo`, zbiornik po jednej stronie = 0) i „zostało” pożyczek (`Effect.loans`).
+- **T534** „Cofnij” zmiany tagu cofa tylko ten tag (`tagUndone`, po `tagKey`; zdjęty wraca na dawne miejsce), reszta
+  zmian – zmienione pola (`setFields`); przełączniki menu zostawiają zaznaczenie (`applyBulk` `keepTicked`), ukryte przez
+  zmianę filtrem odpadają; jeden podgląd skutku na ekranie dla paska i menu (`bulkPreview.ts`).

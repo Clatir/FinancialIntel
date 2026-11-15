@@ -29,6 +29,11 @@ paths:
 - Długie listy po 100 (`ShowMore`), wiersze w `memo`; okna przez `Modal` (portal ze stosem, Esc zamyka wierzchnie).
   Fokus uwięziony w oknie i wraca po zamknięciu (`useFocusTrap`, T442) – własna nakładka (paleta, F1) też go używa.
 - Usunięcia i zmiany zbiorcze z „Cofnij”; przy ważnych rekordach `HistoryButton`.
+- **Zmiany grupowe Operacji (D105, T532–T534):** jedyny zbiór zaznaczonych to `ticked` (`rangeSelect.ts` – czyste przejścia
+  Ctrl / Shift / strzałki; kotwica `tickAnchor` czyszczona z filtrem). Nowa zmiana zbiorcza = wariant `BulkChange`
+  w `bulkModel.ts` (`changedBy`: ta sama referencja – bez zmian, `null` – nie pasuje; warunki jak edytor), menu PPM
+  (`OperationsMenu.tsx`, model `operationsMenuModel.ts`) i pasek wołają te same `bulkPlan` / `applyBulk`; zmiana pól
+  pieniędzy – przez wspólny podgląd (`bulkPreview.ts`), przełącznik – `applyBulk(..., { keepTicked: true })`.
 - Zapis zablokowany przy folderze tylko do odczytu albo w trakcie przełączania (`canWrite`, `useFolderLocked`);
   zapisy zwracają boolean.
 - `data-testid` w kebab-case z prefiksem ekranu (`operation-…`, `import-…`, `quick-…`, `phone-…`); stan w `data-*`

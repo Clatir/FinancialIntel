@@ -21,9 +21,9 @@ paths:
   `Financial-Intel-portable.exe`; `appId` `app.financialintel.desktop`, `productName` „Financial Intel”. iPhone: Capacitor 8
   (`ios/`, `capacitor.config.json`, `app.financialintel.ios`), web app telefonu `vite.mobile.config.mts` → `out/mobile`;
   `.ipa` bez podpisu (AltStore), źródło AltStore `altstore.json` w wydaniu.
-- CI (`.github/workflows/ci.yml`, wzór ICTTJ): Linux przy każdym wypchnięciu (testy, build, E2E pod Xvfb, E2E telefonu
-  w Chromium); Windows (build, smoke, test aktualizacji) i macOS (`ios`: E2E telefonu w WebKit, `.ipa`, symulator) tylko
-  dla PR, gałęzi domyślnej i ręcznie.
+- CI (`.github/workflows/ci.yml`, wzór ICTTJ): Linux (testy, build, E2E pod Xvfb, E2E telefonu w Chromium), Windows
+  (build, smoke, test aktualizacji) i macOS (`ios`: E2E telefonu w WebKit, `.ipa`, symulator) – dla PR, gałęzi domyślnej
+  i ręcznie (T531).
 - Aktualizacje: wzór ICTTJ (GitHub Releases, SHA-256, portable i instalator); repozytorium publiczne (D61), token GitHub
   per komputer w `safeStorage` tylko na wypadek prywatnego.
 - Node do budowania ≥ 22.12, przypięty w `.node-version` (jak ICTTJ, `scripts/check-node.mjs`); `build-windows.cmd` bez

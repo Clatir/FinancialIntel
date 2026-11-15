@@ -1,5 +1,16 @@
 # Financial Intel – zmiany
 
+## 1.20.0
+
+Zmiany grupowe na liście Operacji:
+
+- **Zaznaczanie myszą i klawiaturą:** `Ctrl`+klik zaznacza albo odznacza jedną operację, `Shift`+klik dokłada zakres od ostatnio klikniętej, `Shift`+strzałki rozszerzają zaznaczenie, `Ctrl+A` zaznacza wszystkie widoczne, `Esc` czyści zaznaczenie. Zwykły klik nadal otwiera operację w edytorze, a zaznaczenie zostaje; zmiana filtra je czyści jak dotąd.
+- **Menu pod prawym przyciskiem myszy:** na wierszu operacji (na zaznaczonych albo – gdy wiersz nie jest zaznaczony – tylko na nim) zmienisz kategorię, finansującego, konto, rodzaj, datę (dzień z kalendarza albo przesunięcie o N dni), tagi, plan / impuls, „wyjaśnioną” korektę, ładownię, cel i pożyczkę albo usuniesz zaznaczone. Znacznik ✓ mówi, że mają to wszystkie, „—” – że część; pozycja, która do żadnej z zaznaczonych nie pasuje, jest wyłączona z powodem w podpowiedzi. Paski nad listą działają jak dotąd.
+- **Podgląd skutku przed zmianą:** konto, rodzaj, data, ładownia, cel, pożyczka i usunięcie pokazują przed zapisem, co zmienią w energii, kopertach, saldach, celach, a teraz także w zbiornikach Ładowni i w tym, ile zostało do spłaty pożyczek. Tagi, plan / impuls i „wyjaśniona” zapisują się od razu.
+- **Tagi zbiorczo:** klik w tag dokłada go tam, gdzie go brakuje, a gdy mają go wszystkie – zdejmuje wszędzie; pole „nowy tag” i „Wyczyść tagi”. Menu zostaje otwarte, więc kilka tagów zmienisz po kolei.
+- **Cofnij:** każda zmiana ma „Cofnij”, które przywraca tylko zmienione pola (przy tagu – tylko ten jeden tag); to, co w międzyczasie zmieniłeś inaczej, zostaje ze słowem. Operacje z podziałem paragonu przy ładowni, celu i pożyczce są pomijane i policzone w komunikacie – ich linie zmienisz w edytorze.
+
+
 ## 1.19.1
 
 Wykres Sankey – kontekst miesiąca i składniki przychodów z pracy:
