@@ -742,10 +742,13 @@ export async function applyBulk(plan: BulkPlan, what = '', opts: { keepTicked?: 
   const undo = () => {
     const now = useData.getState().records.transactions
     const back = pairs.flatMap(({ before, after, fields }) => {
+      // Written by a newer version since (B67): this one never writes it – it stays, counted with the ones changed since.
+      if (now[before.id]?.readOnly) return []
       // One tag is the change's field (the menu's toggles one after another): the other tags – set since too – stay.
       if (change.kind === 'tag') {
         const cur = now[before.id]?.record
-        const out = cur ? tagUndone(cur, before, change) : null
+        // Rewritten since into another kind: no longer the operation the change left (`undoKept` – it stays).
+        const out = cur && cur.kind === after.kind ? tagUndone(cur, before, change) : null
         return out ? [out] : []
       }
       const cur = now[before.id]?.record as Record<string, unknown> | undefined

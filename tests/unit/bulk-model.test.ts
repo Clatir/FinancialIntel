@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { shareOf, withShare } from '@shared/calc/share'
 import { defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Transaction } from '@shared/schema'
-import { bulkApplies, changedBy, opState, type BulkChange } from '../../src/renderer/features/operations/bulkModel'
+import { bulkApplies, changedBy, opState, tagUndone, type BulkChange } from '../../src/renderer/features/operations/bulkModel'
 
 // D105 (2): the bulk changes of the ticked operations – the field each one sets, the operations it fits (as the editor
 // lets them be changed), the same object for one it leaves as it is; the menu's ✓ / „—” and its groups.
@@ -227,6 +227,18 @@ describe('stan w menu (opState) i ile pasuje (bulkApplies)', () => {
     expect(bulkApplies([docked], change, new Set([docked.id]))).toBe(0)
     expect(bulkApplies([docked], change)).toBe(1)
     expect(opState([docked], { kind: 'kind', to: 'trading' }, new Set([docked.id]))).toBe('on')
+  })
+})
+
+describe('„Cofnij” jednego tagu (tagUndone)', () => {
+  it('zdjęty tag wraca tylko na operację, która przyjmuje tagi – przelew bez tagów nie dostaje go z powrotem', () => {
+    const before = tx({ tags: ['X'] })
+    const off: Extract<BulkChange, { kind: 'tag' }> = { kind: 'tag', tag: 'X', on: false }
+    const after = changedBy(before, off)!
+    expect(tagUndone(after, before, off)?.tags).toEqual(['X'])
+    // The bar made it a transfer since: no tags field there (the editor's) – never one put back on it.
+    expect(tagUndone({ ...after, kind: 'transfer' }, before, off)).toBeNull()
+    expect(tagUndone({ ...after, kind: 'transfer', tags: ['A'] }, before, off)?.tags).toEqual(['X', 'A'])
   })
 })
 

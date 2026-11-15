@@ -132,7 +132,8 @@ export function changedBy(t: Transaction, c: BulkChange, docked: ReadonlySet<str
 /**
  * „Cofnij” of one tag put on or taken off (B66 – the change's own field is the one tag, not the list): the operation as it
  * is now with that tag taken off again (or put back where it was – the others, those added since too, stay); null – the
- * tag is no longer as the change left it (taken off or put back meanwhile), or there is no room for it any more.
+ * tag is no longer as the change left it (taken off or put back meanwhile), there is no room for it any more, or the
+ * operation has no tags field now. The entry itself (still writable, still of the kind the change left) – the caller's.
  */
 export function tagUndone(current: Transaction, before: Transaction, c: Extract<BulkChange, { kind: 'tag' }>): Transaction | null {
   const key = tagKey(c.tag)
@@ -142,7 +143,8 @@ export function tagUndone(current: Transaction, before: Transaction, c: Extract<
     const rest = tags.filter((x) => tagKey(x) !== key)
     return rest.length ? { ...current, tags: rest } : without(current, 'tags')
   }
-  if (tags.length >= MAX_TAGS) return null
+  // Put back only where the editor has the tags field (a kind changed since may have none – `changedBy` never puts one there).
+  if (tags.length >= MAX_TAGS || !takesTags(current)) return null
   const was = tagsOf(before)
   const at = was.findIndex((x) => tagKey(x) === key)
   if (at < 0) return null

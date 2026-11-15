@@ -522,6 +522,42 @@ describe('poprawki po przeglądzie 1.20.0: „Cofnij” tagu po jednym tagu, zaz
     expect([tags(a.id), tags(b.id)]).toEqual([['A', 'B'], ['Nowy']])
   })
 
+  it('„Cofnij” tagu: wpis innego rodzaju niż po zmianie albo nowszej wersji – pominięty ze słowem', async () => {
+    const a = tx({ counterparty: 'A', tags: ['X'] })
+    const b = tx({ counterparty: 'B', tags: ['X'] })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'tag', tag: 'X', on: false }), '#X')
+    // Another kind since (one that takes tags – the tag alone would let it back).
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, kind: 'income', amount: 1000 }))
+    undoOf('Zdjęto tag #X')()
+    expect([tags(a.id), tags(b.id)]).toEqual([['X'], undefined])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+
+    const c = tx({ counterparty: 'C' })
+    const d = tx({ counterparty: 'D' })
+    load([c, d])
+    ops.tickOperations([c.id, d.id], true)
+    await ops.applyBulk(ops.bulkPlan([c.id, d.id], { kind: 'tag', tag: 'Y', on: true }), '#Y')
+    // Written by a newer version since (B67): never written by this one – said, not counted as taken back.
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { ...s.records.transactions, [d.id]: { ...s.records.transactions[d.id]!, readOnly: true } } } }))
+    undoOf('Dodano tag #Y')()
+    expect([tags(c.id), tags(d.id)]).toEqual([undefined, ['Y']])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+  })
+
+  it('„Cofnij” innej zmiany: wpis nowszej wersji – pominięty ze słowem, nie liczony jako cofnięty', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'impulse', to: 'plan' }))
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { ...s.records.transactions, [b.id]: { ...s.records.transactions[b.id]!, readOnly: true } } } }))
+    lastUndo()()
+    expect([current(a.id).impulse, current(b.id).impulse]).toEqual([null, 'plan'])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+  })
+
   it('keepTicked zostawia zaznaczenie i kotwicę; domyślnie i przy usuwaniu – czyści jak dotąd', async () => {
     const a = tx({ counterparty: 'A' })
     const b = tx({ counterparty: 'B' })
