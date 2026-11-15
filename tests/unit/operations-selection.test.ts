@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clickTick, extendTick, pruneTicked, tickAll, tickedIn, type Selection } from '../../src/renderer/features/operations/rangeSelect'
+import { clickTick, extendTick, pruneDue, pruneTicked, tickAll, tickedIn, type Selection } from '../../src/renderer/features/operations/rangeSelect'
 
 // The store half talks to window.fi through the stores it imports; nothing is written here.
 const storage = new Map<string, string>()
@@ -237,6 +237,20 @@ describe('tickedIn – zaznaczone widoczne, w kolejności listy', () => {
   })
 })
 
+describe('pruneDue – przycinanie tylko po zmianie, którą zapisał przełącznik', () => {
+  const ids = new Set(['b'])
+  const before = {}
+
+  it('nieuzbrojone albo dane bez zmian (nic nie zapisano) – nic do przycięcia', () => {
+    expect(pruneDue(null, before)).toBeNull()
+    expect(pruneDue({ from: before, ids }, before)).toBeNull()
+  })
+
+  it('dane się zmieniły – id z planu przełącznika', () => {
+    expect(pruneDue({ from: before, ids }, {})).toBe(ids)
+  })
+})
+
 describe('pruneTicked – zaznaczone, które zmiana ukryła, odpadają', () => {
   it('zostają tylko widoczne; gdy nic nie odpada – ta sama referencja', () => {
     const next = pruneTicked(sel(['a', 'c', 'x']).ticked, ORDER)
@@ -247,6 +261,21 @@ describe('pruneTicked – zaznaczone, które zmiana ukryła, odpadają', () => {
 
   it('wszystko ukryte – puste zaznaczenie', () => {
     expect(keys({ ticked: pruneTicked(sel(['x', 'y']).ticked, ORDER) })).toEqual([])
+  })
+
+  it('z „only” odpadają tylko wskazane – inne ukryte (np. wcześniej edycją) zostają zaznaczone', () => {
+    const ticked = sel(['a', 'x', 'y']).ticked
+    expect(keys({ ticked: pruneTicked(ticked, ORDER, ['x']) })).toEqual(['a', 'y'])
+    // The one named is shown: nothing goes, the same object.
+    expect(pruneTicked(ticked, ORDER, ['a'])).toBe(ticked)
+    expect(pruneTicked(ticked, ORDER, [])).toBe(ticked)
+  })
+
+  it('sklep: pruneTickedTo(order, only) odrzuca tylko wskazane', () => {
+    ops.useOperationsUi.setState({ ticked: { a: true, x: true, y: true }, tickAnchor: 'a' })
+    ops.pruneTickedTo(ORDER, ['x'])
+    expect(Object.keys(ops.useOperationsUi.getState().ticked).sort()).toEqual(['a', 'y'])
+    ops.clearTicked()
   })
 
   it('sklep: pruneTickedTo odrzuca ukryte; nic do odrzucenia – to samo zaznaczenie', () => {

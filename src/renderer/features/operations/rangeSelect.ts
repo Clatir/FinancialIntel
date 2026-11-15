@@ -64,15 +64,29 @@ export function tickedIn(order: readonly string[], ticked: Ticked): string[] {
   return order.filter((id) => ticked[id])
 }
 
-/** `ticked` without the rows no longer in `order` (a change hid them from the list); the same object when none is. */
-export function pruneTicked(ticked: Ticked, order: readonly string[]): Ticked {
-  const ids = Object.keys(ticked)
-  if (!ids.length) return ticked
+/**
+ * `ticked` without the rows no longer in `order` (a change hid them from the list); the same object when none is. `only` –
+ * just these ids are looked at (the rows a change touched): ones hidden earlier by something else stay as they were.
+ */
+export function pruneTicked(ticked: Ticked, order: readonly string[], only?: Iterable<string>): Ticked {
   const shown = new Set(order)
-  if (ids.every((id) => shown.has(id))) return ticked
+  const gone = (only ? [...only] : Object.keys(ticked)).filter((id) => ticked[id] && !shown.has(id))
+  if (!gone.length) return ticked
+  const drop = new Set(gone)
   const next: Record<string, true> = {}
-  for (const id of ids) if (shown.has(id)) next[id] = true
+  for (const id of Object.keys(ticked)) if (!drop.has(id)) next[id] = true
   return next
+}
+
+/** A switch of the menu that wrote: the data as they were before it and the operations it touched. */
+export interface PruneArm {
+  from: unknown
+  ids: ReadonlySet<string>
+}
+
+/** The ids to prune now: only once the data differ from those before the switch (it wrote), else none (never armed, nothing written). */
+export function pruneDue(arm: PruneArm | null, transactions: unknown): ReadonlySet<string> | null {
+  return arm && transactions !== arm.from ? arm.ids : null
 }
 
 /** Ctrl+A: every row shown is ticked, the ticked ones stay. */

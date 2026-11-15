@@ -188,11 +188,12 @@ export function extendTickFromCursor(order: readonly string[], dir: 1 | -1): str
 
 /**
  * The ticked rows a change hid from the list (a tag taken off a list filtered by it) are no longer ticked – nothing
- * hidden is changed (D76); `order` = the rows shown. The same `ticked` when none went – no render for nothing.
+ * hidden is changed (D76); `order` = the rows shown. `only` – just these ids (the rows the change touched). The same
+ * `ticked` when none went – no render for nothing.
  */
-export function pruneTickedTo(order: readonly string[]): void {
+export function pruneTickedTo(order: readonly string[], only?: Iterable<string>): void {
   const { ticked } = useOperationsUi.getState()
-  const next = pruneTicked(ticked, order)
+  const next = pruneTicked(ticked, order, only)
   if (next !== ticked) useOperationsUi.setState({ ticked: next as Record<string, true> })
 }
 
