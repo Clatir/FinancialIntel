@@ -1,6 +1,7 @@
 /**
  * Operacje: a change of the ticked operations at once (F11) – delete them, move them onto another account, another
- * kind, a shifted date –, the effect on today's energy, the envelopes, the balances, the shields and the goals, the loot
+ * kind, a shifted date –, the effect on today's energy, the envelopes, the balances, the shields, the goals, the cargo's
+ * tanks and the loans (D105), the loot
  * and the envelopes of the months it leaves, the ICTTJ payouts losing their pair (AP-38) shown before it is applied; one
  * „Cofnij”.
  */
@@ -17,7 +18,23 @@ import { applyBulk, bulkEffect, bulkPlan, noBulkEffect, type BulkChange, type Bu
 
 type Action = '' | BulkChange['kind']
 
-const ACTION_LABEL: Record<Exclude<Action, ''>, string> = { delete: 'Usuń', account: 'Przenieś na konto', kind: 'Zmień rodzaj', shift: 'Przesuń datę' }
+const ACTION_LABEL: Record<Exclude<Action, ''>, string> = {
+  delete: 'Usuń',
+  account: 'Przenieś na konto',
+  kind: 'Zmień rodzaj',
+  shift: 'Przesuń datę',
+  day: 'Zmień datę',
+  tag: 'Tag',
+  tagsClear: 'Wyczyść tagi',
+  impulse: 'Plan / impuls',
+  explained: 'Wyjaśniona korekta',
+  container: 'Ładownia',
+  goal: 'Cel',
+  loan: 'Pożyczka'
+}
+
+/** The bar's changes (F11) – the others are the menu's (D105). */
+const BAR_ACTIONS: ReadonlyArray<Exclude<Action, ''>> = ['delete', 'account', 'kind', 'shift']
 
 /** The ticked operations shown, `readOnly` = a folder only to read (the bulk changes off – N2). */
 export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction[]; readOnly: boolean }) {
@@ -53,7 +70,7 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
         <span className="text-muted">zmień</span>
         <select className="input h-[24px] w-[150px] py-0" value={action} onChange={(e) => setAction(e.currentTarget.value as Action)} aria-label="Zmiana zaznaczonych" data-testid="operations-bulk-change">
           <option value="">— wybierz… —</option>
-          {(Object.keys(ACTION_LABEL) as Array<keyof typeof ACTION_LABEL>).map((a) => (
+          {BAR_ACTIONS.map((a) => (
             <option key={a} value={a}>
               {ACTION_LABEL[a]}
             </option>
@@ -151,6 +168,8 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
             {effect.envelopes.map((e) => line(`Koperta: ${cats.label(e.categoryId) || 'codzienne'}`, e, 'operations-bulk-envelope', e.categoryId))}
             {effect.accounts.map((a) => line(`Saldo: ${a.name}`, a, 'operations-bulk-balance', a.id))}
             {effect.goals.map((g) => line(`Cel: ${g.name}`, g, 'operations-bulk-goal', g.id))}
+            {effect.cargo.map((c) => line(`Ładownia: ${c.name}`, c, 'operations-bulk-cargo', c.id))}
+            {effect.loans.map((l) => line(`Pożyczka: ${l.name}, zostało`, l, 'operations-bulk-loan', l.id))}
             {/* The months the operations leave or come to (AP-38): their loot and what their envelopes have left. */}
             {effect.months.map((m) => (
               <div key={m.month} className="contents">
@@ -165,7 +184,7 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
             ))}
           </div>
         ) : (
-          n > 0 && <p className="text-muted">Energia, koperty, łupy, cele, osłony i salda kont bez zmian.</p>
+          n > 0 && <p className="text-muted">Energia, koperty, łupy, cele, ładownia, pożyczki, osłony i salda kont bez zmian.</p>
         )}
         {confirmed.length > 0 && (
           <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="operations-bulk-confirmed">
