@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { notesOf } from '@shared/calc/operations'
@@ -6,7 +6,9 @@ import { tagsText } from '@shared/calc/tags'
 import { useMarkFlags } from '../sensors/state'
 import { MARK_LABEL, OPERATION_MARKS, amountTone, asideOfOperations, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
-import { BulkChangeBar } from './BulkChange'
+import { BulkChangeBar, BulkPreviewHost } from './BulkChange'
+import { OperationsMenu, openOperationsMenu } from './OperationsMenu'
+import { CompactContext } from '../../components/compact'
 import { ColumnsMenu, ExportVisible, MoreFilters, SortHeader, ViewsBar, viewable } from './ListTools'
 import { columnsTemplate, useOperationColumns, type OperationColumn } from './columns'
 import { keywordOfSearch } from '../import/rules'
@@ -196,6 +198,8 @@ function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: T
   const repaid = marks.find((m) => m === 'owed' || m === 'partlyRepaid' || m === 'repaid')
   const shownMarks = marks.filter((m): m is Exclude<OperationMark, 'bank' | 'manual' | 'uncategorized' | 'split'> => !['bank', 'manual', 'uncategorized', 'split', 'owed', 'partlyRepaid', 'repaid'].includes(m))
   const ticked = useOperationsUi((s) => !!s.ticked[t.id])
+  // The menu under the right button is the desktop's (D105) – the phone has no right button.
+  const compact = useContext(CompactContext)
   const { shown } = columns
   const tags = shown('tags') ? tagsText(t) : ''
   // A new entry says so in the first text column shown (the counterparty's – hidden, the next one; none – the date).
@@ -210,6 +214,14 @@ function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: T
       onMouseDown={(e) => {
         if (e.shiftKey) e.preventDefault()
       }}
+      onContextMenu={
+        compact || draft
+          ? undefined
+          : (e) => {
+              e.preventDefault()
+              openOperationsMenu(t.id, e.clientX, e.clientY)
+            }
+      }
       onClick={(e) => {
         // Ctrl / Shift: the ticked set only, the cursor and the editor stay (D105); a new entry is no operation yet.
         if (!draft && (e.ctrlKey || e.metaKey || e.shiftKey)) {
@@ -348,6 +360,7 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
   const mode = remember === 'keyword' && !keyword ? 'none' : remember
   // A read-only folder: the bulk changes off (N2) – ticking, un-ticking and the sum stay.
   return (
+    <>
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-accent/50 bg-raised px-3 py-1.5 text-[12px]" data-testid="operations-bulk">
       <span className="text-fg-strong" data-testid="operations-bulk-count">
         Zaznaczone: {n} {plural(n, 'operacja', 'operacje', 'operacji')} · <span className="num">{signedPln(sum)} zł</span>
@@ -427,6 +440,9 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
         Odznacz
       </button>
     </div>
+    {/* The one preview of the screen: the bar's changes and the menu's open it. */}
+    <BulkPreviewHost />
+    </>
   )
 }
 
@@ -651,6 +667,7 @@ export function OperationsPage() {
         </div>
 
         <BulkBar visible={rows} />
+        <OperationsMenu order={order} />
         <div className="grid h-[24px] shrink-0 items-center gap-x-1.5 overflow-hidden border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: columns.template }} data-testid="operations-header">
           <TickAll rows={rows} />
           <SortHeader sort={filter.sort} by="date">

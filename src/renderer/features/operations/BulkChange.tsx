@@ -5,7 +5,7 @@
  * and the envelopes of the months it leaves, the ICTTJ payouts losing their pair (AP-38) shown before it is applied; one
  * „Cofnij”.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { confirmedChanges } from '@shared/calc/balances'
 import { lostPairText } from '@shared/calc/effect'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
@@ -14,7 +14,9 @@ import { Modal } from '../../components/Modal'
 import { monthLabel, plDate, plural } from '../../lib/format'
 import { useRecordList } from '../../store/records'
 import { AccountSelect, useAccounts, useCategories } from './pickers'
-import { applyBulk, bulkEffect, bulkPlan, noBulkEffect, type BulkChange, type BulkEffect, type BulkPlan } from './state'
+import { closeBulkPreview, previewBulk, useBulkPreview } from './bulkPreview'
+import { skipReason } from './operationsMenuModel'
+import { applyBulk, noBulkEffect, type BulkChange } from './state'
 
 type Action = '' | BulkChange['kind']
 
@@ -44,7 +46,6 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
   const [kind, setKind] = useState<TxKind>('transfer')
   const [counter, setCounter] = useState<string | null>(null)
   const [days, setDays] = useState(1)
-  const [preview, setPreview] = useState<{ plan: BulkPlan; effect: BulkEffect | null; what: string } | null>(null)
   const change = (): BulkChange | null => {
     if (action === 'delete') return { kind: 'delete' }
     if (action === 'account') return accountId ? { kind: 'account', accountId } : null
@@ -58,11 +59,11 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
   const open = () => {
     const c = change()
     if (!c) return
-    const plan = bulkPlan(
+    previewBulk(
       shown.map((t) => t.id),
-      c
+      c,
+      what()
     )
-    setPreview({ plan, effect: bulkEffect(plan), what: what() })
   }
   return (
     <>
@@ -106,12 +107,18 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
           Podgląd…
         </button>
       </fieldset>
-      {preview && <BulkPreview preview={preview} onClose={() => setPreview(null)} />}
     </>
   )
 }
 
-function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: BulkEffect | null; what: string }; onClose: () => void }) {
+/** The one preview dialog of the screen (the bar's and the menu's): drawn while the store holds one; closed with its screen. */
+export function BulkPreviewHost() {
+  const preview = useBulkPreview((s) => s.preview)
+  useEffect(() => closeBulkPreview, [])
+  return preview ? <BulkPreview preview={preview} onClose={closeBulkPreview} /> : null
+}
+
+function BulkPreview({ preview, onClose }: { preview: NonNullable<ReturnType<typeof useBulkPreview.getState>['preview']>; onClose: () => void }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const balances = useRecordList('balances')
@@ -158,7 +165,7 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
       <div className="flex flex-col gap-2 text-[12px]" data-testid="operations-bulk-effect">
         <p>
           {n ? `${n} ${plural(n, 'operacja', 'operacje', 'operacji')}` : 'Żadna z zaznaczonych operacji się nie zmieni'}
-          {plan.skipped ? ` · pominięte ${plan.skipped} (zmiana do nich nie pasuje: zadokowane, przelew na własne konto)` : ''}
+          {plan.skipped ? ` · pominięte ${plan.skipped} (zmiana do nich nie pasuje: ${skipReason(plan.change)})` : ''}
           {plan.newer ? ` · zapisane przez nowszą wersję aplikacji: ${plan.newer} (bez zmian)` : ''}.
         </p>
         {effect && !noBulkEffect(effect) ? (
