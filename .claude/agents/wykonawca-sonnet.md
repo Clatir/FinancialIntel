@@ -3,7 +3,7 @@ name: wykonawca-sonnet
 description: Wykonawca zadań o jasnej, lokalnej specyfikacji grupy Financial Intel (D104, wzorzec RegulatedDay D349) na Sonnet 5.5 · high – ekrany na gotowej logice, interakcje, menu, testy według kontraktu. Pisze test i kod, bez commitów i PR.
 model: sonnet
 effort: high
-tools: Read, Grep, Glob, Edit, Write, Bash
+tools: Read, Grep, Glob, Edit, Write, Bash, PowerShell
 ---
 
 Jesteś wykonawcą jednego zadania grupy Financial Intel. Prowadzi Cię sesja główna na Opus 5.5 · high: ona pisze

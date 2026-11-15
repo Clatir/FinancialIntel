@@ -5,11 +5,8 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 20 KB, sprawdza CI – D103).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan (08.11.2026):** **1.19.1 wydane** (07.11.2026, Sankey „Skąd i dokąd” – miesiąc w nagłówku, składniki przychodów
-z pracy, oznaczenie miesiąca w Debriefingu; PR #66). Wcześniej: 1.19.0 (D102), ciągi N1–R2 (1.15.5–1.17.0) i G0–GD
-(1.17.1–1.18.1) – wpisy w archiwum `postep-od-1.15.4.md`.
-
-**Stan (15.11.2026):** grupa **1.20.0 – zmiany grupowe** w toku (komenda 15.11.2026, jeden ciąg A0–B4 bez pauz – D104).
+**Stan (15.11.2026):** **1.19.1 wydane** (07.11.2026, PR #66; wcześniejsze grupy – archiwum `postep-od-1.15.4.md`).
+Grupa **1.20.0 – zmiany grupowe** w toku (komenda 15.11.2026, jeden ciąg A0–B4 bez pauz – D104).
 Po wznowieniu: tabela i kontrakt niżej.
 
 ## Grupa 1.20.0 – wykonawcy i zmiany grupowe (od 15.11.2026)
@@ -21,10 +18,10 @@ wykonawcy (agenci widoczni od nowej sesji). PR dopiero w B4 – jedna runda CI.
 
 | # | Krok | Wykonawca · przegląd | Model · thinking | Czas | Stan |
 | --- | --- | --- | --- | --- | --- |
-| A0 | `.claude/agents/wykonawca-*`, skill `etap`, CLAUDE.md, D104, D105, T531, `ci.yml` | sesja główna · medium | Opus 5.5 · high | 20–30 min | 🔄 |
-| B0 | Kontrakt B1–B3 (niżej) | sesja główna | Opus 5.5 · high | 15–20 min | 🔄 |
-| B1 | Zaznaczanie (Ctrl / Shift / Shift+strzałki / Ctrl+A / Esc) na `ticked` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–25 min | ⬜ (z B2 równolegle) |
-| B2 | Nowe zmiany zbiorcze (dzień, tagi, plan / impuls, wyjaśniona, ładownia, cel, pożyczka), `opState`, skutek ładowni i pożyczek | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | ⬜ (z B1 równolegle) |
+| A0 | `.claude/agents/wykonawca-*`, skill `etap`, CLAUDE.md, D104, D105, T531, `ci.yml` | sesja główna · medium | Opus 5.5 · high | 20–30 min | ✅ 15.11 (`9130c45` + poprawki przeglądu; ok. 35 min) |
+| B0 | Kontrakt B1–B3 (niżej) | sesja główna | Opus 5.5 · high | 15–20 min | ✅ 15.11 |
+| B1 | Zaznaczanie (Ctrl / Shift / Shift+strzałki / Ctrl+A / Esc) na `ticked` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–25 min | 🔄 (z B2 równolegle) |
+| B2 | Nowe zmiany zbiorcze (dzień, tagi, plan / impuls, wyjaśniona, ładownia, cel, pożyczka), `opState`, skutek ładowni i pożyczek | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | 🔄 (z B1 równolegle) |
 | B3 | Menu PPM, kalendarz, wspólny podgląd, E2E | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 25–35 min | ⬜ (po B1 + B2) |
 | B4 | Pełne testy + E2E, `/code-review` xhigh całości, `ui.md`, CHANGELOG `## 1.20.0`, wersja, PR, CI, scalenie, wydanie | sesja główna | Opus 5.5 · high | 30–45 min + CI | ⬜ |
 
@@ -35,6 +32,16 @@ wykonawcy (agenci widoczni od nowej sesji). PR dopiero w B4 – jedna runda CI.
   ostatni wiersz klikany (także zwykłym klikiem) albo zaznaczony polem; Shift+strzałki przesuwają kursor i dokładają
   jego wiersz (powrót nie zdejmuje – zdejmuje Ctrl+klik albo Esc); „wspólnie…” finansującego tylko w pasku (edytor
   udziałów nie mieści się w menu); menu tylko na komputerze (na telefonie bez prawego przycisku – pasek zostaje).
+
+### Uwagi na później (przegląd A0, medium)
+- `ci.yml`: `concurrency` z `cancel-in-progress: true` przerywa też run na `main` – dwa scalenia tuż po sobie mogą
+  pominąć publikację wersji (było i przed T531; scalaj, gdy run na `main` skończył publikację).
+- `ci.yml`: warunek `github.event_name != 'push' || …` jobów Windows / iPhone jest po T531 zawsze prawdziwy (nieszkodliwy);
+  `branches: [main]` obok `default_branch` w warunkach – przy zmianie gałęzi domyślnej poprawić oba.
+- Kontrakt podaje ścieżkę Node wprost (`.tools
+ode-v24.21.0-win-x64`) – przy zmianie `.node-version` poprawić.
+- Bez CI do PR grupy: po scaleniu B1 + B2 lokalnie pełny `typecheck` i `npm test`; w razie wątpliwości ręczny
+  `gh workflow run ci.yml --ref claude/1.20.0-zmiany-grupowe`.
 
 ### Kontrakt B0
 Wspólne dla wykonawców: baza `git fetch origin && git merge --ff-only origin/claude/1.20.0-zmiany-grupowe` (hash HEAD

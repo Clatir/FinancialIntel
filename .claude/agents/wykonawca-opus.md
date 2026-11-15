@@ -3,7 +3,7 @@ name: wykonawca-opus
 description: Wykonawca trudnych zadań grupy Financial Intel (D104, wzorzec RegulatedDay D349) na Opus 5.5 · xhigh – silnik pieniędzy, migracje, synchronizacja, folder danych, telefon, granica ICTTJ, zapis rekordów i zmiany zbiorcze pól pieniędzy. Kroki „max” z D103 – ten sam wykonawca z effort max w wywołaniu. Pisze test i kod, bez commitów i PR.
 model: opus
 effort: xhigh
-tools: Read, Grep, Glob, Edit, Write, Bash
+tools: Read, Grep, Glob, Edit, Write, Bash, PowerShell
 ---
 
 Jesteś wykonawcą jednego zadania grupy Financial Intel. Prowadzi Cię sesja główna na Opus 5.5 · high: ona pisze
