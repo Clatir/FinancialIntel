@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { addDays, inClockWindow, warsawNow } from '@shared/calc/dates'
+import { inClockWindow, warsawNow } from '@shared/calc/dates'
 import { effectOf, monthsEffectOf, noEffect, pairsLost, type Effect, type LostPair, type MonthEffect } from '@shared/calc/effect'
 import { pendingPairsOf } from '@shared/calc/dock'
 import { budgetStartOf, computeFleet } from '@shared/calc/fleet'
@@ -22,6 +22,8 @@ import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
+import { clickTick, extendTick, pruneTicked, tickAll, type Modifiers } from './rangeSelect'
+import { changedBy, tagUndone, type BulkChange } from './bulkModel'
 
 /** Filters of this computer (the search starts fresh; the period – when it is the whole history or a range, AP-34). */
 const FILTER_KEY = 'fi.operations.filter'
@@ -58,6 +60,8 @@ interface OperationsUi {
   selectedId: string | null
   /** Operations ticked for a bulk change (D76); another filter clears them – nothing hidden is changed. */
   ticked: Record<string, true>
+  /** The row a Shift+click range starts from (D105): the last one clicked or ticked with its box; cleared with `ticked`. */
+  tickAnchor: string | null
   /**
    * A view asked from elsewhere (B88: a notification, the bridge, the inbox, a jump to an operation, a new entry) that
    * hides the filter stored on this computer: changes made in it stay the view's – the stored filter is one click away
@@ -81,6 +85,7 @@ export const useOperationsUi = create<OperationsUi>(() => ({
   filter: { ...emptyFilter(currentMonth), ...readStored() },
   selectedId: null,
   ticked: {},
+  tickAnchor: null,
   shown: false,
   keptId: null
 }))
@@ -90,7 +95,7 @@ export function setFilter(patch: Partial<OperationsFilter>): void {
     const filter = { ...s.filter, ...patch }
     // In a view asked from elsewhere the change is the view's (B88): the stored filter stays as it was.
     if (!s.shown) store(filter)
-    return { filter, ticked: {}, keptId: sameValue(filter, s.filter) ? s.keptId : null }
+    return { filter, ticked: {}, tickAnchor: null, keptId: sameValue(filter, s.filter) ? s.keptId : null }
   })
 }
 
@@ -106,6 +111,7 @@ export function showFilter(patch: Partial<OperationsFilter>): void {
     return {
       filter,
       ticked: {},
+      tickAnchor: null,
       shown: s.shown || STORED_KEYS.some((k) => k in patch && !sameValue(patch[k], s.filter[k])),
       keptId: sameValue(filter, s.filter) ? s.keptId : null
     }
@@ -119,7 +125,7 @@ export function showFilter(patch: Partial<OperationsFilter>): void {
 export function showStoredFilter(): void {
   useOperationsUi.setState((s) => {
     const empty = emptyFilter(currentMonth)
-    return { filter: { ...s.filter, ...Object.fromEntries(STORED_KEYS.map((k) => [k, empty[k]])), period: empty.period, ...readStored() }, ticked: {}, shown: false, keptId: null }
+    return { filter: { ...s.filter, ...Object.fromEntries(STORED_KEYS.map((k) => [k, empty[k]])), period: empty.period, ...readStored() }, ticked: {}, tickAnchor: null, shown: false, keptId: null }
   })
 }
 
@@ -128,7 +134,7 @@ export function resetFilter(): void {
   const filter = emptyFilter(warsawNow().month)
   const { shown } = useOperationsUi.getState()
   if (!shown) store(filter)
-  useOperationsUi.setState({ filter, ticked: {}, keptId: null })
+  useOperationsUi.setState({ filter, ticked: {}, tickAnchor: null, keptId: null })
 }
 
 /**
@@ -140,7 +146,7 @@ export function followCurrentMonth(now: string = warsawNow().month): void {
   const was = currentMonth
   currentMonth = now
   const p = useOperationsUi.getState().filter.period
-  if (p.kind === 'month' && p.month === was) useOperationsUi.setState((s) => ({ filter: { ...s.filter, period: { kind: 'month', month: now } }, ticked: {} }))
+  if (p.kind === 'month' && p.month === was) useOperationsUi.setState((s) => ({ filter: { ...s.filter, period: { kind: 'month', month: now } }, ticked: {}, tickAnchor: null }))
 }
 
 export function tickOperations(ids: readonly string[], on: boolean): void {
@@ -152,7 +158,51 @@ export function tickOperations(ids: readonly string[], on: boolean): void {
   })
 }
 
-export const clearTicked = () => useOperationsUi.setState({ ticked: {} })
+export const clearTicked = () => useOperationsUi.setState({ ticked: {}, tickAnchor: null })
+
+/** The box of one row: ticks or unticks it and makes it the anchor of a range (D105). */
+export function tickRow(id: string, on: boolean): void {
+  tickOperations([id], on)
+  useOperationsUi.setState({ tickAnchor: id })
+}
+
+/** A plain click on a row: the anchor moves, the ticked set stays as it is (D105). */
+export function anchorTick(id: string): void {
+  if (useOperationsUi.getState().tickAnchor !== id) useOperationsUi.setState({ tickAnchor: id })
+}
+
+/** Ctrl+click toggles a row, Shift+click adds the range from the anchor; `order` = the rows shown, no drafts. */
+export function clickTickRow(order: readonly string[], id: string, mods: Modifiers): void {
+  const { ticked, tickAnchor } = useOperationsUi.getState()
+  const next = clickTick({ ticked, anchor: tickAnchor }, order, id, mods)
+  useOperationsUi.setState({ ticked: next.ticked as Record<string, true>, tickAnchor: next.anchor })
+}
+
+/** Shift+arrow: the cursor (the selected row) moves one row and the rows it left and reached are ticked; returns the new cursor. */
+export function extendTickFromCursor(order: readonly string[], dir: 1 | -1): string | null {
+  const { ticked, tickAnchor, selectedId } = useOperationsUi.getState()
+  const next = extendTick({ ticked, anchor: tickAnchor }, order, selectedId, dir)
+  useOperationsUi.setState({ ticked: next.ticked as Record<string, true>, tickAnchor: next.anchor })
+  return next.cursor
+}
+
+/**
+ * The ticked rows a change hid from the list (a tag taken off a list filtered by it) are no longer ticked – nothing
+ * hidden is changed (D76); `order` = the rows shown. `only` – just these ids (the rows the change touched). The same
+ * `ticked` when none went – no render for nothing.
+ */
+export function pruneTickedTo(order: readonly string[], only?: Iterable<string>): void {
+  const { ticked } = useOperationsUi.getState()
+  const next = pruneTicked(ticked, order, only)
+  if (next !== ticked) useOperationsUi.setState({ ticked: next as Record<string, true> })
+}
+
+/** Ctrl+A: every row shown is ticked. */
+export function tickAllVisible(order: readonly string[]): void {
+  const { ticked } = useOperationsUi.getState()
+  const next = tickAll(ticked, order)
+  if (next !== ticked) useOperationsUi.setState({ ticked: next as Record<string, true> })
+}
 
 /**
  * One category for the ticked expenses the list shows (D76; operations split into parts and other kinds stay –
@@ -524,12 +574,7 @@ export function deleteView(id: string): void {
 
 // ------------------------------------------------------------------ bulk changes (1.7.0, F11)
 
-/** A change of the ticked operations at once (F11): deleted, moved onto another account, another kind, a shifted date. */
-export type BulkChange =
-  | { kind: 'delete' }
-  | { kind: 'account'; accountId: string }
-  | { kind: 'kind'; to: TxKind; counterAccountId?: string | null }
-  | { kind: 'shift'; days: number }
+export type { BulkChange, OpState } from './bulkModel'
 
 export interface BulkPlan {
   change: BulkChange
@@ -543,39 +588,28 @@ export interface BulkPlan {
   newer: number
 }
 
-/** What a change makes of one operation: the same object – nothing to change; null – it does not fit. */
-function changedBy(t: Transaction, c: BulkChange, docked: ReadonlySet<string>): Transaction | null {
-  switch (c.kind) {
-    case 'delete':
-      return { ...t }
-    case 'account':
-      if (t.accountId === c.accountId) return t
-      // A transfer onto the account of its other side would be a transfer to itself.
-      if (t.kind === 'transfer' && t.counterAccountId === c.accountId) return null
-      return { ...t, accountId: c.accountId }
-    case 'kind': {
-      const counter = c.to === 'transfer' ? (c.counterAccountId ?? null) : null
-      if (t.kind === c.to && (c.to !== 'transfer' || t.counterAccountId === counter)) return t
-      // A docked one keeps its kind (the docking is about it – Mostek → Dokowanie); a transfer never goes to its own account.
-      if ((docked.has(t.id) && t.kind !== c.to) || (counter && counter === t.accountId)) return null
-      const k = withKind(t, c.to)
-      if (c.to !== 'transfer') return k
-      // Another account: its bank row and day go. A new transfer is one operation for both sides (`withKind` – F10); one
-      // of before 1.7.0 stays one side (its other side may be an operation of its own – the inbox joins them).
-      return { ...k, counterAccountId: counter, ...(counter !== t.counterAccountId ? { counterBank: undefined, counterDate: undefined } : {}) }
-    }
-    case 'shift':
-      if (!c.days) return t
-      return { ...t, date: addDays(t.date, c.days), ...(t.counterDate ? { counterDate: addDays(t.counterDate, c.days) } : {}) }
-  }
+/** The ticked operations shown (no drafts), as their entries – `readOnly`: written by a newer version (B67). */
+function tickedEntries(visibleIds: readonly string[]) {
+  const { ticked } = useOperationsUi.getState()
+  const data = useData.getState()
+  return visibleIds.filter((id) => ticked[id] && !data.drafts[id]).flatMap((id) => (data.records.transactions[id] ? [data.records.transactions[id]!] : []))
+}
+
+/** The operations docked (their kind stays – `changedBy`). */
+const dockedIds = (): ReadonlySet<string> => new Set(listOf(useData.getState().records.dockings).map((d) => d.transactionId))
+
+/**
+ * The ticked operations shown that a bulk change may write (no drafts, none of a newer version) and the docked ones – what
+ * the menu reads for its marks and groups (`opState`, `bulkApplies` of `bulkModel.ts`); read when it opens, nothing kept.
+ */
+export function bulkTargets(visibleIds: readonly string[]): { records: Transaction[]; docked: ReadonlySet<string> } {
+  return { records: tickedEntries(visibleIds).flatMap((e) => (e.readOnly ? [] : [e.record])), docked: dockedIds() }
 }
 
 /** The ticked operations shown that a change takes (F11) and what it makes of them – nothing written yet. */
 export function bulkPlan(visibleIds: readonly string[], change: BulkChange): BulkPlan {
-  const { ticked } = useOperationsUi.getState()
-  const data = useData.getState()
-  const entries = visibleIds.filter((id) => ticked[id] && !data.drafts[id]).flatMap((id) => (data.records.transactions[id] ? [data.records.transactions[id]!] : []))
-  const docked = new Set(listOf(data.records.dockings).map((d) => d.transactionId))
+  const entries = tickedEntries(visibleIds)
+  const docked = dockedIds()
   const plan: BulkPlan = { change, before: [], after: [], skipped: 0, newer: entries.filter((e) => e.readOnly).length }
   for (const e of entries) {
     if (e.readOnly) continue
@@ -640,14 +674,41 @@ function setFields(before: Transaction, after: Transaction): string[] {
   return [...keys].filter((k) => k !== 'updatedAt' && k !== 'updatedBy' && !deepEqual((before as Record<string, unknown>)[k], (after as Record<string, unknown>)[k]))
 }
 
-const BULK_LABEL: Record<BulkChange['kind'], string> = { delete: 'Usunięto', account: 'Przeniesiono na konto', kind: 'Zmieniono rodzaj', shift: 'Przesunięto datę' }
+const BULK_LABEL: Record<BulkChange['kind'], string> = {
+  delete: 'Usunięto',
+  account: 'Przeniesiono na konto',
+  kind: 'Zmieniono rodzaj',
+  shift: 'Przesunięto datę',
+  day: 'Zmieniono datę',
+  tag: 'Dodano tag',
+  tagsClear: 'Wyczyszczono tagi',
+  impulse: 'Oznaczono jako impuls',
+  explained: 'Oznaczono korekty jako wyjaśnione',
+  container: 'Przypisano do ładowni',
+  goal: 'Rozliczono z celu',
+  loan: 'Przypisano do pożyczki'
+}
 
-/** The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields. */
-export async function applyBulk(plan: BulkPlan, what = ''): Promise<void> {
+/** The toast's words of a change applied: the ones taking a field off say so. */
+function bulkLabel(c: BulkChange): string {
+  if (c.kind === 'tag' && !c.on) return 'Zdjęto tag'
+  if (c.kind === 'impulse') return c.to === 'plan' ? 'Oznaczono jako plan' : c.to ? BULK_LABEL.impulse : 'Wyczyszczono plan / impuls'
+  if (c.kind === 'explained' && !c.on) return 'Zdjęto oznaczenie „wyjaśniona” z korekt'
+  if (c.kind === 'container' && !c.containerId) return 'Zdjęto z ładowni'
+  if (c.kind === 'goal' && !c.goalId) return 'Zdjęto rozliczenie z celu'
+  if (c.kind === 'loan' && !c.loanId) return 'Odłączono od pożyczki'
+  return BULK_LABEL[c.kind]
+}
+
+/**
+ * The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields.
+ * `keepTicked` – the menu's toggles, which stay open on the same ticked operations (D105); a deletion clears them anyway.
+ */
+export async function applyBulk(plan: BulkPlan, what = '', opts: { keepTicked?: boolean } = {}): Promise<void> {
   if (!plan.before.length || !canWrite()) return
   const n = plan.before.length
   const tail = `${plan.skipped ? `, pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : ''}${newerNote(plan.newer)}`
-  clearTicked()
+  if (!opts.keepTicked || plan.change.kind === 'delete') clearTicked()
   if (plan.change.kind === 'delete') {
     const ids = plan.before.map((t) => t.id)
     if (ids.includes(useOperationsUi.getState().selectedId ?? '')) useOperationsUi.setState({ selectedId: null })
@@ -678,9 +739,19 @@ export async function applyBulk(plan: BulkPlan, what = ''): Promise<void> {
   }
   if (!replaceRecords('transactions', plan.after)) return
   const pairs = plan.before.map((b, i) => ({ before: b, after: plan.after[i]!, fields: setFields(b, plan.after[i]!) }))
+  const change = plan.change
   const undo = () => {
     const now = useData.getState().records.transactions
     const back = pairs.flatMap(({ before, after, fields }) => {
+      // Written by a newer version since (B67): this one never writes it – it stays, counted with the ones changed since.
+      if (now[before.id]?.readOnly) return []
+      // One tag is the change's field (the menu's toggles one after another): the other tags – set since too – stay.
+      if (change.kind === 'tag') {
+        const cur = now[before.id]?.record
+        // Rewritten since into another kind: no longer the operation the change left (`undoKept` – it stays).
+        const out = cur && cur.kind === after.kind ? tagUndone(cur, before, change) : null
+        return out ? [out] : []
+      }
       const cur = now[before.id]?.record as Record<string, unknown> | undefined
       if (!cur || !fields.every((k) => deepEqual(cur[k], (after as Record<string, unknown>)[k]))) return []
       const out: Record<string, unknown> = { ...cur }
@@ -694,5 +765,5 @@ export async function applyBulk(plan: BulkPlan, what = ''): Promise<void> {
     replaceRecords('transactions', back)
     undoneNote(back.length, pairs.length)
   }
-  toast(`${BULK_LABEL[plan.change.kind]}${what ? ` ${what}` : ''}: ${n} ${plural(n, 'operacja', 'operacje', 'operacji')}${tail}.`, 'success', 8000, { label: 'Cofnij', run: undo })
+  toast(`${bulkLabel(plan.change)}${what ? ` ${what}` : ''}: ${n} ${plural(n, 'operacja', 'operacje', 'operacji')}${tail}.`, 'success', 8000, { label: 'Cofnij', run: undo })
 }

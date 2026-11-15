@@ -45,6 +45,20 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
       ['Esc', 'zamknij powiększenie panelu'],
       ['F11', 'pełny ekran osobnego okna (Esc – wyjście)']
     ]
+  },
+  {
+    // D105: the ticked operations and the menu under the right button.
+    title: 'Lista operacji',
+    items: [
+      ['/', 'szukaj'],
+      ['↑ ↓', 'poprzednia / następna operacja'],
+      ['Ctrl klik', 'zaznacz / odznacz operację'],
+      ['Shift klik', 'zaznacz zakres od ostatnio klikniętej'],
+      ['Shift ↑ ↓', 'rozszerz zaznaczenie'],
+      ['Ctrl A', 'zaznacz wszystkie widoczne'],
+      ['Esc', 'odznacz wszystkie'],
+      ['prawy przycisk', 'zmień zaznaczone (menu)']
+    ]
   }
 ]
 

@@ -1,10 +1,11 @@
 /**
  * Operacje: a change of the ticked operations at once (F11) – delete them, move them onto another account, another
- * kind, a shifted date –, the effect on today's energy, the envelopes, the balances, the shields and the goals, the loot
+ * kind, a shifted date –, the effect on today's energy, the envelopes, the balances, the shields, the goals, the cargo's
+ * tanks and the loans (D105), the loot
  * and the envelopes of the months it leaves, the ICTTJ payouts losing their pair (AP-38) shown before it is applied; one
  * „Cofnij”.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { confirmedChanges } from '@shared/calc/balances'
 import { lostPairText } from '@shared/calc/effect'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
@@ -13,11 +14,29 @@ import { Modal } from '../../components/Modal'
 import { monthLabel, plDate, plural } from '../../lib/format'
 import { useRecordList } from '../../store/records'
 import { AccountSelect, useAccounts, useCategories } from './pickers'
-import { applyBulk, bulkEffect, bulkPlan, noBulkEffect, type BulkChange, type BulkEffect, type BulkPlan } from './state'
+import { closeBulkPreview, previewBulk, useBulkPreview } from './bulkPreview'
+import { skipReason, whatOf } from './operationsMenuModel'
+import { applyBulk, noBulkEffect, type BulkChange } from './state'
 
 type Action = '' | BulkChange['kind']
 
-const ACTION_LABEL: Record<Exclude<Action, ''>, string> = { delete: 'Usuń', account: 'Przenieś na konto', kind: 'Zmień rodzaj', shift: 'Przesuń datę' }
+const ACTION_LABEL: Record<Exclude<Action, ''>, string> = {
+  delete: 'Usuń',
+  account: 'Przenieś na konto',
+  kind: 'Zmień rodzaj',
+  shift: 'Przesuń datę',
+  day: 'Zmień datę',
+  tag: 'Tag',
+  tagsClear: 'Wyczyść tagi',
+  impulse: 'Plan / impuls',
+  explained: 'Wyjaśniona korekta',
+  container: 'Ładownia',
+  goal: 'Cel',
+  loan: 'Pożyczka'
+}
+
+/** The bar's changes (F11) – the others are the menu's (D105). */
+const BAR_ACTIONS: ReadonlyArray<Exclude<Action, ''>> = ['delete', 'account', 'kind', 'shift']
 
 /** The ticked operations shown, `readOnly` = a folder only to read (the bulk changes off – N2). */
 export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction[]; readOnly: boolean }) {
@@ -27,7 +46,6 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
   const [kind, setKind] = useState<TxKind>('transfer')
   const [counter, setCounter] = useState<string | null>(null)
   const [days, setDays] = useState(1)
-  const [preview, setPreview] = useState<{ plan: BulkPlan; effect: BulkEffect | null; what: string } | null>(null)
   const change = (): BulkChange | null => {
     if (action === 'delete') return { kind: 'delete' }
     if (action === 'account') return accountId ? { kind: 'account', accountId } : null
@@ -37,15 +55,15 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
   }
   const name = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? 'konto spoza budżetu'
   const what = () =>
-    action === 'account' ? `„${name(accountId)}”` : action === 'kind' ? `na „${TX_KIND_LABEL[kind]}${kind === 'transfer' && counter ? ` – ${name(counter)}` : ''}”` : action === 'shift' ? `o ${days > 0 ? '+' : ''}${days} ${plural(Math.abs(days), 'dzień', 'dni', 'dni')}` : ''
+    action === 'account' ? `„${name(accountId)}”` : action === 'kind' ? `na „${TX_KIND_LABEL[kind]}${kind === 'transfer' && counter ? ` – ${name(counter)}` : ''}”` : action === 'shift' ? whatOf({ kind: 'shift', days }) : ''
   const open = () => {
     const c = change()
     if (!c) return
-    const plan = bulkPlan(
+    previewBulk(
       shown.map((t) => t.id),
-      c
+      c,
+      what()
     )
-    setPreview({ plan, effect: bulkEffect(plan), what: what() })
   }
   return (
     <>
@@ -53,7 +71,7 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
         <span className="text-muted">zmień</span>
         <select className="input h-[24px] w-[150px] py-0" value={action} onChange={(e) => setAction(e.currentTarget.value as Action)} aria-label="Zmiana zaznaczonych" data-testid="operations-bulk-change">
           <option value="">— wybierz… —</option>
-          {(Object.keys(ACTION_LABEL) as Array<keyof typeof ACTION_LABEL>).map((a) => (
+          {BAR_ACTIONS.map((a) => (
             <option key={a} value={a}>
               {ACTION_LABEL[a]}
             </option>
@@ -89,12 +107,18 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
           Podgląd…
         </button>
       </fieldset>
-      {preview && <BulkPreview preview={preview} onClose={() => setPreview(null)} />}
     </>
   )
 }
 
-function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: BulkEffect | null; what: string }; onClose: () => void }) {
+/** The one preview dialog of the screen (the bar's and the menu's): drawn while the store holds one; closed with its screen. */
+export function BulkPreviewHost() {
+  const preview = useBulkPreview((s) => s.preview)
+  useEffect(() => closeBulkPreview, [])
+  return preview ? <BulkPreview preview={preview} onClose={closeBulkPreview} /> : null
+}
+
+function BulkPreview({ preview, onClose }: { preview: NonNullable<ReturnType<typeof useBulkPreview.getState>['preview']>; onClose: () => void }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const balances = useRecordList('balances')
@@ -141,7 +165,7 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
       <div className="flex flex-col gap-2 text-[12px]" data-testid="operations-bulk-effect">
         <p>
           {n ? `${n} ${plural(n, 'operacja', 'operacje', 'operacji')}` : 'Żadna z zaznaczonych operacji się nie zmieni'}
-          {plan.skipped ? ` · pominięte ${plan.skipped} (zmiana do nich nie pasuje: zadokowane, przelew na własne konto)` : ''}
+          {plan.skipped ? ` · pominięte ${plan.skipped} (zmiana do nich nie pasuje: ${skipReason(plan.change)})` : ''}
           {plan.newer ? ` · zapisane przez nowszą wersję aplikacji: ${plan.newer} (bez zmian)` : ''}.
         </p>
         {effect && !noBulkEffect(effect) ? (
@@ -151,6 +175,8 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
             {effect.envelopes.map((e) => line(`Koperta: ${cats.label(e.categoryId) || 'codzienne'}`, e, 'operations-bulk-envelope', e.categoryId))}
             {effect.accounts.map((a) => line(`Saldo: ${a.name}`, a, 'operations-bulk-balance', a.id))}
             {effect.goals.map((g) => line(`Cel: ${g.name}`, g, 'operations-bulk-goal', g.id))}
+            {effect.cargo.map((c) => line(`Ładownia: ${c.name}`, c, 'operations-bulk-cargo', c.id))}
+            {effect.loans.map((l) => line(`Pożyczka: ${l.name}, zostało`, l, 'operations-bulk-loan', l.id))}
             {/* The months the operations leave or come to (AP-38): their loot and what their envelopes have left. */}
             {effect.months.map((m) => (
               <div key={m.month} className="contents">
@@ -165,7 +191,7 @@ function BulkPreview({ preview, onClose }: { preview: { plan: BulkPlan; effect: 
             ))}
           </div>
         ) : (
-          n > 0 && <p className="text-muted">Energia, koperty, łupy, cele, osłony i salda kont bez zmian.</p>
+          n > 0 && <p className="text-muted">Energia, koperty, łupy, cele, ładownia, pożyczki, osłony i salda kont bez zmian.</p>
         )}
         {confirmed.length > 0 && (
           <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="operations-bulk-confirmed">

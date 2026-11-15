@@ -1,6 +1,7 @@
 /**
  * What a change of operations does (F11: before a bulk change of Operacje is applied): today's energy, the envelopes,
- * the accounts' balances and the shields, the goals – the engine's state now against the one with the change; the loot
+ * the accounts' balances and the shields, the goals, the cargo's tanks and the loans' rest (D105) – the engine's state now
+ * against the one with the change; the loot
  * and the envelopes of the months the operations leave or come to (AP-38) – the debriefing of the engine's log before and
  * after; the ICTTJ payouts losing their pair in the bank – the deliveries before and after. Read only: no money rule here.
  */
@@ -27,9 +28,29 @@ export interface Effect {
   accounts: Array<Change & { id: string; name: string }>
   /** The goals whose money changes (AP-38: a docked payout deleted takes what it gave them). */
   goals: Array<Change & { id: string; name: string }>
+  /** The cargo's tanks (periodic fees) whose money changes – a payment moved onto or off its container (D105). */
+  cargo: Array<Change & { id: string; name: string }>
+  /** The loans whose rest changes (`LoanState.open` – „zostało”): an operation of the loan, a payment of its container (D105). */
+  loans: Array<Change & { id: string; name: string }>
 }
 
 const change = (before: number, after: number): Change | null => (before === after ? null : { before, after })
+
+/**
+ * The tanks whose money changes. A container no longer in the hold keeps its tank in the state only while it holds money –
+ * a tank on one side only is 0 on the other (a payment taken off it: 200 zł → 0; put on it: 0 → its rest), as an account.
+ */
+function tanksEffect(before: FleetState['tanks'], after: FleetState['tanks']): Effect['cargo'] {
+  const out: Effect['cargo'] = []
+  const was = new Map(before.map((t) => [t.containerId, t.amount]))
+  const is = new Map(after.map((t) => [t.containerId, t.amount]))
+  for (const t of after) {
+    const b = was.get(t.containerId) ?? 0
+    if (b !== t.amount) out.push({ id: t.containerId, name: t.name, before: b, after: t.amount })
+  }
+  for (const t of before) if (!is.has(t.containerId) && t.amount) out.push({ id: t.containerId, name: t.name, before: t.amount, after: 0 })
+  return out
+}
 
 export function effectOf(before: FleetState, after: FleetState): Effect {
   const envelopes: Effect['envelopes'] = []
@@ -54,12 +75,17 @@ export function effectOf(before: FleetState, after: FleetState): Effect {
     goals: after.goals.flatMap((g) => {
       const was = before.goals.find((b) => b.id === g.id)
       return was && was.amount !== g.amount ? [{ id: g.id, name: g.name, before: was.amount, after: g.amount }] : []
+    }),
+    cargo: tanksEffect(before.tanks, after.tanks),
+    loans: after.loans.flatMap((l) => {
+      const was = before.loans.find((b) => b.loan.id === l.loan.id)
+      return was && was.open !== l.open ? [{ id: l.loan.id, name: l.loan.name, before: was.open, after: l.open }] : []
     })
   }
 }
 
 /** Does the change move nothing the captain sees? */
-export const noEffect = (e: Effect): boolean => !e.energy && !e.shields && !e.envelopes.length && !e.accounts.length && !e.goals.length
+export const noEffect = (e: Effect): boolean => !e.energy && !e.shields && !e.envelopes.length && !e.accounts.length && !e.goals.length && !e.cargo.length && !e.loans.length
 
 /** A line of `layersEffect`: an amount before and after (null – unknown, a target without its salary or costs). */
 export interface LayersLine {

@@ -18,7 +18,7 @@ Dobór modelu (relatywnie: Fable 5.1 ≈ 2,5× Opus 5.5 ≈ 5× Sonnet 5.5; Haik
 | Migracje danych, synchronizacja, folder danych, telefon, reszta logiki | Opus 5.5 xhigh (D103) |
 | Druga opinia tylko przy znalezisku critical | Fable 5.1 – rzadko (D103) |
 | Ekrany na gotowym silniku, teksty, testy według jasnej specyfikacji – domyślny poziom | Opus 5.5 high albo Sonnet 5.5 (D103) |
-| CHANGELOG, dokumenty, commit, PR, pilnowanie CI | Sonnet 5.5 |
+| CHANGELOG, dokumenty, commit, PR, pilnowanie CI | w grupie – sesja główna Opus 5.5 · high (D104); poza grupą Sonnet 5.5 |
 | Szerokie przeszukiwanie kodu | agent `Explore` z `model: haiku` |
 
 Model zmieniaj tylko na granicy etapu (pauza) razem z `/clear` – pamięć podręczna promptu jest osobna dla każdego
@@ -47,10 +47,46 @@ modelu, a stan przenosi `docs/postep.md`.
    „Uwagi na później”. `CHANGELOG.md` przy dopisywaniu wersji – Read z `limit` (początek pliku), nigdy całość. Nowa reguła albo pułapka
    modułu → `.claude/rules/<moduł>.md`; zmiany dla użytkownika → `CHANGELOG.md`. Do CLAUDE.md nie dopisuj map kodu.
 5. Zaktualizowana tabela postępu (etap / grupa, model i thinking z górką, szacowany czas, stan).
-6. Pauza – użytkownik zmienia model / thinking. Bez komendy nie zaczynaj kolejnego etapu ani grupy (D67).
+6. Pauza – użytkownik zmienia model / thinking. Bez komendy nie zaczynaj kolejnego etapu ani grupy (D67). W grupie
+   (ciągu) pauza dopiero na jej końcu albo przy pytaniu o zachowanie widoczne dla użytkownika (D104).
+
+## Wykonawcy, grupy, jedno CI (D104, wzorzec `Clatir/RegulatedDay` D317, D349, D351, D354, D413)
+- **Sesja główna – Opus 5.5 · high:** kontrakt każdego kroku w sekcji grupy w `docs/postep.md` (typy, sygnatury,
+  istniejące funkcje do użycia z `plik:linia`, „gotowe, gdy”, pułapki niżej), przegląd diffu wykonawcy w kodzie, pełne
+  testy, `/code-review`, git, dokumenty, CHANGELOG, PR, CI, scalanie i wydanie (zmienia D103 cz. 2 „zamknięcie – Sonnet”).
+- **Test i kod pisze wykonawca** z `.claude/agents/` według kolumny „Wykonawca · przegląd” w tabeli prac (D96):
+  `wykonawca-opus` (xhigh) – silnik pieniędzy, migracje, synchronizacja, folder danych, telefon, granica ICTTJ, zapis
+  rekordów, zmiany zbiorcze pól pieniędzy; kroki „max” z D103 – ten sam wykonawca z `effort: max` w wywołaniu, przegląd
+  max w sesji głównej; `wykonawca-sonnet` (high) – ekrany na gotowej logice, interakcje, testy według kontraktu;
+  `wykonawca-haiku` (high) – tylko teksty, opisy, listy odbioru, bez kodu funkcji.
+- Kroki niezależne – równolegle (najwyżej 4–5 naraz), każdy we własnym drzewie (`isolation: "worktree"`); zależne – po
+  scaleniu poprzednich do gałęzi grupy. Numery T przydzielaj z góry. Poprawki po przeglądzie wracają do tego samego
+  wykonawcy (SendMessage – jego kontekst zostaje). Pytania wykonawcy o zachowanie widoczne dla użytkownika – do
+  użytkownika; techniczne rozstrzyga sesja główna (T-decyzja).
+- **Grupa = ciąg (D67, D104):** komunikat „Przed etapem” i pytania o wygląd całej grupy z góry; kroki bez pauzy; pauza
+  na końcu albo przy nowym pytaniu o zachowanie widoczne dla użytkownika.
+- **Jedno CI na grupę (T531):** `ci.yml` rusza tylko na PR, pushu do `main` i ręcznie – commity kroków na gałęzi grupy
+  `claude/<wersja>-<opis>` nie uruchamiają CI (bez `[skip ci]`). PR otwierasz na końcu grupy, po wersji i CHANGELOG –
+  każdy push do otwartego PR to nowa runda, więc poprawki po CI zbieraj w jeden push. Scalanie według D71.
+- **Pułapki (z TJ, 15.11.2026):**
+  - agent z nowego pliku w `.claude/agents/` widać dopiero w nowej sesji – do tego czasu `general-purpose` z `model`
+    i `effort` z pliku wykonawcy i poleceniem „przeczytaj `.claude/agents/wykonawca-<x>.md` i postępuj według niego”;
+  - drzewo wykonawcy nie startuje od gałęzi grupy – w poleceniu `git fetch origin && git merge --ff-only
+    origin/<gałąź grupy>` i oczekiwany hash HEAD (gałąź grupy wypchnięta przed startem wykonawcy);
+  - drzewo nie ma `node_modules` – łącze przez PowerShell: `New-Item -ItemType Junction -Path node_modules -Target
+    <repo>\node_modules` (`mklink` z bash nie działa); nigdy `npm ci` w drzewie;
+  - Node z `.tools\node-v<.node-version>-win-x64` na początku `PATH` (systemowy 20.12 za stary);
+  - integracja przez `git -C <drzewo>` i `git push origin HEAD:<gałąź grupy>` – bez `cd` do drzewa wykonawcy; nigdy
+    goły `git stash` (stos wspólny dla drzew);
+  - `tsconfig.web.json` ma jawną listę testów store'u w `include` – nowy test store'u i czysty moduł renderera testowany
+    w node dopisz do `include` / `exclude` (inaczej TS6307); wpisz to do kontraktu;
+  - nazwy plików różne tylko wielkością liter (`bulkMenu.ts` obok `BulkMenu.tsx`) – TS1261 na Windows;
+  - koszt: wykonawca Opus xhigh z dwiema poprawkami ok. 250 tys. tokenów, Sonnet ok. 100–160 tys.; precyzyjny kontrakt
+    (pliki, linie, istniejące funkcje) skraca pracę najbardziej; każdy wykonawca wczytuje pełny CLAUDE.md.
 
 ## PR, scalanie (D71), wydanie
-- Nowa wersja: `package.json` + sekcja w `CHANGELOG.md` (CI sprawdza `scripts/release-notes.mjs`).
+- Nowa wersja: `package.json` + sekcja w `CHANGELOG.md` (CI sprawdza `scripts/release-notes.mjs`); jedna wersja i jedna
+  sekcja na grupę, PR otwierany po nich (T531).
 - PR grupy scalam sam, gdy CI (Linux i Windows) jest zielone, nie ma konfliktu ani otwartych uwag i nic nie czeka na
   decyzję użytkownika. Po scaleniu sprawdź, czy CI na `main` wydało wersję (wydanie publikuje job Windows; czerwone E2E
   na `main` = brak wydania – tak przepadło 0.3.0).

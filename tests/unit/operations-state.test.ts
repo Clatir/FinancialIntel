@@ -5,6 +5,7 @@ import { withAmount } from '@shared/calc/share'
 import { createDefaultSettings } from '@shared/defaults'
 import { COLLECTIONS } from '@shared/paths'
 import { defaultCategoryId, HOUSE_MEMBER_ID, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type ImportRule, type Transaction } from '@shared/schema'
+import type { BulkChange } from '../../src/renderer/features/operations/state'
 
 // The renderer's stores talk to the main process through window.fi (preload); here a mock that takes every write.
 const saved = <T,>(r: T): RecordEntry<T> => ({ record: r, relPath: 'x.json', readOnly: false })
@@ -359,5 +360,231 @@ describe('przegląd S: przejście do operacji zdejmuje też filtry 1.7.0 (F18), 
     api.deleteRecord.mockResolvedValue({ ok: true })
     await ops.deleteOperation(purchase, 'Apteka')
     expect(current(cashTxId!).covers).toEqual([])
+  })
+})
+
+describe('zmiany grupowe – nowe pola z „Cofnij” (1.20.0, D105)', () => {
+  const C1 = nextId()
+  const C2 = nextId()
+  const G1 = nextId()
+  const G2 = nextId()
+  const L1 = nextId()
+  const L2 = nextId()
+  const CORRECTION: Partial<Transaction> = { kind: 'correction', amount: -300, categoryId: null }
+  const LOAN: Partial<Transaction> = { kind: 'loan', amount: 50000, categoryId: null }
+  /** Each new change: the operation, the change, the fields it sets (and their values before), the toast, a change of them made since. */
+  const cases: Array<{ name: string; over: Partial<Transaction>; change: BulkChange; set: Partial<Transaction>; was: Partial<Transaction>; toast: string; since: Partial<Transaction> }> = [
+    { name: 'dzień', over: {}, change: { kind: 'day', date: '2026-10-02' }, set: { date: '2026-10-02' }, was: { date: '2026-10-14' }, toast: 'Zmieniono datę', since: { date: '2026-10-20' } },
+    { name: 'tag – dołóż', over: { tags: ['A'] }, change: { kind: 'tag', tag: 'B', on: true }, set: { tags: ['A', 'B'] }, was: { tags: ['A'] }, toast: 'Dodano tag', since: { tags: ['Z'] } },
+    { name: 'tag – zdejmij', over: { tags: ['A', 'B'] }, change: { kind: 'tag', tag: '#a', on: false }, set: { tags: ['B'] }, was: { tags: ['A', 'B'] }, toast: 'Zdjęto tag', since: { tags: ['A', 'Z'] } },
+    { name: 'wyczyść tagi', over: { tags: ['A'] }, change: { kind: 'tagsClear' }, set: { tags: undefined }, was: { tags: ['A'] }, toast: 'Wyczyszczono tagi', since: { tags: ['Z'] } },
+    { name: 'impuls', over: {}, change: { kind: 'impulse', to: 'impulse' }, set: { impulse: 'impulse' }, was: { impulse: null }, toast: 'Oznaczono jako impuls', since: { impulse: 'plan' } },
+    { name: 'wyjaśniona', over: CORRECTION, change: { kind: 'explained', on: true }, set: { explained: true }, was: { explained: undefined }, toast: 'Oznaczono korekty jako wyjaśnione', since: { explained: false } },
+    { name: 'ładownia', over: { goalId: G1 }, change: { kind: 'container', containerId: C1 }, set: { containerId: C1, goalId: null }, was: { containerId: null, goalId: G1 }, toast: 'Przypisano do ładowni', since: { containerId: C2 } },
+    { name: 'cel', over: { containerId: C1 }, change: { kind: 'goal', goalId: G1 }, set: { goalId: G1, containerId: null }, was: { goalId: null, containerId: C1 }, toast: 'Rozliczono z celu', since: { goalId: G2 } },
+    { name: 'pożyczka', over: LOAN, change: { kind: 'loan', loanId: L1 }, set: { loanId: L1 }, was: { loanId: null }, toast: 'Przypisano do pożyczki', since: { loanId: L2 } }
+  ]
+  const fields = (t: Transaction, of: Partial<Transaction>) => Object.fromEntries(Object.keys(of).map((k) => [k, (t as Record<string, unknown>)[k]]))
+
+  for (const c of cases) {
+    it(`${c.name}: zapis, „Cofnij” tylko swoich pól, póki są takie, jak ustawiła; zmienione w międzyczasie zostaje`, async () => {
+      const a = tx({ counterparty: 'A', ...c.over })
+      const b = tx({ counterparty: 'B', ...c.over })
+      load([a, b])
+      ops.tickOperations([a.id, b.id], true)
+      const plan = ops.bulkPlan([a.id, b.id], c.change)
+      expect(plan).toMatchObject({ skipped: 0, newer: 0 })
+      expect(plan.before.map((t) => t.id)).toEqual([a.id, b.id])
+      await ops.applyBulk(plan)
+      expect(fields(current(a.id), c.set)).toEqual(c.set)
+      expect(fields(current(b.id), c.set)).toEqual(c.set)
+      expect(ui.useUi.getState().toasts.at(-1)!.text).toBe(`${c.toast}: 2 operacje.`)
+      expect(ops.useOperationsUi.getState().ticked).toEqual({})
+      data.updateRecord('transactions', a.id, (r) => ({ ...r, note: 'później' }))
+      data.updateRecord('transactions', b.id, (r) => ({ ...r, ...c.since }))
+      lastUndo()()
+      expect(fields(current(a.id), c.was)).toEqual(c.was)
+      expect(current(a.id).note).toBe('później')
+      expect(fields(current(b.id), c.since)).toEqual(c.since)
+      expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+    })
+  }
+
+  it('wpis nowszej wersji – bez zmian przy każdej nowej zmianie', () => {
+    for (const c of cases) {
+      const newer = tx({ counterparty: 'N', ...c.over })
+      load([newer])
+      data.useData.setState((s) => ({ records: { ...s.records, transactions: { [newer.id]: { ...s.records.transactions[newer.id]!, readOnly: true } } } }))
+      ops.tickOperations([newer.id], true)
+      expect(ops.bulkPlan([newer.id], c.change), c.name).toMatchObject({ before: [], after: [], newer: 1, skipped: 0 })
+    }
+  })
+
+  it('podział paragonu przy ładowni, celu i pożyczce – pominięty i policzony; wspólny zakup przyjmuje zmianę', async () => {
+    const receipt = tx({ counterparty: 'Paragon', categoryId: null, splits: [{ id: nextId(), amount: -600, categoryId: FOOD }, { id: nextId(), amount: -400, categoryId: FUN }] as Transaction['splits'] })
+    const plain = tx({ counterparty: 'Zwykły' })
+    const loanReceipt = tx({ counterparty: 'Pożyczka w częściach', kind: 'loan', categoryId: null, splits: [{ id: nextId(), amount: -600 }, { id: nextId(), amount: -400 }] as Transaction['splits'] })
+    load([receipt, plain, loanReceipt])
+    ops.tickOperations([plain.id], true)
+    ops.financeTicked([plain.id], { share: { mode: 'equal', lines: [{ memberId: null, value: 0, gift: false }, { memberId: HOUSE_MEMBER_ID, value: 0, gift: false }] } }, 'Wspólnie')
+    ops.tickOperations([receipt.id, plain.id, loanReceipt.id], true)
+    for (const change of [{ kind: 'container', containerId: C1 }, { kind: 'goal', goalId: G1 }] as BulkChange[]) {
+      const plan = ops.bulkPlan([receipt.id, plain.id], change)
+      expect(plan.before.map((t) => t.id)).toEqual([plain.id])
+      expect(plan.skipped).toBe(1)
+    }
+    expect(ops.bulkPlan([loanReceipt.id], { kind: 'loan', loanId: L1 })).toMatchObject({ before: [], skipped: 1 })
+    await ops.applyBulk(ops.bulkPlan([receipt.id, plain.id], { kind: 'container', containerId: C1 }), '„Czynsz”')
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Przypisano do ładowni „Czynsz”: 1 operacja, pominięte (zmiana do nich nie pasuje): 1.')
+    expect(current(plain.id)).toMatchObject({ containerId: C1, share: expect.objectContaining({ mode: 'equal' }) })
+    expect(current(plain.id).splits.map((x) => x.amount)).toEqual([-500, -500])
+    expect(current(receipt.id).containerId).toBeNull()
+    // Tags, plan / impulse and „wyjaśniona” are the whole operation's: a split receipt takes them.
+    ops.tickOperations([receipt.id], true)
+    expect(ops.bulkPlan([receipt.id], { kind: 'impulse', to: 'plan' }).after).toEqual([{ ...current(receipt.id), impulse: 'plan' }])
+    expect(ops.bulkPlan([receipt.id], { kind: 'tag', tag: 'Remont', on: true }).after).toEqual([{ ...current(receipt.id), tags: ['Remont'] }])
+  })
+
+  it('operacje dla menu: zaznaczone i widoczne, bez szkiców i wpisów nowszej wersji; zadokowane osobno', () => {
+    const a = tx({ counterparty: 'A' })
+    const docked = tx({ kind: 'trading', amount: 30000, categoryId: null })
+    const newer = tx({ counterparty: 'N' })
+    const hidden = tx({ counterparty: 'ukryta' })
+    load([a, docked, newer, hidden])
+    const dockings = { D1: { record: { id: 'D1', transactionId: docked.id } as never, relPath: 'dockings/x.json', readOnly: false } }
+    data.useData.setState((s) => ({ records: { ...s.records, dockings, transactions: { ...s.records.transactions, [newer.id]: { ...s.records.transactions[newer.id]!, readOnly: true } } } }))
+    const draft = ops.newOperation()
+    ops.tickOperations([a.id, docked.id, newer.id, hidden.id, draft], true)
+    const { records, docked: dockedIds } = ops.bulkTargets([a.id, docked.id, newer.id, draft])
+    expect(records.map((t) => t.id)).toEqual([a.id, docked.id])
+    expect([...dockedIds]).toEqual([docked.id])
+  })
+})
+
+describe('poprawki po przeglądzie 1.20.0: „Cofnij” tagu po jednym tagu, zaznaczenie przy przełącznikach menu', () => {
+  const undoOf = (text: string) => ui.useUi.getState().toasts.find((t) => t.text.startsWith(text))!.action!.run
+  const tags = (id: string) => current(id).tags
+
+  it('dwa przełączenia po sobie: „Cofnij” pierwszego zdejmuje tylko jego tag, drugi zostaje; potem drugi', async () => {
+    const a = tx({ counterparty: 'A', tags: ['A'] })
+    const b = tx({ counterparty: 'B', tags: ['A'] })
+    load([a, b])
+    const ids = [a.id, b.id]
+    ops.tickOperations(ids, true)
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'tag', tag: 'X', on: true }), '#X', { keepTicked: true })
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'tag', tag: 'Y', on: true }), '#Y', { keepTicked: true })
+    expect([tags(a.id), tags(b.id)]).toEqual([
+      ['A', 'X', 'Y'],
+      ['A', 'X', 'Y']
+    ])
+    const toasts = ui.useUi.getState().toasts.length
+    undoOf('Dodano tag #X')()
+    expect([tags(a.id), tags(b.id)]).toEqual([
+      ['A', 'Y'],
+      ['A', 'Y']
+    ])
+    // All taken back: no word of operations changed since.
+    expect(ui.useUi.getState().toasts.length).toBe(toasts)
+    undoOf('Dodano tag #Y')()
+    expect([tags(a.id), tags(b.id)]).toEqual([['A'], ['A']])
+  })
+
+  it('tag zdjęty w międzyczasie – pominięty ze słowem; zdjęty zbiorczo wraca na swoje miejsce, dołożone później zostają', async () => {
+    const a = tx({ counterparty: 'A', tags: ['A'] })
+    const b = tx({ counterparty: 'B', tags: ['A'] })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'tag', tag: 'X', on: true }), '#X')
+    data.updateRecord('transactions', a.id, (r) => ({ ...r, tags: ['A'] }))
+    undoOf('Dodano tag #X')()
+    expect([tags(a.id), tags(b.id)]).toEqual([['A'], ['A']])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+
+    const c = tx({ counterparty: 'C', tags: ['A', 'Wakacje', 'B'] })
+    const d = tx({ counterparty: 'D', tags: ['Wakacje'] })
+    load([c, d])
+    ops.tickOperations([c.id, d.id], true)
+    await ops.applyBulk(ops.bulkPlan([c.id, d.id], { kind: 'tag', tag: '#wakacje', on: false }), '#wakacje')
+    expect([tags(c.id), tags(d.id)]).toEqual([['A', 'B'], undefined])
+    data.updateRecord('transactions', c.id, (r) => ({ ...r, tags: ['A', 'B', 'C'] }))
+    undoOf('Zdjęto tag #wakacje')()
+    expect([tags(c.id), tags(d.id)]).toEqual([['A', 'Wakacje', 'B', 'C'], ['Wakacje']])
+  })
+
+  it('wyczyść tagi: „Cofnij” nadal całą listę – tylko póki jest pusta', async () => {
+    const a = tx({ counterparty: 'A', tags: ['A', 'B'] })
+    const b = tx({ counterparty: 'B', tags: ['A'] })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'tagsClear' }))
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, tags: ['Nowy'] }))
+    lastUndo()()
+    expect([tags(a.id), tags(b.id)]).toEqual([['A', 'B'], ['Nowy']])
+  })
+
+  it('„Cofnij” tagu: wpis innego rodzaju niż po zmianie albo nowszej wersji – pominięty ze słowem', async () => {
+    const a = tx({ counterparty: 'A', tags: ['X'] })
+    const b = tx({ counterparty: 'B', tags: ['X'] })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'tag', tag: 'X', on: false }), '#X')
+    // Another kind since (one that takes tags – the tag alone would let it back).
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, kind: 'income', amount: 1000 }))
+    undoOf('Zdjęto tag #X')()
+    expect([tags(a.id), tags(b.id)]).toEqual([['X'], undefined])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+
+    const c = tx({ counterparty: 'C' })
+    const d = tx({ counterparty: 'D' })
+    load([c, d])
+    ops.tickOperations([c.id, d.id], true)
+    await ops.applyBulk(ops.bulkPlan([c.id, d.id], { kind: 'tag', tag: 'Y', on: true }), '#Y')
+    // Written by a newer version since (B67): never written by this one – said, not counted as taken back.
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { ...s.records.transactions, [d.id]: { ...s.records.transactions[d.id]!, readOnly: true } } } }))
+    undoOf('Dodano tag #Y')()
+    expect([tags(c.id), tags(d.id)]).toEqual([undefined, ['Y']])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+  })
+
+  it('„Cofnij” zdjęcia jedynego tagu z przelewu (nic nie zmieniło się w międzyczasie) – tag wraca, bez słowa o zmianie', async () => {
+    const t = tx({ counterparty: 'T', kind: 'transfer', tags: ['X'] })
+    load([t])
+    ops.tickOperations([t.id], true)
+    await ops.applyBulk(ops.bulkPlan([t.id], { kind: 'tag', tag: 'X', on: false }), '#X')
+    expect(tags(t.id)).toBeUndefined()
+    const toasts = ui.useUi.getState().toasts.length
+    undoOf('Zdjęto tag #X')()
+    expect(tags(t.id)).toEqual(['X'])
+    expect(ui.useUi.getState().toasts.length).toBe(toasts)
+  })
+
+  it('„Cofnij” innej zmiany: wpis nowszej wersji – pominięty ze słowem, nie liczony jako cofnięty', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    await ops.applyBulk(ops.bulkPlan([a.id, b.id], { kind: 'impulse', to: 'plan' }))
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { ...s.records.transactions, [b.id]: { ...s.records.transactions[b.id]!, readOnly: true } } } }))
+    lastUndo()()
+    expect([current(a.id).impulse, current(b.id).impulse]).toEqual([null, 'plan'])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
+  })
+
+  it('keepTicked zostawia zaznaczenie i kotwicę; domyślnie i przy usuwaniu – czyści jak dotąd', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    const ids = [a.id, b.id]
+    ops.tickOperations(ids, true)
+    ops.useOperationsUi.setState({ tickAnchor: b.id })
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'impulse', to: 'plan' }), '', { keepTicked: true })
+    expect(ops.useOperationsUi.getState()).toMatchObject({ ticked: { [a.id]: true, [b.id]: true }, tickAnchor: b.id })
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'impulse', to: 'impulse' }))
+    expect(ops.useOperationsUi.getState()).toMatchObject({ ticked: {}, tickAnchor: null })
+    api.deleteRecords.mockImplementation(async (_c: string, del: string[]) => del.map((id) => ({ id })))
+    ops.tickOperations(ids, true)
+    await ops.applyBulk(ops.bulkPlan(ids, { kind: 'delete' }), '', { keepTicked: true })
+    expect(ops.useOperationsUi.getState().ticked).toEqual({})
+    api.deleteRecords.mockReset()
   })
 })
