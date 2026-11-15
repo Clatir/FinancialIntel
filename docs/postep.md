@@ -20,9 +20,9 @@ wykonawcy (agenci widoczni od nowej sesji). PR dopiero w B4 – jedna runda CI.
 | --- | --- | --- | --- | --- | --- |
 | A0 | `.claude/agents/wykonawca-*`, skill `etap`, CLAUDE.md, D104, D105, T531, `ci.yml` | sesja główna · medium | Opus 5.5 · high | 20–30 min | ✅ 15.11 (`9130c45` + poprawki przeglądu; ok. 35 min) |
 | B0 | Kontrakt B1–B3 (niżej) | sesja główna | Opus 5.5 · high | 15–20 min | ✅ 15.11 |
-| B1 | Zaznaczanie (Ctrl / Shift / Shift+strzałki / Ctrl+A / Esc) na `ticked` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–25 min | 🔄 (z B2 równolegle) |
-| B2 | Nowe zmiany zbiorcze (dzień, tagi, plan / impuls, wyjaśniona, ładownia, cel, pożyczka), `opState`, skutek ładowni i pożyczek | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | 🔄 (z B1 równolegle) |
-| B3 | Menu PPM, kalendarz, wspólny podgląd, E2E | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 25–35 min | ⬜ (po B1 + B2) |
+| B1 | Zaznaczanie (Ctrl / Shift / Shift+strzałki / Ctrl+A / Esc) na `ticked` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–25 min | ✅ 15.11 (≈ 5 min wykonawcy; `a44e3e5`; 29 testów) |
+| B2 | Nowe zmiany zbiorcze (dzień, tagi, plan / impuls, wyjaśniona, ładownia, cel, pożyczka), `opState`, skutek ładowni i pożyczek | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | ✅ 15.11 (≈ 14 min wykonawcy; scalenie `364ada1`; 3 pliki testów) |
+| B3 | Menu PPM, kalendarz, wspólny podgląd, E2E | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 25–35 min | 🔄 15.11 |
 | B4 | Pełne testy + E2E, `/code-review` xhigh całości, `ui.md`, CHANGELOG `## 1.20.0`, wersja, PR, CI, scalenie, wydanie | sesja główna | Opus 5.5 · high | 30–45 min + CI | ⬜ |
 
 ### Decyzje w trakcie grupy
@@ -32,6 +32,9 @@ wykonawcy (agenci widoczni od nowej sesji). PR dopiero w B4 – jedna runda CI.
   ostatni wiersz klikany (także zwykłym klikiem) albo zaznaczony polem; Shift+strzałki przesuwają kursor i dokładają
   jego wiersz (powrót nie zdejmuje – zdejmuje Ctrl+klik albo Esc); „wspólnie…” finansującego tylko w pasku (edytor
   udziałów nie mieści się w menu); menu tylko na komputerze (na telefonie bez prawego przycisku – pasek zostaje).
+- Techniczne (T533, do wpisania w B4): nowe zmiany zbiorcze najpierw sprawdzają, czy pasują, potem czy coś zmieniają
+  (`bulkApplies` / `opState` liczą tylko pasujące); „bez ładowni” pomija zwrot towaru z kontenerem (edytor nie pokazuje
+  tam ładowni); skutek w podglądzie – zbiorniki ładowni (`Effect.cargo`) i „zostało” pożyczek (`Effect.loans`).
 
 ### Uwagi na później (przegląd A0, medium)
 - `ci.yml`: `concurrency` z `cancel-in-progress: true` przerywa też run na `main` – dwa scalenia tuż po sobie mogą
