@@ -22,7 +22,7 @@ import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
 import { rememberBrands, saveKeywordRule } from '../import/rules'
-import { clickTick, extendTick, tickAll, type Modifiers } from './rangeSelect'
+import { clickTick, extendTick, pruneTicked, tickAll, type Modifiers } from './rangeSelect'
 import { changedBy, tagUndone, type BulkChange } from './bulkModel'
 
 /** Filters of this computer (the search starts fresh; the period – when it is the whole history or a range, AP-34). */
@@ -184,6 +184,16 @@ export function extendTickFromCursor(order: readonly string[], dir: 1 | -1): str
   const next = extendTick({ ticked, anchor: tickAnchor }, order, selectedId, dir)
   useOperationsUi.setState({ ticked: next.ticked as Record<string, true>, tickAnchor: next.anchor })
   return next.cursor
+}
+
+/**
+ * The ticked rows a change hid from the list (a tag taken off a list filtered by it) are no longer ticked – nothing
+ * hidden is changed (D76); `order` = the rows shown. The same `ticked` when none went – no render for nothing.
+ */
+export function pruneTickedTo(order: readonly string[]): void {
+  const { ticked } = useOperationsUi.getState()
+  const next = pruneTicked(ticked, order)
+  if (next !== ticked) useOperationsUi.setState({ ticked: next as Record<string, true> })
 }
 
 /** Ctrl+A: every row shown is ticked. */

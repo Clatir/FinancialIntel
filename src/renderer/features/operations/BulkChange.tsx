@@ -15,7 +15,7 @@ import { monthLabel, plDate, plural } from '../../lib/format'
 import { useRecordList } from '../../store/records'
 import { AccountSelect, useAccounts, useCategories } from './pickers'
 import { closeBulkPreview, previewBulk, useBulkPreview } from './bulkPreview'
-import { skipReason } from './operationsMenuModel'
+import { skipReason, whatOf } from './operationsMenuModel'
 import { applyBulk, noBulkEffect, type BulkChange } from './state'
 
 type Action = '' | BulkChange['kind']
@@ -55,7 +55,7 @@ export function BulkChangeBar({ shown, readOnly }: { shown: readonly Transaction
   }
   const name = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? 'konto spoza budżetu'
   const what = () =>
-    action === 'account' ? `„${name(accountId)}”` : action === 'kind' ? `na „${TX_KIND_LABEL[kind]}${kind === 'transfer' && counter ? ` – ${name(counter)}` : ''}”` : action === 'shift' ? `o ${days > 0 ? '+' : ''}${days} ${plural(Math.abs(days), 'dzień', 'dni', 'dni')}` : ''
+    action === 'account' ? `„${name(accountId)}”` : action === 'kind' ? `na „${TX_KIND_LABEL[kind]}${kind === 'transfer' && counter ? ` – ${name(counter)}` : ''}”` : action === 'shift' ? whatOf({ kind: 'shift', days }) : ''
   const open = () => {
     const c = change()
     if (!c) return

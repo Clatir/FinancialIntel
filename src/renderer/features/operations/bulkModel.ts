@@ -166,6 +166,14 @@ export function bulkApplies(records: readonly Transaction[], change: BulkChange,
  * 'tag', tag, on: true }) !== 'on' }` – on every one, it takes the tag off; otherwise it puts it on.
  */
 export function opState(records: readonly Transaction[], change: BulkChange, docked: ReadonlySet<string> = NONE): OpState {
+  return bulkProbe(records, change, docked).state
+}
+
+/**
+ * `bulkApplies` and `opState` in one pass (the menu asks both of every item): how many operations the change fits, how
+ * many of them are already as it leaves them, and the mark that gives.
+ */
+export function bulkProbe(records: readonly Transaction[], change: BulkChange, docked: ReadonlySet<string> = NONE): { fit: number; done: number; state: OpState } {
   let fit = 0
   let done = 0
   for (const t of records) {
@@ -174,5 +182,5 @@ export function opState(records: readonly Transaction[], change: BulkChange, doc
     fit++
     if (next === t) done++
   }
-  return !done ? 'off' : done === fit ? 'on' : 'mixed'
+  return { fit, done, state: !done ? 'off' : done === fit ? 'on' : 'mixed' }
 }
