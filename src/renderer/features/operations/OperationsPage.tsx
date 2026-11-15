@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { notesOf } from '@shared/calc/operations'
@@ -26,7 +26,7 @@ import { WEEKDAY_PL, periodLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { operationRowText } from './rowText'
 import { CategorySelect, useAccounts, useCategories } from './pickers'
-import { categorizeTicked, clearTicked, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickOperations, useOperationsUi } from './state'
+import { anchorTick, categorizeTicked, clearTicked, clickTickRow, extendTickFromCursor, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickAllVisible, tickOperations, tickRow, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
 import { useRecordList } from '../../store/records'
 import { SHARE_MODES } from '@shared/schema'
@@ -181,7 +181,7 @@ interface Columns {
   shown: (c: OperationColumn) => boolean
 }
 
-function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null; flags: MarkFlags; columns: Columns }) {
+function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null; flags: MarkFlags; columns: Columns; getOrder: () => readonly string[] }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const orders = useData((s) => s.fi?.settings.orders)
@@ -205,10 +205,24 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
     <div
       data-testid="operation-row"
       data-key={t.id}
-      onClick={() => selectOperation(t.id)}
+      data-ticked={ticked ? '1' : undefined}
+      // Shift+click must not select text (D105).
+      onMouseDown={(e) => {
+        if (e.shiftKey) e.preventDefault()
+      }}
+      onClick={(e) => {
+        // Ctrl / Shift: the ticked set only, the cursor and the editor stay (D105); a new entry is no operation yet.
+        if (!draft && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+          if (e.shiftKey) e.preventDefault()
+          clickTickRow(getOrder(), t.id, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey })
+          return
+        }
+        selectOperation(t.id)
+        if (!draft) anchorTick(t.id)
+      }}
       className={cx(
         'absolute left-0 grid w-full items-center gap-x-1.5 border-b border-line/70 px-2 text-[12px]',
-        selected ? 'bg-accent-soft' : index % 2 ? 'bg-white/[0.012] hover:bg-hover' : 'hover:bg-hover'
+        selected ? 'bg-accent-soft' : ticked ? 'bg-white/[0.05] hover:bg-hover' : index % 2 ? 'bg-white/[0.012] hover:bg-hover' : 'hover:bg-hover'
       )}
       style={{ top, height: ROW, gridTemplateColumns: columns.template }}
     >
@@ -217,7 +231,7 @@ function Row({ t, selected, index, top, view, flags, columns }: { t: Transaction
         checked={ticked}
         disabled={draft}
         onClick={(e) => e.stopPropagation()}
-        onChange={(e) => tickOperations([t.id], e.currentTarget.checked)}
+        onChange={(e) => tickRow(t.id, e.currentTarget.checked)}
         aria-label="Zaznacz operację"
         data-testid="operation-tick"
       />
@@ -453,6 +467,11 @@ export function OperationsPage() {
       deferred.sort
     )
   }, [all, deferred, cats, accounts, fi, drafts, flags, keptId])
+  // The rows a range is taken in (D105): as shown, a new entry left out; read at click time, so a row needs no new props.
+  const order = useMemo(() => rows.filter((t) => !drafts[t.id]).map((t) => t.id), [rows, drafts])
+  const orderRef = useRef(order)
+  orderRef.current = order
+  const getOrder = useCallback(() => orderRef.current, [])
   const sums = useMemo(() => sumOperations(rows), [rows])
   const view = deferred.accounts.length === 1 ? deferred.accounts[0]! : null
   const aside = useMemo(() => asideOfOperations(rows, view), [rows, view])
@@ -474,6 +493,34 @@ export function OperationsPage() {
       if (useUi.getState().paletteOpen || document.querySelector('[role="dialog"]')) return
       const el = document.activeElement as HTMLElement | null
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')
+      // A box (the tick of a row) is no text field: the selection keys work with it in focus.
+      const inText = typing && !(el instanceof HTMLInputElement && ['checkbox', 'radio', 'button'].includes(el.type))
+      if (!inText && !e.altKey) {
+        const mod = e.ctrlKey || e.metaKey
+        // D105: Ctrl+A ticks the rows shown; Esc clears the ticks; Shift+arrows extend them from the cursor.
+        if (mod && !e.shiftKey && e.key.toLowerCase() === 'a') {
+          e.preventDefault()
+          tickAllVisible(order)
+          return
+        }
+        if (e.key === 'Escape' && !mod && !e.shiftKey) {
+          if (Object.keys(useOperationsUi.getState().ticked).length) {
+            e.preventDefault()
+            clearTicked()
+          }
+          return
+        }
+        if (e.shiftKey && !mod && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+          e.preventDefault()
+          const cursor = extendTickFromCursor(order, e.key === 'ArrowDown' ? 1 : -1)
+          const at = cursor ? rows.findIndex((t) => t.id === cursor) : -1
+          if (cursor && at >= 0) {
+            selectOperation(cursor)
+            virtualizer.scrollToIndex(at, { align: 'auto' })
+          }
+          return
+        }
+      }
       if (e.key === '/' && !typing) {
         e.preventDefault()
         searchRef.current?.focus()
@@ -492,7 +539,7 @@ export function OperationsPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [rows, selectedIndex, virtualizer])
+  }, [rows, order, selectedIndex, virtualizer])
 
   if (!fi) return null
   const active = viewable(filter)
@@ -642,7 +689,7 @@ export function OperationsPage() {
             <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
               {virtualizer.getVirtualItems().map((v) => {
                 const t = rows[v.index] as Transaction
-                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} flags={flags} columns={columns} />
+                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} flags={flags} columns={columns} getOrder={getOrder} />
               })}
             </div>
           )}
