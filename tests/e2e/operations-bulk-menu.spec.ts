@@ -64,12 +64,26 @@ test('zaznaczanie: Ctrl+klik, Shift+klik, Ctrl+A, Esc', async () => {
     await page.keyboard.press('Escape')
     await expect(ticked).toHaveCount(0)
     // Shift / Ctrl on the box of a row do what they do on the row: a range from the anchor.
-    await row(page, 'Sklep Alfa').getByTestId('operation-tick').click()
-    await row(page, 'Sklep Gamma').getByTestId('operation-tick').click({ modifiers: ['Shift'] })
+    // The boxes themselves say the same as the rows' marks.
+    const box = (name: string) => row(page, name).getByTestId('operation-tick')
+    await box('Sklep Alfa').click()
+    await expect(box('Sklep Alfa')).toBeChecked()
+    await box('Sklep Gamma').click({ modifiers: ['Shift'] })
     await expect(ticked).toHaveCount(3)
     await expect(row(page, 'Sklep Beta')).toHaveAttribute('data-ticked', '1')
-    await row(page, 'Sklep Beta').getByTestId('operation-tick').click({ modifiers: ['Control'] })
+    for (const name of ['Sklep Alfa', 'Sklep Beta', 'Sklep Gamma']) await expect(box(name)).toBeChecked()
+    await expect(box('Sklep Delta')).not.toBeChecked()
+    // Shift on a box already ticked takes nothing off (the range is only added to).
+    await box('Sklep Gamma').click({ modifiers: ['Shift'] })
+    await expect(ticked).toHaveCount(3)
+    await expect(box('Sklep Gamma')).toBeChecked()
+    // Ctrl takes one off – the box follows the ticks, never the browser's own toggle.
+    await box('Sklep Beta').click({ modifiers: ['Control'] })
     await expect(ticked).toHaveCount(2)
+    await expect(box('Sklep Beta')).not.toBeChecked()
+    await box('Sklep Delta').click({ modifiers: ['Control'] })
+    await expect(box('Sklep Delta')).toBeChecked()
+    await expect(ticked).toHaveCount(3)
     expect(errors).toEqual([])
   } finally {
     await app.close()
@@ -196,6 +210,30 @@ test('lista filtrowana tagiem: zdjęcie tagu chowa wiersze, zaznaczenie odpada, 
     await expect(page.getByTestId('operation-row')).toHaveCount(2)
     await expect(page.locator('[data-testid="operation-row"][data-ticked="1"]')).toHaveCount(0)
     await expect(page.getByTestId('operations-bulk')).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('edycja, która wyprowadza zaznaczony wiersz poza filtr, nie rusza zaznaczenia (tylko menu je przycina)', async () => {
+  const { dataDir } = seed()
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await openList(page)
+    await page.getByTestId('operations-search').fill('Sklep Alfa')
+    await expect(page.getByTestId('operation-row')).toHaveCount(1)
+    await row(page, 'Sklep Alfa').getByTestId('operation-tick').check()
+    await row(page, 'Sklep Alfa').click()
+    const counterparty = page.getByTestId('operation-counterparty')
+    await counterparty.fill('Kiosk')
+    await counterparty.press('Enter')
+    await expect(page.getByTestId('operation-row')).toHaveCount(0)
+    await counterparty.fill('Sklep Alfa')
+    await counterparty.press('Enter')
+    await expect(page.getByTestId('operation-row')).toHaveCount(1)
+    // It left the list and came back: still ticked, as before – no edit silently unticks.
+    await expect(row(page, 'Sklep Alfa')).toHaveAttribute('data-ticked', '1')
     expect(errors).toEqual([])
   } finally {
     await app.close()

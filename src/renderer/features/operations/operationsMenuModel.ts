@@ -77,7 +77,7 @@ const noFit = (what: string) => `Żadna z zaznaczonych operacji nie ${what}.`
 /** What the toast and the preview's title say after the words of a change: „na 02.10.2026”, „o +3 dni”. */
 export function whatOf(c: BulkChange): string {
   if (c.kind === 'day') return `na ${plDate(c.date)}`
-  if (c.kind === 'shift') return `o ${c.days > 0 ? '+' : '−'}${Math.abs(c.days)} ${plural(Math.abs(c.days), 'dzień', 'dni', 'dni')}`
+  if (c.kind === 'shift') return `o ${c.days > 0 ? '+' : c.days < 0 ? '−' : ''}${Math.abs(c.days)} ${plural(Math.abs(c.days), 'dzień', 'dni', 'dni')}`
   return ''
 }
 

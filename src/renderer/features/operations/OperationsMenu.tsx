@@ -42,7 +42,8 @@ import {
   type Place
 } from './operationsMenuModel'
 import { useAccounts, useCategories } from './pickers'
-import { applyBulk, bulkPlan, bulkTargets, categorizeTicked, financeTicked, useOperationsUi } from './state'
+import { tickedIn } from './rangeSelect'
+import { applyBulk, bulkPlan, bulkTargets, categorizeTicked, financeTicked, pruneTickedTo, useOperationsUi } from './state'
 
 // ------------------------------------------------------------------ the store: where the menu stands
 
@@ -86,13 +87,16 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
   const containers = useRecordList('containers')
   const loans = useRecordList('loans')
   const fleet = useFleet()
-  const count = useMemo(() => order.filter((id) => ticked[id]).length, [order, ticked])
+  // What the menu changes: the ticked rows of this very render that the list shows – never a hidden one (D76), also in the
+  // frame between a change of the data and the list following it.
+  const ids = useMemo(() => tickedIn(order, ticked), [order, ticked])
+  const count = ids.length
   const [nav, setNav] = useState<MenuNav>(initialNav)
   const box = useRef<HTMLDivElement>(null)
 
   const input = useMemo<MenuInput>(() => {
     // `transactions` and `ticked` (the dependencies) are what `bulkTargets` reads – the menu follows a change made in it.
-    const { records, docked } = bulkTargets(order)
+    const { records, docked } = bulkTargets(ids)
     const categories = cats.mains
       .filter((c) => !c.archived)
       .flatMap((c) => [
@@ -116,10 +120,17 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       goals: fleet?.goals ?? [],
       loans
     }
-  }, [transactions, ticked, order, cats, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason, count])
+  }, [transactions, ids, cats, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason, count])
   const root = useMemo(() => buildMenu(input), [input])
 
-  // Nothing ticked is left to change (the list unticks what a change hid from it): the menu goes.
+  // A switch of the menu has changed the data (`afterSwitch` = the operations before it): what it hid from the list is no
+  // longer ticked (D76). Only the menu's own change prunes – an edit elsewhere, or a list empty for want of data, never does.
+  const afterSwitch = useRef<unknown>(null)
+  useEffect(() => {
+    if (afterSwitch.current && transactions !== afterSwitch.current) pruneTickedTo(order)
+  }, [order, transactions])
+
+  // Nothing ticked is left to change: the menu goes.
   useEffect(() => {
     if (!count) closeOperationsMenu()
   }, [count])
@@ -133,21 +144,23 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
     const c: MenuCommand = leaf.command
     if (c.type === 'category') {
       closeOperationsMenu()
-      categorizeTicked(order, c.categoryId, 'none', c.label)
+      categorizeTicked(ids, c.categoryId, 'none', c.label)
     } else if (c.type === 'finance') {
       closeOperationsMenu()
-      financeTicked(order, { memberId: c.memberId, gift: c.gift }, c.label)
+      financeTicked(ids, { memberId: c.memberId, gift: c.gift }, c.label)
     } else if (c.type === 'preview') {
       closeOperationsMenu()
-      previewBulk(order, c.change, c.what)
+      previewBulk(ids, c.change, c.what)
     } else {
-      const plan = bulkPlan(order, c.change)
+      const plan = bulkPlan(ids, c.change)
       if (!plan.before.length) {
         toast('Bez zmian – zaznaczone operacje są już takie.', 'info')
         return
       }
       if (!leaf.keepOpen) closeOperationsMenu()
-      // A switch leaves the menu open and the ticks as they were: the next one works on the same operations.
+      // A switch leaves the menu open and the ticks as they were: the next one works on the same operations – the ones
+      // the change hid from the list are unticked once the list has followed the data (the effect above).
+      if (leaf.keepOpen) afterSwitch.current = useData.getState().records.transactions
       await applyBulk(plan, c.what, { keepTicked: !!leaf.keepOpen })
     }
   }

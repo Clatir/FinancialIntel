@@ -59,6 +59,11 @@ export function extendTick(state: Selection, order: readonly string[], cursorId:
   return { ticked: withAdded(state.ticked, ids), anchor: state.anchor ?? (at < 0 ? cursor : order[at]!), cursor }
 }
 
+/** The ticked rows that are shown (in `order`), in the list's order – what the bar and the menu change; the hidden ones never. */
+export function tickedIn(order: readonly string[], ticked: Ticked): string[] {
+  return order.filter((id) => ticked[id])
+}
+
 /** `ticked` without the rows no longer in `order` (a change hid them from the list); the same object when none is. */
 export function pruneTicked(ticked: Ticked, order: readonly string[]): Ticked {
   const ids = Object.keys(ticked)
