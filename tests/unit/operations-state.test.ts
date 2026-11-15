@@ -546,6 +546,18 @@ describe('poprawki po przeglądzie 1.20.0: „Cofnij” tagu po jednym tagu, zaz
     expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
   })
 
+  it('„Cofnij” zdjęcia jedynego tagu z przelewu (nic nie zmieniło się w międzyczasie) – tag wraca, bez słowa o zmianie', async () => {
+    const t = tx({ counterparty: 'T', kind: 'transfer', tags: ['X'] })
+    load([t])
+    ops.tickOperations([t.id], true)
+    await ops.applyBulk(ops.bulkPlan([t.id], { kind: 'tag', tag: 'X', on: false }), '#X')
+    expect(tags(t.id)).toBeUndefined()
+    const toasts = ui.useUi.getState().toasts.length
+    undoOf('Zdjęto tag #X')()
+    expect(tags(t.id)).toEqual(['X'])
+    expect(ui.useUi.getState().toasts.length).toBe(toasts)
+  })
+
   it('„Cofnij” innej zmiany: wpis nowszej wersji – pominięty ze słowem, nie liczony jako cofnięty', async () => {
     const a = tx({ counterparty: 'A' })
     const b = tx({ counterparty: 'B' })

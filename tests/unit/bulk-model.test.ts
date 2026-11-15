@@ -240,6 +240,14 @@ describe('„Cofnij” jednego tagu (tagUndone)', () => {
     expect(tagUndone({ ...after, kind: 'transfer' }, before, off)).toBeNull()
     expect(tagUndone({ ...after, kind: 'transfer', tags: ['A'] }, before, off)?.tags).toEqual(['X', 'A'])
   })
+
+  it('przelew, któremu zdjęto jedyny tag – ten sam rodzaj, tag tam był: wraca', () => {
+    const before = tx({ kind: 'transfer', tags: ['X'] })
+    const off: Extract<BulkChange, { kind: 'tag' }> = { kind: 'tag', tag: 'X', on: false }
+    const after = changedBy(before, off)!
+    expect(after.tags).toBeUndefined()
+    expect(tagUndone(after, before, off)?.tags).toEqual(['X'])
+  })
 })
 
 describe('dawne zmiany paska bez zmian', () => {

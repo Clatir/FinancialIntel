@@ -143,8 +143,9 @@ export function tagUndone(current: Transaction, before: Transaction, c: Extract<
     const rest = tags.filter((x) => tagKey(x) !== key)
     return rest.length ? { ...current, tags: rest } : without(current, 'tags')
   }
-  // Put back only where the editor has the tags field (a kind changed since may have none – `changedBy` never puts one there).
-  if (tags.length >= MAX_TAGS || !takesTags(current)) return null
+  // Put back where it was (the same kind – the tag was there, its only one too) or where the editor has the tags field; a
+  // kind changed since into one without tags never gets one (`changedBy` never puts one there).
+  if (tags.length >= MAX_TAGS || (current.kind !== before.kind && !takesTags(current))) return null
   const was = tagsOf(before)
   const at = was.findIndex((x) => tagKey(x) === key)
   if (at < 0) return null
