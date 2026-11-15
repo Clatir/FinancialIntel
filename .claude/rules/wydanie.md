@@ -35,5 +35,6 @@ paths:
   i `altstore.json`. Czerwone E2E na `main` = brak wydania (tak przepadło 0.3.0) – po scaleniu sprawdź CI `main`.
 - PR grupy scalam sam (D71), gdy CI (Linux i Windows) jest zielone, nie ma konfliktu ani otwartych uwag i nic nie czeka
   na decyzję użytkownika. Pełna procedura: skill `etap`.
-- Windows i macOS w CI tylko dla PR, gałęzi domyślnej i ręcznie; na zwykłej gałęzi roboczej – tylko Linux.
+- CI rusza tylko dla PR, gałęzi domyślnej i ręcznie (T531) – push na gałąź roboczą nie uruchamia nic; PR grupy
+  otwierany na końcu, po wersji i CHANGELOG (jedna runda: Linux, Windows, iPhone).
 - Zmiana `.github/workflows/*` wymaga tokena z uprawnieniem `workflow` przy pushu.

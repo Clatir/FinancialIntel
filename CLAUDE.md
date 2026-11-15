@@ -16,6 +16,10 @@ terminy ICT po angielsku, komentarze w kodzie po angielsku. Siostrzana aplikacja
   według ryzyka, najwyżej dwie rundy (druga tylko na poprawkach) – szczegóły w skillu `etap`.
 - **Bez komendy użytkownika nie zaczynaj kolejnego etapu ani grupy** (D67). W grupie etapy idą bez pauzy, jeden PR
   i jedno wydanie na grupę.
+- **Wykonawcy, grupy, jedno CI (D104, wzorzec `Clatir/RegulatedDay`, szczegóły w skillu `etap`):** sesja główna Opus 5.5 ·
+  high prowadzi (kontrakt w `docs/postep.md`, przegląd diffu, testy, `/code-review`, git, dokumenty, PR, CI, wydanie);
+  test i kod pisze wykonawca z `.claude/agents/` według kolumny „Wykonawca · przegląd”; pytania grupy z góry; CI tylko
+  na PR i na `main` – jedna runda na grupę.
 - Przed etapem komunikat „Przed etapem N”; po etapie: testy → `/code-review` → commit + push → wpis w `docs/postep.md` →
   tabela postępu → pauza. Szablon, scalanie PR (D71) i wydanie: skill `etap` – wywołaj go przed etapem i po nim.
 - **`/clear` po każdym scalonym PR:** powiedz wprost, że można (wszystko wypchnięte, `docs/postep.md` mówi, co dalej).

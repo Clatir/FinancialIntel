@@ -2,7 +2,10 @@
 name: CI
 
 on:
+  # One CI per group (T531): a push runs only on the default branch (releases); the steps of a group on its working
+  # branch run nothing until the group's pull request – that one round tests Linux, Windows and the iPhone.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -76,8 +79,8 @@ jobs:
           if npm ci > npm-ci.log 2>&1; then cat npm-ci.log; echo "npm ci should fail on Node 22.11"; exit 1; fi
           grep -q "jest za stary" npm-ci.log
 
-  # The Windows build runs for pull requests, the default branch (releases) and by hand – a plain push to a working
-  # branch runs the Linux jobs only (its pull request runs the whole CI anyway).
+  # The Windows build runs for pull requests, the default branch (releases) and by hand (a push to a working branch
+  # runs no CI at all – T531).
   windows:
     name: Build exe + smoke test (Windows)
     needs: [test, e2e, node-gate]

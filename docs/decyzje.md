@@ -462,3 +462,26 @@ nowe dopisuj na końcu z datą i wskaż, którą zastępują. Decyzje techniczne
   wpis bieżącej grupy; wpisy po wydaniu do archiwum); `CHANGELOG.md` przy dopisywaniu wersji – Read z `limit` (początek
   pliku), nigdy całość; zamknięte przeglądy i raporty → `docs/archiwum/`.
 
+- **D104** (15.11.2026) Wykonawcy, grupy i jedno CI według wzorca `Clatir/RegulatedDay` (D317, D349, D351, D354, D413;
+  jak ICTTJ 15.11.2026). Uzupełnia D67 i D96, zmienia D103 cz. 2 w części „zamknięcie – Sonnet 5.5”:
+  (1) **sesja główna Opus 5.5 · high prowadzi** – kontrakt kroku w `docs/postep.md`, przegląd diffu wykonawcy, pełne
+  testy, `/code-review`, git, dokumenty, CHANGELOG, PR, CI, scalanie (D71) i wydanie; (2) **test i kod pisze wykonawca**
+  z `.claude/agents/` według ryzyka (kolumna „Wykonawca · przegląd” w tabeli prac): `wykonawca-opus` xhigh – silnik
+  pieniędzy, migracje, synchronizacja, folder danych, telefon, granica ICTTJ, zmiany zbiorcze pól pieniędzy;
+  `wykonawca-sonnet` high – ekrany na gotowej logice, interakcje; `wykonawca-haiku` – tylko teksty; najpierw test, który
+  pada, potem kod; wykonawca nie commituje i nie zmienia CHANGELOG, postępu, decyzji ani CLAUDE.md; poprawki po
+  przeglądzie – ten sam wykonawca; kroki niezależne równolegle we własnych drzewach; (3) **kroki „max” z D103** pisze
+  `wykonawca-opus` z effort max podanym tylko w wywołaniu tego kroku, przegląd max w sesji głównej; (4) **grupa = ciąg**
+  (D67): pytania o zachowanie widoczne dla użytkownika z góry, kroki bez pauzy, pauza na końcu albo przy nowym pytaniu;
+  (5) **jedno CI na grupę** – CI rusza tylko na PR i na `main` (T531), jeden PR po wersji i CHANGELOG grupy.
+- **D105** (15.11.2026) Zmiany grupowe na liście Operacji (grupa 1.20.0, wzór ICTTJ 1.26.0, dostosowany; uzupełnia D76
+  i F11): (1) **zaznaczanie** na istniejącym zaznaczeniu (pole w wierszu zostaje): zwykły klik – tylko kursor
+  i edytor, zaznaczenie zostaje; Ctrl+klik przełącza wiersz; Shift+klik dokłada zakres od kotwicy w bieżącym
+  sortowaniu i filtrze; Shift+strzałki rozszerzają zakres; Ctrl+A zaznacza widoczne; Esc czyści zaznaczenie; zmiana
+  filtra czyści je jak dotąd, szkice odpadają; (2) **menu pod prawym przyciskiem** na wierszu, obok pasków zaznaczonych
+  (paski zostają, menu woła te same działania): kategoria, finansujący, konto, rodzaj, data (dzień z kalendarza albo
+  przesunięcie o N dni), usuń – jak dotąd z podglądem skutku tam, gdzie pasek go ma; nowe: tagi (przełącznik – gdy mają
+  go wszystkie, zdejmij wszędzie, inaczej dołóż; pole na nowy tag, „Wyczyść tagi”), plan / impuls, wyjaśniona korekta
+  (tylko korekty), ładownia albo cel (wykluczają się) i pożyczka (tylko operacje rodzaju „pożyczka”) – z podglądem
+  skutku; operacje z podziałem paragonu pominięte przy ładowni, celu i pożyczce i policzone w komunikacie (wspólny zakup
+  przyjmuje zmianę), tagi, plan / impuls i „wyjaśniona” działają na całej operacji; (3) każda zmiana z „Cofnij”.

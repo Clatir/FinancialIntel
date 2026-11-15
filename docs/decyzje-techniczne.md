@@ -3928,3 +3928,6 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T530** `.claude/settings.json` blokuje czytanie wyników buildów i raportów (`out/`, `dist/`, `playwright-report/`,
   `coverage/`, buildy iOS) obok `package-lock.json` i `release*/`; `test-results/` zostaje dostępne (zrzuty i kontekst
   błędów E2E przy naprawach).
+- **T531** `ci.yml`: `push` tylko na `main` (wydania), poza tym `pull_request` i ręcznie – kroki grupy na gałęzi
+  roboczej nie uruchamiają CI, bez znacznika `[skip ci]` (D104; w ICTTJ `[skip ci]` – tu prościej, bez pułapki opisu
+  commitu scalającego i bez podwójnej rundy Linux przy ostatnim pushu z otwartym PR). PR grupy otwierany na końcu.
