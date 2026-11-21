@@ -433,7 +433,7 @@ function EnvelopesPanel({ month, current, fleet, brief, readOnly }: { month: str
       {!rows.length ? (
         <Empty>Brak kopert w tym miesiącu.</Empty>
       ) : (
-        <EnvelopeBars rows={rows} elapsed={month === current ? monthElapsed(fleet.today) : undefined} onCover={month === current && !readOnly ? setCovering : undefined} />
+        <EnvelopeBars rows={rows} elapsed={month === current ? monthElapsed(fleet.today) : undefined} month={month} onCover={month === current && !readOnly ? setCovering : undefined} />
       )}
       {outside.length > 0 && <OutsideRow outside={outside} label={cats.label} />}
       {covering && <CoverDialog month={month} to={covering} fleet={fleet} onClose={() => setCovering(null)} />}

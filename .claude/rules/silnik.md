@@ -100,6 +100,8 @@ paths:
   `dueWindow` (`calc/cargoStatus.ts` – stan, Radar, odprawa, straż ładowni, silnik, kreator); terminy budżetu od dnia
   startu; „Zapłacone (dziś)” (`payToday`) – płatność dziś policzona tą regułą; niezapłacony termin wcześniejszego
   miesiąca zostaje (`CargoStatus.carried`) do zapłaty – konsument mapujący stan po kontenerze filtruje `!carried`.
+  Zaległe po kontenerze (T540: odprawa jedną linią, meldunek „Zaległe opłaty”) – `lateFees` / `lateFeeText` nad tym
+  stanem, nigdy własna reguła; powiadomienia dalej raz na termin.
   Terminy naprzód na dniu z historii (`cargoDays` → `payDays`, `nextDueOf`), nigdy wprost z `dueDay`; `dueAt` – dzień
   ustawiony ręcznie. **Pułapka (T398):** płatność z datą po dziś płaci termin dopiero w swoim dniu – stan liczy płatności
   do dziś (jak silnik); termin, któremu ta sama reguła ją daje (wszystkie płatności, okno Radaru `AHEAD_DAYS`), jest
