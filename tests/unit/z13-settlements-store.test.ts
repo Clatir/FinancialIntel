@@ -136,6 +136,24 @@ describe('Z13: rozliczenia z domownikami – liczby z księgi silnika', () => {
     expect(of(MAREK)!.waiting).toEqual([])
   })
 
+  it('panel w Radarze (i link „rozlicz na Radarze ›” Mostka): ktoś do rozliczenia albo osoby obok domyślnego „Dom”', () => {
+    open()
+    const f = fleet.fleetNow()!
+    const people = data.useData.getState().fi!.settings.household.members
+    expect(settle.settlementsShown(f.receivables.members, people)).toBe(true)
+    // Only the default „Dom” (and an archived person), nobody to settle – as with the loans given alone on Mostek: no panel.
+    const house = createDefaultSettings().settings.household.members
+    const archived = [...house, person(TATA, 'Tata', { archived: true })]
+    const none = { memberId: OLA, owed: 0, deposit: 0, open: [], since: null, unassigned: [] }
+    expect(settle.settlementsShown([], house)).toBe(false)
+    expect(settle.settlementsShown([none], archived)).toBe(false)
+    // A person beside „Dom”, a debt, an advance, money waiting to be assigned – each shows it.
+    expect(settle.settlementsShown([], [...house, person(TATA, 'Tata')])).toBe(true)
+    expect(settle.settlementsShown([{ ...none, owed: 100 }], house)).toBe(true)
+    expect(settle.settlementsShown([{ ...none, deposit: 100 }], house)).toBe(true)
+    expect(settle.settlementsShown([{ ...none, unassigned: [{ txId: R2, date: day(3), amount: 100 }] }], house)).toBe(true)
+  })
+
   it('saldo na start rozliczeń: pozycja bez operacji, oznaczona', () => {
     open()
     const m = of(BABCIA)!

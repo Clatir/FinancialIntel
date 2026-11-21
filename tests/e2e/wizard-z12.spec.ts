@@ -1,13 +1,14 @@
 // 1.21.0 Z12 (UX-79, D106 pkt 11, T546): a new empty folder opens the start wizard by itself – once on this computer;
 // its first step offers „Szybki start” (the balances, the salary, the daily envelopes), started by the same „Uruchom
 // budżet”. The other E2E start on the bridge: `launch()` switches the opening off (FI_WIZARD_AUTO=0) – here it is on.
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
+import { seedFolder } from './seed'
 
 const FOOD = '01KDEFCAT00000000000000100'
 const MBANK = '01KDEFACC00000000000000001'
@@ -119,6 +120,34 @@ test('UX-79: kreator zostawiony bez zapisu – drugie uruchomienie zaczyna na Mo
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     await expect(page.getByTestId('banner-wizard-start')).toHaveText('Kreator startu')
     await expect(page.getByTestId('page-wizard')).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('UX-79: nowy pusty folder otwarty z Ustawień („Nowe dane w innym folderze…”) – kreator sam, gdy folder jest pokazany', async () => {
+  const { month } = warsawNow()
+  const base = mkdtempSync(join(tmpdir(), 'fi-z12-'))
+  const dataDir = join(base, 'Dom', 'FinancialIntel')
+  const other = join(base, 'Nowy', 'FinancialIntel')
+  // A running budget: no wizard at the start.
+  seedFolder(dataDir, { settings: (s) => ({ ...s, budget: { ...s.budget, start: `${month}-01` } }) })
+  mkdirSync(other, { recursive: true })
+  const { app, page, errors } = await launch({ dataDir, env: AUTO })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+,')
+    await page.getByTestId('settings-tab-folder').click()
+    // The system's folder dialog answers with the new empty folder.
+    await app.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog
+    }, other)
+    await page.getByRole('button', { name: 'Nowe dane w innym folderze…' }).click()
+    // Before: the folder came while the switch held the window – the wizard waited for the next start.
+    await expect(page.getByTestId('page-wizard')).toBeVisible()
+    await expect(page.getByTestId('wizard-step-0')).toHaveClass(/text-accent/)
+    expect(existsSync(join(other, 'fi.json'))).toBe(true)
     expect(errors).toEqual([])
   } finally {
     await app.close()

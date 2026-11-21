@@ -1,7 +1,8 @@
 /**
  * Z2 (1.21.0, D106, T536) – „Cofnij” and summaries in the window's store:
  * - UX-7: „Koperty ze średnich” – „Cofnij” sets back each envelope's limit from before (`setProposedEnvelopes`, as
- *   `copyOnward`); a limit changed since stays, said (`undoKept`);
+ *   `copyOnward`); a limit changed since stays, said (`undoKept`); a plan of its own the proposal made (T46) goes while it
+ *   is still just that (as `decideLoot` – review of the group);
  * - UX-8: the loot split – one line of what goes where (`lootSplitText`) and „Cofnij” giving the month's plan back as it
  *   was before (`decideLoot`): the decision from before, or no plan of its own when the decision made it;
  * - UX-9: „Pomiń wpis” in the docking window – a toast with „Cofnij” bringing the entry back (`skipDelivery`).
@@ -111,14 +112,49 @@ describe('UX-7: „Koperty ze średnich” z „Cofnij” – limity sprzed prop
     expect(own(NOW.month)!.envelopes).toEqual({ [FOOD]: zl(300), [HOME]: zl(200) })
   })
 
-  it('miesiąc na wcześniejszym planie: limity wracają do tych z planu w mocy (własny plan zostaje, jak w „Kopiuj dalej”)', () => {
+  it('miesiąc na wcześniejszym planie: propozycja założyła jego plan – „Cofnij” go usuwa (miesiąc znowu na planie w mocy, jak przy łupach)', async () => {
     open([plan(EARLIER, { envelopes: { [FOOD]: zl(500) } })])
     expect(own(NOW.month)).toBeUndefined()
     month.setProposedEnvelopes(NOW.month, { [FOOD]: zl(780), [FUN]: zl(150) }, TEXT)
     expect(own(NOW.month)!.envelopes).toEqual({ [FOOD]: zl(780), [FUN]: zl(150) })
+    expect(await data.writeNow('months', monthPlanId(NOW.month))).toBe(true)
     undo(TEXT)
-    expect(own(NOW.month)!.envelopes).toEqual({ [FOOD]: zl(500) })
+    // Before: the copy stayed with the limits from before – the month pinned to it (T46), the earlier plan's changes lost to it.
+    expect(own(NOW.month)).toBeUndefined()
+    await vi.waitFor(() => expect(api.deleteRecord).toHaveBeenCalledWith('months', monthPlanId(NOW.month)))
     expect(own(EARLIER)!.envelopes).toEqual({ [FOOD]: zl(500) })
+  })
+
+  it('założony plan zmieniony od tego czasu (pensja) – zostaje, limity wracają do tych z planu w mocy', async () => {
+    open([plan(EARLIER, { envelopes: { [FOOD]: zl(500) } })])
+    month.setProposedEnvelopes(NOW.month, { [FOOD]: zl(780), [FUN]: zl(150) }, TEXT)
+    month.setSalary(NOW.month, zl(4500))
+    await data.writeNow('months', monthPlanId(NOW.month))
+    undo(TEXT)
+    expect(own(NOW.month)).toMatchObject({ salary: zl(4500), envelopes: { [FOOD]: zl(500) } })
+    expect(api.deleteRecord).not.toHaveBeenCalled()
+  })
+
+  it('założony plan z limitem zmienionym od tego czasu – zostaje ten limit (ze słowem), reszta wraca', () => {
+    open([plan(EARLIER, { envelopes: { [FOOD]: zl(500) } })])
+    month.setProposedEnvelopes(NOW.month, { [FOOD]: zl(780), [FUN]: zl(150) }, TEXT)
+    month.setEnvelope(NOW.month, FUN, zl(200))
+    undo(TEXT)
+    expect(own(NOW.month)!.envelopes).toEqual({ [FOOD]: zl(500), [FUN]: zl(200) })
+    expect(toasts().map((x) => x.text)).toContain('Cofnięte koperty: 1; zmienione od tego czasu zostają, jak są: 1.')
+    expect(api.deleteRecord).not.toHaveBeenCalled()
+  })
+
+  it('założony plan usunięty w tym czasie (drugi komputer) – „Cofnij” nie zakłada go od nowa', async () => {
+    open([plan(EARLIER, { envelopes: { [FOOD]: zl(500) } })])
+    month.setProposedEnvelopes(NOW.month, { [FOOD]: zl(780), [FUN]: zl(150) }, TEXT)
+    await data.writeNow('months', monthPlanId(NOW.month))
+    data.applyChange({ upserts: [], removals: [{ collection: 'months', id: monthPlanId(NOW.month) }], fi: null, problems: [], conflicts: [], status: data.useData.getState().status!, origin: 'external' })
+    expect(own(NOW.month)).toBeUndefined()
+    api.saveRecord.mockClear()
+    undo(TEXT)
+    expect(own(NOW.month)).toBeUndefined()
+    expect(data.hasUnsaved()).toBe(false)
   })
 
   it('limit zmieniony po propozycji zostaje – ze słowem; reszta wraca', () => {
