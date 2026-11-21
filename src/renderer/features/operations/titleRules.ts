@@ -11,9 +11,9 @@ import type { ImportRule, Transaction } from '@shared/schema'
 import { canWrite, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { keywordRuleRefusal, rulesUndo, saveKeywordRule, undoRules, type KeywordRuleInput } from '../import/rules'
-import { titleRuled, type TitleTarget } from './bulkModel'
+import { bulkProbe, titleRuled, type TitleTarget } from './bulkModel'
 import { openBulkPreview } from './bulkPreview'
-import { applyBulk, bulkEffect, bulkPlanOf, type BulkPlan } from './state'
+import { applyBulk, bulkEffect, bulkPlanOf, dockedIds, type BulkPlan } from './state'
 
 export interface TitleRuleInput extends TitleTarget {
   keyword: string
@@ -127,6 +127,16 @@ export function titleRulePlan(input: TitleRuleInput, current?: Transaction): { p
   const plan = bulkPlanOf(ids, { kind: 'titleRule', rule: targetOf(input), ...(current ? { openId: current.id } : {}) })
   const taken = ids.filter((id) => !drafts[id]).length
   return { plan, done: taken - plan.before.length - plan.skipped - plan.newer }
+}
+
+/**
+ * How many of the matching operations of the history the rule changes (T549): the ones it fits (their direction, a
+ * docked one's kind – `changedBy`) and not already as it leaves them – the count „Zapisz i zaktualizuj (N)” gives, as
+ * the preview shows them. The matching ones, without the open operation (`findMatchingByTitle` with its id).
+ */
+export function titleRuleChanges(matching: readonly Transaction[], input: TitleRuleInput): number {
+  const { fit, done } = bulkProbe(matching, { kind: 'titleRule', rule: targetOf(input) }, dockedIds())
+  return fit - done
 }
 
 /** The history the rule leaves as it is (AP-15): how many are so already, skipped, of a newer version. */

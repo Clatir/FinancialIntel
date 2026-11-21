@@ -3981,4 +3981,10 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   poza budżetem” przy wierszu (zostaje w Meldunkach – potwierdzone 21.11.2026).
 - **T549** (Z14, zamknięcie 1.21.0) Teksty okna bez numerów wersji („zapisany dawniej …”, `VERSION_PENDING` tylko
   `update.ts`); potwierdzone 21.11.2026: panel Rozliczeń znika bez sald i osób poza „Dom” (T547), pasek miesiąca
-  z kopert codziennych (T540), krok „Pensja i koperty” przy planie odziedziczonym zrobiony (T545).
+  z kopert codziennych (T540), krok „Pensja i koperty” przy planie odziedziczonym zrobiony (T545). Poprawki przeglądu:
+  reguła tytułu z historią zmienia tylko operacje swojego kierunku (`direction`, jak import; otwarta – `openId` – bierze
+  ją jak w edytorze), znak przy przelewie / pożyczce zostaje; licznik „Zapisz i zaktualizuj (N)” = `titleRuleChanges`
+  (pasujące i nie „już takie” – jak podgląd); `applyBulk` nie nadpisuje operacji zmienionych od podglądu (zostają ze
+  słowem; nic zapisanego – reguła też nie); „Cofnij” samej reguły (`rulesUndo`). Kreator otwiera się sam także po
+  zmianie folderu z Ustawień i po zdjęciu „tylko do odczytu”; „Cofnij” „Koperty ze średnich” usuwa nietkniętą kopię
+  planu; link „rozlicz na Radarze” tylko przy `settlementsShown`; „Wyłącz / Włącz wszystkie” z „Cofnij”.

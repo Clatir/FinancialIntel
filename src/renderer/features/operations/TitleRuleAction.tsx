@@ -9,7 +9,7 @@ import { CategoryField, useAccounts } from './pickers'
 import { FinancerSelect } from '../household/MemberPickers'
 import { useMembers } from '../household/actions'
 import { NO_CATEGORY_REFUSAL } from '../import/rules'
-import { applyTitleRule, findMatchingByTitle, titleKeyword, type TitleRuleInput } from './titleRules'
+import { applyTitleRule, findMatchingByTitle, titleKeyword, titleRuleChanges, type TitleRuleInput } from './titleRules'
 
 const TYPE_OPTIONS = [
   { value: 'refund', label: 'Zwrot / kategoria' },
@@ -100,22 +100,26 @@ function TitleRulePopover({
     [transactions, keyword, title, t.id, targetCounterparty]
   )
 
+  const inputOf = (): TitleRuleInput => ({
+    keyword: keyword.trim() || title,
+    kind: activeKind,
+    direction: selectedType === 'refund' ? 'in' : activeKind === 'expense' ? 'out' : activeKind === 'income' ? 'in' : null,
+    categoryId: activeKind === 'expense' ? categoryId : null,
+    counterparty: targetCounterparty,
+    refundable: activeKind === 'expense' && refundable,
+    household: activeKind === 'income' && !!memberId,
+    memberId: (activeKind === 'expense' && refundable) || (activeKind === 'income' && !!memberId) ? memberId : null,
+    gift: activeKind === 'expense' && refundable && gift ? true : undefined,
+    counterAccountId: activeKind === 'transfer' ? counterAccountId : null,
+    inflowKind: activeKind === 'income' && !!memberId ? inflowKind : undefined,
+    // Ticked while another keyword found some: none now – the rule only.
+    updateHistory: updateHistory && matching.length > 0
+  })
+  // The ones the rule changes (T549): of its direction, not already so – as the preview counts them.
+  const changes = updateHistory && matching.length > 0 ? titleRuleChanges(matching, inputOf()) : 0
+
   const handleApply = (close: () => void) => {
-    const input: TitleRuleInput = {
-      keyword: keyword.trim() || title,
-      kind: activeKind,
-      direction: selectedType === 'refund' ? 'in' : activeKind === 'expense' ? 'out' : activeKind === 'income' ? 'in' : null,
-      categoryId: activeKind === 'expense' ? categoryId : null,
-      counterparty: targetCounterparty,
-      refundable: activeKind === 'expense' && refundable,
-      household: activeKind === 'income' && !!memberId,
-      memberId: (activeKind === 'expense' && refundable) || (activeKind === 'income' && !!memberId) ? memberId : null,
-      gift: activeKind === 'expense' && refundable && gift ? true : undefined,
-      counterAccountId: activeKind === 'transfer' ? counterAccountId : null,
-      inflowKind: activeKind === 'income' && !!memberId ? inflowKind : undefined,
-      // Ticked while another keyword found some: none now – the rule only.
-      updateHistory: updateHistory && matching.length > 0
-    }
+    const input = inputOf()
 
     // The open operation as the rule decides – the editor's own edit (without the history, or a draft – T535).
     const patchCurrent = () => {
@@ -389,7 +393,7 @@ function TitleRulePopover({
               onClick={() => handleApply(close)}
               data-testid="title-rule-apply-btn"
             >
-              {updateHistory && matching.length > 0 ? `Zapisz i zaktualizuj (${matching.length})…` : 'Zapisz regułę'}
+              {changes > 0 ? `Zapisz i zaktualizuj (${changes})…` : 'Zapisz regułę'}
             </button>
           </div>
         </div>

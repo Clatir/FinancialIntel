@@ -55,7 +55,8 @@ paths:
 - Zakładki pamiętane na komputerze (`localStorage` z `try/catch`): grupy Ustawień – `settings/settingsNav.ts`
   (`SETTINGS_GROUPS`, `fi.settings.tab`, T543), zakładki Wywiadu – `intel/tabs.ts` (`INTEL_TABS`, `fi.intel.tab`, T539).
 - Wpływ od domownika z ekranu (Rozliczenia, „Oddał(a) gotówką”, T547) to szkic `newOperation` w edytorze – nigdy zapis
-  wprost z panelu; liczby rozliczeń tylko z `calc/` (ekran ich nie liczy).
+  wprost z panelu; liczby rozliczeń tylko z `calc/` (ekran ich nie liczy). Panel i każdy link do niego („rozlicz na
+  Radarze”) – tylko według `settlementsShown` (`radar/settlements.ts`).
 - Ekrany komputera są używane też na telefonie – układ przez `CompactContext` / `Columns`, bez osobnych kopii ekranów.
 - **Nic po cichu (AP-15, T400):** odmowa i przycięcie mają komunikat przy polu (w oknie szybkiego wpisu toasty idą do stopki;
   Enter wstrzymuje tylko odmowa, słowo o przycięciu z tego samego działania wraca z „Zapisano” – T413, T417).

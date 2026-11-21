@@ -20,7 +20,7 @@ vi.stubGlobal('window', { fi: api })
 
 const data = await import('../../src/renderer/store/data')
 const ui = await import('../../src/renderer/store/ui')
-const { matchesTitle, findMatchingByTitle, applyTargetToTransaction, applyTitleRule, titleKeyword } = await import('../../src/renderer/features/operations/titleRules')
+const { matchesTitle, findMatchingByTitle, applyTargetToTransaction, applyTitleRule, titleKeyword, titleRuleChanges } = await import('../../src/renderer/features/operations/titleRules')
 const { useBulkPreview, closeBulkPreview } = await import('../../src/renderer/features/operations/bulkPreview')
 const { addKeywordRule, rememberCategory } = await import('../../src/renderer/features/import/rules')
 const { confirmedChanges } = await import('@shared/calc/balances')
@@ -454,6 +454,20 @@ describe('reguła tytułu – poprawki po przeglądzie 1.21.0 (T549)', () => {
     expect(rulesNow()).toHaveLength(1)
     lastToast()!.action!.run()
     expect(rulesNow()).toEqual([])
+  })
+
+  it('licznik „Zapisz i zaktualizuj (N)” – tylko te, które reguła zmieni (kierunek, już takie) – jak podgląd', () => {
+    const refund = tx({ amount: 5000, title: 'Zwrot Zara', categoryId: null })
+    const purchase = tx({ amount: -12000, title: 'Zwrot Zara', categoryId: null })
+    const done = tx({ amount: 3000, title: 'Zwrot Zara', categoryId: FOOD })
+    const open = tx({ amount: 2000, title: 'Zwrot Zara', categoryId: null })
+    load([refund, purchase, done, open])
+    const matching = findMatchingByTitle(data.useData.getState().records.transactions, 'zara', open.id)
+    expect(matching).toHaveLength(3)
+    expect(titleRuleChanges(matching, refundRule)).toBe(1)
+    applyTitleRule({ ...refundRule, updateHistory: true })
+    // The preview of the same history (the open one not excluded here): the same ones besides it.
+    expect(useBulkPreview.getState().preview!.plan.before.map((t) => t.id).filter((id) => id !== open.id)).toEqual([refund.id])
   })
 
   it('sama reguła (bez historii) ma „Cofnij”: reguła znika, inne zostają; zmieniona od tego czasu zostaje ze słowem', () => {

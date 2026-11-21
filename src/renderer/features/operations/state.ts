@@ -581,7 +581,7 @@ function tickedEntries(visibleIds: readonly string[]) {
 }
 
 /** The operations docked (their kind stays – `changedBy`). */
-const dockedIds = (): ReadonlySet<string> => new Set(listOf(useData.getState().records.dockings).map((d) => d.transactionId))
+export const dockedIds = (): ReadonlySet<string> => new Set(listOf(useData.getState().records.dockings).map((d) => d.transactionId))
 
 /**
  * The ticked operations shown that a bulk change may write (no drafts, none of a newer version) and the docked ones – what
