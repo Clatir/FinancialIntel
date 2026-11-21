@@ -218,6 +218,11 @@ export interface AppInfo {
    * from another computer (B33); test runs shorten them.
    */
   freeze: { afterOpenMs: number; quietMs: number }
+  /**
+   * The start wizard opens by itself in a new empty folder (UX-79); false – never by itself (test runs that do not test
+   * it: `FI_WIZARD_AUTO=0`). Absent = on.
+   */
+  wizardAuto?: boolean
 }
 
 /**

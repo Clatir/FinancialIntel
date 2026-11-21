@@ -148,6 +148,8 @@ function appEnv(root: string, token: string | null = null): Record<string, strin
     FI_DEFAULT_DATA_DIR: join(root, 'OneDrive', 'FinancialIntel'),
     FI_UPDATE_URL: base,
     FI_UPDATE_CHECK_DELAY_MS: '1000',
+    // The new folder starts on the bridge, not in the start wizard opened by itself (UX-79).
+    FI_WIZARD_AUTO: '0',
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
   }
 }
