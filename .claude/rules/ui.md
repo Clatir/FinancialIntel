@@ -46,8 +46,16 @@ paths:
   zapisy zwracają boolean.
 - `data-testid` w kebab-case z prefiksem ekranu (`operation-…`, `import-…`, `quick-…`, `phone-…`); stan w `data-*`
   (`data-state`, `data-kind`), nie w tekście.
-- Skróty: Ctrl+1…0 ekrany, Ctrl+N nowa operacja (każdy ekran), Ctrl+S zapis, Ctrl+$ ukrycie kwot, Ctrl+Shift+M meldunki,
-  Ctrl+Plus / Minus / Shift+0 rozmiar; ściągawka F1.
+- Skróty: Ctrl+1…0 ekrany, Ctrl+N nowa operacja (każdy ekran), Ctrl+S zapis, Ctrl+Shift+4 ($) ukrycie kwot, Ctrl+Shift+M
+  meldunki, Ctrl+K paleta, Alt+← / → wstecz / dalej, Ctrl+Plus / Minus / Shift+0 rozmiar; ściągawka F1. Format skrótu
+  w menu, palecie, pasku i F1 – tylko `components/shortcuts.ts` (`KEYS`, `pageKeys`; T537). W edytorze operacji
+  Ctrl+Enter zapisuje i zaczyna nowy wpis (UX-73) – wyjście z pola zapisuje i zostawia wpis otwarty.
+- Toasty (T537): czas domyślny `toastMs` (długość tekstu, błąd dłużej), mysz nad toastem go wstrzymuje; podane `ms` to
+  minimum. Kilka toastów z „Cofnij” naraz – E2E szuka właściwego po tekście (`getByTestId('toast').filter(…)`).
+- Zakładki pamiętane na komputerze (`localStorage` z `try/catch`): grupy Ustawień – `settings/settingsNav.ts`
+  (`SETTINGS_GROUPS`, `fi.settings.tab`, T543), zakładki Wywiadu – `intel/tabs.ts` (`INTEL_TABS`, `fi.intel.tab`, T539).
+- Wpływ od domownika z ekranu (Rozliczenia, „Oddał(a) gotówką”, T547) to szkic `newOperation` w edytorze – nigdy zapis
+  wprost z panelu; liczby rozliczeń tylko z `calc/` (ekran ich nie liczy).
 - Ekrany komputera są używane też na telefonie – układ przez `CompactContext` / `Columns`, bez osobnych kopii ekranów.
 - **Nic po cichu (AP-15, T400):** odmowa i przycięcie mają komunikat przy polu (w oknie szybkiego wpisu toasty idą do stopki;
   Enter wstrzymuje tylko odmowa, słowo o przycięciu z tego samego działania wraca z „Zapisano” – T413, T417).
@@ -60,6 +68,7 @@ paths:
 - **Teksty (AP-23, T403):** daty tylko `plDate` / `plDateTime` (dd.mm.rrrr – nigdy ISO ani `toLocaleString`), liczby z
   przecinkiem i minusem „−” (`decimalText`, `percentText`; stopa oszczędności `rateText` zawsze z jednym miejscem),
   liczebniki `countLabel` / `salariesText`, imiesłów zgodny z rzeczownikiem. Kody decyzji (D…, T…, B…, F…, AF-…) i „spec”
-  tylko w komentarzach (`tests/unit/ui-no-codes.test.ts` pada na każdym w tekście). Błąd systemu, JSON, ZIP i zod
+  tylko w komentarzach (`tests/unit/ui-no-codes.test.ts` pada na każdym w tekście); numer wersji („przed 1.7.0”) też –
+  tekst mówi, co się zmieniło („zapisany dawniej …”, UX-67). Błąd systemu, JSON, ZIP i zod
   przechodzi przez `plainError` (`errorMessage` w oknie robi to sam); nowy termin ICT – do `ICT_GLOSSARY`, nowa linia
   Stanu okrętu – dymek z `glossaryOf`.
