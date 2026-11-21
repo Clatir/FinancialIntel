@@ -12,6 +12,7 @@ import { NewerNote } from '../../components/NewerNote'
 import type { FleetState } from '@shared/calc/fleet'
 import { useFleet } from '../../store/fleet'
 import { useRecordList } from '../../store/records'
+import { commitActiveField } from '../../store/ui'
 import { AmountField, DateField, plnText, signedPln, TimeField } from '../../components/fields'
 import { Badge, Empty, Field, Segmented, TextArea, TextField, cx } from '../../components/ui'
 import { IconClose, IconPlus } from '../../components/icons'
@@ -20,7 +21,7 @@ import { plDate, plDateTime } from '../../lib/format'
 import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
 import { AccountSelect, CategorySelect, useAccounts } from './pickers'
-import { changeKind as changeOperationKind, deleteOperation, openOperation, rememberAccount, showBrand, updateOperation } from './state'
+import { changeKind as changeOperationKind, deleteOperation, openOperation, newOperation, rememberAccount, showBrand, updateOperation } from './state'
 import { addOtherSide, joinTransfers, transferEdits, transferIssuesOf, type JoinIssue } from './transfers'
 import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
 import { hintChanges, hintedOf, manualRuleHint, OFFICER_SOURCE_LABEL, officerHint, ruleHintText, type RuleHint } from '@shared/import/officer'
@@ -212,7 +213,19 @@ export function OperationEditor({ id }: { id: string }) {
   )
 
   return (
-    <div className="flex min-h-0 flex-col gap-2.5 p-3 text-[12px]" data-testid="operation-editor">
+    <div
+      className="flex min-h-0 flex-col gap-2.5 p-3 text-[12px]"
+      data-testid="operation-editor"
+      // Ctrl+Enter (UX-73, as in the quick entry): the field in focus is saved and a new entry begins.
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
+        // A window opened from the editor (a portal) keeps its own keys.
+        if (e.target instanceof Element && e.target.closest('[role="dialog"]')) return
+        e.preventDefault()
+        commitActiveField()
+        newOperation()
+      }}
+    >
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-medium text-fg-strong" data-testid="operation-editor-title">
           {isDraft ? 'Nowa operacja' : TX_KIND_LABEL[t.kind]}
