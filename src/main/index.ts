@@ -1124,6 +1124,10 @@ function registerIpc(): void {
     const err = await shell.openPath(dir)
     if (err) throw new Error(err)
   })
+  // The same quit as the tray's „Zakończ”: the window's close path flushes the writes first.
+  handle('quitApp', () => {
+    quitApp()
+  })
   handle('openExternal', async (url: string) => {
     if (!/^https:\/\//i.test(url)) throw new Error('Można otwierać tylko adresy https://')
     await shell.openExternal(url)

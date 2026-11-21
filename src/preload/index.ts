@@ -44,6 +44,7 @@ const api: FiApi = {
   showGhostFolder: (dir) => invoke('showGhostFolder', dir),
   openExternal: (url) => invoke('openExternal', url),
   openLogs: () => invoke('openLogs'),
+  quitApp: () => invoke('quitApp'),
   trayPrefs: () => invoke('trayPrefs'),
   setTrayPrefs: (patch) => invoke('setTrayPrefs', patch),
   rescan: () => invoke('rescan'),

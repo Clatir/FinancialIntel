@@ -7,6 +7,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { IconClose } from './icons'
 import { cx } from './ui'
 
+/** How long the question stays armed without an answer (UX-22). */
+export const ARMED_MS = 10000
+
 export function ConfirmButton({
   children,
   confirmLabel,
@@ -32,13 +35,19 @@ export function ConfirmButton({
   useEffect(() => {
     if (!armed) return
     confirmRef.current?.focus()
+    // Armed for a while only (UX-22): left alone it goes back to the button – a question forgotten on the screen is
+    // not answered by an Enter typed much later.
+    const timer = setTimeout(() => setArmed(false), ARMED_MS)
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
       setArmed(false)
     }
     window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('keydown', onKey, true)
+    }
   }, [armed])
   if (!armed)
     return (
@@ -47,7 +56,14 @@ export function ConfirmButton({
       </button>
     )
   return (
-    <span className="flex flex-wrap items-center gap-1.5" data-testid={testId ? `${testId}-ask` : undefined}>
+    <span
+      className="flex flex-wrap items-center gap-1.5"
+      data-testid={testId ? `${testId}-ask` : undefined}
+      // The focus gone elsewhere (a click, Tab) withdraws the question (UX-22).
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArmed(false)
+      }}
+    >
       {message && <span className="text-[11.5px] text-muted">{message}</span>}
       <button
         ref={confirmRef}

@@ -3,11 +3,12 @@
  * higher class get their screen with the fanfare; a demotion, an achievement and a judged mission come as a toast with
  * one sound – several at once as one toast (the watch log has them all).
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { ACHIEVEMENT_INFO, ACHIEVEMENTS, missionTitle, RANK_LABEL, RANKS, type AchievementId, type Rank } from '@shared/calc/game'
 import { SHIP_CLASS_LABEL, SHIP_CLASSES, type ShipClass } from '@shared/calc/fleet'
 import { useCelebrations, type Celebration } from '../../store/game'
 import { navigate, toast } from '../../store/ui'
+import { useFocusTrap } from '../../components/trap'
 import { playSound } from '../../lib/sounds'
 import { countLabel, plDate } from '../../lib/format'
 import { Insignia } from './CommandPage'
@@ -47,26 +48,40 @@ export function GameCelebrations() {
   useEffect(() => {
     if (head && isBig(head)) playSound('promotion')
   }, [head])
-  useEffect(() => {
-    if (!head || !isBig(head)) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'Enter') {
-        e.preventDefault()
-        e.stopPropagation()
-        shift()
-      }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [head])
   if (!head || !isBig(head)) return null
+  return <BigCelebration head={head} />
+}
+
+/**
+ * The screen of a promotion (UX-21): a dialog with the focus trap – its Enter and Esc are heard only with the focus in
+ * it, never taken from a form under it (the trap moves the focus in when it opens, `Tab` goes round its buttons).
+ */
+function BigCelebration({ head }: { head: Celebration }) {
+  const box = useRef<HTMLDivElement>(null)
+  useFocusTrap(box)
   const rank = head.kind === 'rank' && isRank(head.rank) ? head.rank : null
   const title = rank ? `Awans: ${RANK_LABEL[rank]}` : head.kind === 'class' && isClass(head.cls) ? `Nowa klasa: ${SHIP_CLASS_LABEL[head.cls]}` : ''
   const day = head.kind === 'rank' || head.kind === 'class' ? head.day : ''
   const note = rank ? `Stopień od ${plDate(day)} – dni zgodne z rozkazami i wykonane misje.` : `Zasięg okrętu wzrósł (${plDate(day)}).`
   return (
     <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/70" onMouseDown={() => shift()} data-testid="celebration" data-kind={head.kind}>
-      <div className="relative flex w-[min(420px,92vw)] animate-pop-in flex-col items-center gap-3 overflow-hidden border border-accent/50 bg-panel px-6 py-6" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal>
+      <div
+        ref={box}
+        tabIndex={-1}
+        className="relative flex w-[min(420px,92vw)] animate-pop-in flex-col items-center gap-3 overflow-hidden border border-accent/50 bg-panel px-6 py-6 outline-none"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          // Enter on one of its buttons is that button's click; on the dialog itself – „Do dzieła”.
+          if (e.key === 'Escape' || (e.key === 'Enter' && e.target === e.currentTarget)) {
+            e.preventDefault()
+            e.stopPropagation()
+            shift()
+          }
+        }}
+        role="dialog"
+        aria-modal
+        aria-label="Awans"
+      >
         {rank && <Insignia rank={rank} size={56} />}
         <span className="animate-event-in text-[18px] font-medium text-accent" data-testid="celebration-title">
           {title}

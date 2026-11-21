@@ -496,6 +496,7 @@ export class PhoneHost {
       showGhostFolder: call('showGhostFolder', () => undefined),
       openExternal: call('openExternal', (url: string) => this.d.openUrl(url)),
       openLogs: call('openLogs', () => undefined),
+      quitApp: pcOnly('quitApp'),
       trayPrefs: call('trayPrefs', () => this.tray()),
       setTrayPrefs: call('setTrayPrefs', () => this.tray()),
       rescan: call('rescan', () => undefined),

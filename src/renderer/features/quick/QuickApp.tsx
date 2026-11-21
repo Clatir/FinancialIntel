@@ -576,7 +576,10 @@ export function QuickApp() {
         setD((x) => (x.kind === 'income' ? x : { ...x, impulse }))
         return
       }
-      if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey) {
+      // A button or a list keeps its own Enter (UX-3): „Wyczyść” / „Podziel” act, a list opens – nothing is saved by it.
+      // Ctrl+Enter saves from anywhere.
+      const ownEnter = e.target instanceof HTMLButtonElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLAnchorElement
+      if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !e.shiftKey && !(ownEnter && !e.ctrlKey && !e.metaKey)) {
         e.preventDefault()
         // Ctrl+Enter: saved, and the window stays for the next one (F7); Enter saves and closes (D70).
         const andNext = e.ctrlKey || e.metaKey

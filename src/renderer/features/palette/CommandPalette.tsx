@@ -18,9 +18,11 @@ import { PAGES } from '../screens/pages'
 import { SETTINGS_TABS } from '../settings/SettingsPage'
 import { startWizard } from '../wizard/state'
 import { revealAmounts, toggleHideAmounts, useMachine } from '../../store/machine'
-import { newOperation, openOperation } from '../operations/state'
+import { newOperation, openOperation, resetFilter } from '../operations/state'
 import { openIctj } from '../../store/ictj'
 import { openFirstDocking } from '../dock/state'
+import { KEYS, pageKeys } from '../../components/shortcuts'
+import { readRecent, rememberRecent } from './recent'
 
 const GROUP =
   '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted'
@@ -87,10 +89,10 @@ function Palette() {
 
   const actions: Action[] = useMemo(
     () => [
-      { id: 'new-operation', label: 'Nowa operacja', keys: 'Ctrl N', run: () => void newOperation() },
+      { id: 'new-operation', label: 'Nowa operacja', keys: KEYS.newOperation, run: () => void newOperation() },
       { id: 'wizard', label: 'Kreator startu budżetu', run: () => startWizard() },
       { id: 'quick', label: 'Szybki wpis (okno nad wszystkimi)', run: () => void api.quickOpen() },
-      { id: 'hide-amounts', label: 'Ukryj / pokaż kwoty', keys: 'Ctrl $', run: () => toggleHideAmounts() },
+      { id: 'hide-amounts', label: 'Ukryj / pokaż kwoty', keys: KEYS.hideAmounts, run: () => toggleHideAmounts() },
       ...(hidden
         ? [
             { id: 'reveal-5', label: 'Pokaż ukryte kwoty na 5 minut', run: () => void revealAmounts(5) },
@@ -99,9 +101,9 @@ function Palette() {
         : []),
       { id: 'open-ictj', label: 'Otwórz ICT Trade Journal', run: () => void openIctj(() => navigate({ page: 'settings', tab: 'ictj' })) },
       { id: 'dock', label: 'Dokowanie: następna dostawa z XTB', run: () => (openFirstDocking() ? navigate({ page: 'bridge' }) : toast('Brak dostaw do zadokowania.')) },
-      ...PAGES.map((p) => ({ id: `page-${p.page}`, label: `${p.label} – ${p.sub}`, keys: `Ctrl ${p.key}`, run: () => navigate({ page: p.page }) })),
-      { id: 'sync', label: 'Synchronizacja i problemy', keys: 'Ctrl Shift Y', run: () => navigate({ page: 'sync' }) },
-      { id: 'inbox', label: 'Meldunki do rozpatrzenia', keys: 'Ctrl Shift M', run: () => navigate({ page: 'inbox' }) },
+      ...PAGES.map((p) => ({ id: `page-${p.page}`, label: `${p.label} – ${p.sub}`, keys: pageKeys(p.key), run: () => navigate({ page: p.page }) })),
+      { id: 'sync', label: 'Synchronizacja i problemy', keys: KEYS.sync, run: () => navigate({ page: 'sync' }) },
+      { id: 'inbox', label: 'Meldunki do rozpatrzenia', keys: KEYS.inbox, run: () => navigate({ page: 'inbox' }) },
       ...SETTINGS_TABS.map((t) => ({ id: `settings-${t.id}`, label: `Ustawienia: ${t.label}`, run: () => navigate({ page: 'settings', tab: t.id }) })),
       ...layoutPresets
         .filter((p) => p.page === page)
@@ -109,7 +111,7 @@ function Palette() {
       {
         id: 'save',
         label: 'Zapisz teraz',
-        keys: 'Ctrl S',
+        keys: KEYS.save,
         run: () => void saveNow()
       },
       {
@@ -123,10 +125,21 @@ function Palette() {
               (e) => toast(errorMessage(e), 'error')
             )
       },
+      // UX-78: what the filter of Operacje keeps is cleared from anywhere, and the list shown.
+      {
+        id: 'clear-filters',
+        label: 'Wyczyść filtry Operacji',
+        run: () => {
+          resetFilter()
+          navigate({ page: 'operations' })
+        }
+      },
       { id: 'folder', label: 'Pokaż folder danych w Eksploratorze', run: () => void api.showInFolder(null) },
       { id: 'logs', label: 'Otwórz folder logów', run: () => void api.openLogs().catch((e) => toast(errorMessage(e), 'error')) },
       { id: 'updates', label: 'Sprawdź aktualizacje', run: () => void checkForUpdates().then(() => navigate({ page: 'settings', tab: 'updates' })) },
-      { id: 'help', label: 'Skróty klawiszowe', keys: '?', run: () => window.dispatchEvent(new Event('fi:shortcuts')) }
+      { id: 'help', label: 'Skróty klawiszowe', keys: '?', run: () => window.dispatchEvent(new Event('fi:shortcuts')) },
+      // The app quits through its usual close (the writes first); never offered under „Ostatnio” (`recent.ts`).
+      { id: 'quit', label: 'Zakończ aplikację', run: () => void api.quitApp().catch((e) => toast(errorMessage(e), 'error')) }
     ],
     [layoutPresets, page, hidden]
   )
@@ -139,9 +152,17 @@ function Palette() {
     const ws = fold(query).split(/\s+/).filter(Boolean)
     return ws.length ? actions.filter((a) => ws.every((w) => fold(a.label).includes(w))) : actions
   }, [actions, query])
+  // „Ostatnio” (UX-78): the commands used last, before the rest, while nothing is typed (read at each opening).
+  const [recentIds] = useState(readRecent)
+  const recent = useMemo(
+    () => (query.trim() ? [] : recentIds.map((id) => actions.find((a) => a.id === id)).filter((a): a is Action => !!a)),
+    [recentIds, actions, query]
+  )
+  const rest = useMemo(() => (recent.length ? shownActions.filter((a) => !recent.includes(a)) : shownActions), [shownActions, recent])
 
-  const run = (fn: () => void) => {
+  const run = (fn: () => void, id?: string) => {
     setPalette(false)
+    if (id) rememberRecent(id)
     fn()
   }
   const any = shownActions.length + hits.operations.length + hits.containers.length + hits.goals.length + hits.loans.length + hits.members.length + hits.settings.length > 0
@@ -169,10 +190,20 @@ function Palette() {
           />
           <Command.List className="max-h-[52vh] overflow-y-auto p-1">
             {!any && <div className="px-3 py-4 text-muted">Nic nie znaleziono.</div>}
-            {shownActions.length > 0 && (
+            {recent.length > 0 && (
+              <Command.Group heading="Ostatnio" className={GROUP} data-testid="palette-recent">
+                {recent.map((a) => (
+                  <Command.Item key={a.id} value={`recent:${a.id}`} onSelect={() => run(a.run, a.id)} className={ITEM} data-testid="palette-recent-item">
+                    <span className="flex-1">{a.label}</span>
+                    {a.keys && <Kbd>{a.keys}</Kbd>}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
+            {rest.length > 0 && (
               <Command.Group heading="Akcje" className={GROUP}>
-                {shownActions.map((a) => (
-                  <Command.Item key={a.id} value={`action:${a.id}`} onSelect={() => run(a.run)} className={ITEM}>
+                {rest.map((a) => (
+                  <Command.Item key={a.id} value={`action:${a.id}`} onSelect={() => run(a.run, a.id)} className={ITEM}>
                     <span className="flex-1">{a.label}</span>
                     {a.keys && <Kbd>{a.keys}</Kbd>}
                   </Command.Item>

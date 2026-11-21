@@ -366,6 +366,8 @@ export interface FiApi {
   openExternal(url: string): Promise<void>
   /** Opens the folder of this computer's application log (userData/logs) in the file manager. */
   openLogs(): Promise<void>
+  /** The application quits for real (the palette's „Zakończ aplikację”, UX-78): the usual close – the writes first, not to the tray. */
+  quitApp(): Promise<void>
   /**
    * Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows); `loginEntry` = the
    * system starts this copy now (its entry), null = not known; `loginDisabled` = its entry turned off in Task Manager (T433).
