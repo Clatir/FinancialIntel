@@ -24,7 +24,7 @@ filtra godzin Killzones w Operacjach **nie** ma (nowa funkcja); `MonthField` pok
 | U2 | Radar: „osłony po” wiersza zbiorczego zaległych | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 20–30 min | ✅ 21.11 (16 min) |
 | U3 | Słowa w toastach i imporcie, toast `settleDue` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 20–30 min | ✅ 21.11 (10 min) |
 | U4 | Nawigacja i menu | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | ✅ 21.11 (15 min) |
-| U5 | Edytor i pola | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 45–60 min | |
+| U5 | Edytor i pola | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 45–60 min | ✅ 21.11 (19 min) |
 | U6 | Wydajność Mostku i Rozliczeń | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–20 min | ✅ 21.11 (9 min) |
 | U7 | Stabilność testów, skrypty `tests/audyt/*` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 30–45 min | |
 | U8 | Pełne testy + E2E, `/code-review` (xhigh: U1, U2; high: reszta), CHANGELOG `## 1.21.1`, wersja, PR, CI, wydanie | sesja główna | Opus 5.5 · high | 45–60 min + CI | |
