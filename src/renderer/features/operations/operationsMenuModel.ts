@@ -144,7 +144,7 @@ export function buildMenu(input: MenuInput): MenuNode[] {
     'category',
     'Kategoria',
     [
-      { type: 'search', id: 'category-search', query, none: !shownCategories.length },
+      { type: 'search', id: 'category-search', query, none: !!query.trim() && !shownCategories.length },
       ...shownCategories.map((c) => ({ type: 'leaf', id: `category-${c.id}`, label: c.sub && !query.trim() ? `· ${c.name}` : c.label, command: { type: 'category', categoryId: c.id, label: c.label } }) as MenuLeaf)
     ],
     null

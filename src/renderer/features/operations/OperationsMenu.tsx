@@ -267,7 +267,13 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
             (open || nav.focus === node.id) && !node.disabled && 'bg-hover',
             node.type === 'leaf' && node.danger && 'text-down'
           )}
-          onMouseEnter={() => setNav((n) => hoverItem(root, n, depth, node.id))}
+          onMouseEnter={() => {
+            // A field of the menu being typed in keeps the focus: the list under a resting mouse changes with every letter,
+            // and an item that comes under it must not take the focus (nor the Enter) from the field. A submenu still opens.
+            const typing = document.activeElement instanceof HTMLInputElement && !!document.activeElement.closest('[data-operations-menu]')
+            if (typing && node.type !== 'sub') return
+            setNav((n) => hoverItem(root, n, depth, node.id))
+          }}
           onClick={() => {
             if (node.type === 'sub') setNav((n) => hoverItem(root, n, depth, node.id))
             else void run(node)

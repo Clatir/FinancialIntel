@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { addMonths, daysInMonth, monthsBetween, warsawNow } from '@shared/calc/dates'
 import { glossaryOf } from '@shared/glossary'
 import { nextDueOf, paymentsIndex } from '@shared/calc/cargoStatus'
@@ -125,6 +125,12 @@ export function CargoPage() {
   const watch = useCargoWatch()
   const proposals = watch.proposals
   const ignored = useData((s) => s.fi?.settings.cargo.ignored.length ?? 0)
+  // A tick of a proposal that has left the list (added, hidden) goes with it – it never comes back ticked.
+  useEffect(() => {
+    if (!fleet) return
+    const live = new Set(proposals.map((p) => p.key))
+    if (pickedDraft.keys.some((k) => !live.has(k))) setPickedDraft({ keys: pickedDraft.keys.filter((k) => live.has(k)) })
+  }, [fleet, proposals, pickedDraft, setPickedDraft])
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const sim = (change: Parameters<typeof simulateCargo>[1]) =>
     simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)

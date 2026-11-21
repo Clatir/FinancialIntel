@@ -104,13 +104,15 @@ test('ładownia pilnuje cen i opłat (1.9.0, F9, F23): nowa cena z „Zaktualizu
     await expect(proposal('WODOCIĄGI').getByTestId('cargo-proposal-cycle')).toHaveText('co 2 miesiące')
     await expect(proposal('ENERGA').getByTestId('cargo-proposal-cycle')).toHaveText('co miesiąc · zmienna')
     await expect(proposal('ENERGA')).toContainText('230,00 zł')
-    // „Nie proponuj” – gone until „proponuj znowu”.
+    // „Nie proponuj” – gone until „proponuj znowu”; a tick it had does not come back with it.
+    await proposal('WODOCIĄGI').getByTestId('cargo-proposal-pick').check()
     await proposal('WODOCIĄGI').getByTestId('cargo-proposal-ignore').click()
     await expect(proposal('WODOCIĄGI')).toHaveCount(0)
     await expect(page.getByTestId('cargo-proposals-unignore')).toHaveText('Ukryte propozycje: 1 – proponuj znowu')
     await expect.poll(async () => (await json(join(dir, 'fi.json'))).settings.cargo.ignored.length).toBe(1)
     await page.getByTestId('cargo-proposals-unignore').click()
     await expect(proposal('WODOCIĄGI')).toHaveCount(1)
+    await expect(proposal('WODOCIĄGI').getByTestId('cargo-proposal-pick')).not.toBeChecked()
     // The variable bill to the hold.
     await proposal('ENERGA').getByTestId('cargo-proposal-add').click()
     await expect(page.getByTestId('container-variable')).toBeChecked()

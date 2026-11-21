@@ -249,6 +249,12 @@ describe('kategoria, finansujący, rodzaj, usuń', () => {
     expect(opened).toEqual({ path: ['category'], focus: 'category-search' })
   })
 
+  it('kategoria: „none” tylko przy wpisanym fragmencie – pusta lista bez wpisu nie mówi „Żadna kategoria…”', () => {
+    expect(sub(buildMenu(input([tx()], { categories: [] })), 'category').items).toEqual([{ type: 'search', id: 'category-search', query: '', none: false }])
+    expect(sub(buildMenu(input([tx()], { categories: [], categoryQuery: '  ' })), 'category').items[0]).toMatchObject({ none: false })
+    expect(sub(buildMenu(input([tx()], { categoryQuery: 'zzz' })), 'category').items[0]).toMatchObject({ none: true })
+  })
+
   it('rodzaj: bez korekty; przelew – podmenu kont drugiej strony', () => {
     const kinds = sub(buildMenu(input([tx()])), 'kind').items
     expect(kinds.some((n) => n.id === 'kind-correction')).toBe(false)

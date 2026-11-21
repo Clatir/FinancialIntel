@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addDays, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
+import { openForm } from './forms'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -38,6 +39,11 @@ test('menu pod prawym przyciskiem: szukanie kategorii – pole na górze, filtr,
     await search.fill('PALIW')
     await expect(page.getByTestId(`operations-menu-category-${FUEL}`)).toHaveText('Auto · paliwo')
     await expect(page.getByTestId(`operations-menu-category-${GROCERIES}`)).toHaveCount(0)
+    // The mouse over an item that appears under it does not take the focus from the field – typing goes on.
+    await page.getByTestId(`operations-menu-category-${FUEL}`).hover()
+    await expect(search).toBeFocused()
+    await page.keyboard.type('o')
+    await expect(search).toHaveValue('PALIWo')
     await search.fill('zzz')
     await expect(page.getByTestId('operations-menu-category-none')).toBeVisible()
     await expect(page.getByTestId(`operations-menu-category-${FUEL}`)).toHaveCount(0)
@@ -45,6 +51,37 @@ test('menu pod prawym przyciskiem: szukanie kategorii – pole na górze, filtr,
     await search.press('Enter')
     await expect(page.getByTestId('operations-menu')).toHaveCount(0)
     await expect.poll(async () => (await records(dir, 'transactions'))[0]?.categoryId).toBe(FUEL)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+// U5: Esc in a month field the focus only came to is not the field's – the window hears it; a real edit is taken back by it.
+test('pole miesiąca: Esc bez wpisu idzie dalej, Esc po wpisie cofa wpis', async () => {
+  const { month } = warsawNow()
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-u5-month-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start: `${month}-01` } }),
+    records: { balances: [{ date: `${month}-01`, accountId: MBANK, kind: 'opening', amount: zl(20000) }] }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+6')
+    await openForm(page, 'goal')
+    const field = page.getByTestId('starmap-new-deadline')
+    await page.evaluate("window.__escapes = 0; window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__escapes++ })")
+    await field.click()
+    await expect(field).toBeFocused()
+    await field.press('Escape')
+    await expect.poll(() => page.evaluate('window.__escapes')).toBe(1)
+    // A typed month taken back: the field's own Esc, the window does not hear it.
+    await field.click()
+    await field.fill('2027-06')
+    await field.press('Escape')
+    await expect(field).toHaveValue('')
+    expect(await page.evaluate('window.__escapes')).toBe(1)
     expect(errors).toEqual([])
   } finally {
     await app.close()

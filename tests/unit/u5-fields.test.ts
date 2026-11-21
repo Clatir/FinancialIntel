@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 // The fields import the stores, which talk to the main process through window.fi.
 vi.stubGlobal('window', { fi: {} })
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined })
-const { readDateDraft, monthFieldText } = await import('../../src/renderer/components/fields')
+const { readDateDraft, monthFieldText, readMonthDraft } = await import('../../src/renderer/components/fields')
 
 // U5 (c), (b): the date field with an empty value (the period's open ends) and the month field's wording.
 
@@ -33,5 +33,23 @@ describe('monthFieldText: miesiąc słownie', () => {
     expect(monthFieldText('2026-11')).toBe('listopad 2026')
     expect(monthFieldText('2027-06')).toBe('czerwiec 2027')
     expect(monthFieldText(null)).toBe('')
+  })
+})
+
+describe('readMonthDraft: tylko prawdziwa zmiana jest edycją', () => {
+  it('draft z fokusu (równy startowi) albo brak draftu – bez edycji, także gdy wartość zmieniła się pod polem', () => {
+    expect(readMonthDraft(null, '2026-11')).toEqual({ edited: false })
+    expect(readMonthDraft('2026-11', '2026-11')).toEqual({ edited: false })
+    expect(readMonthDraft('', '', true)).toEqual({ edited: false })
+    // Not even for an empty field that may not stay empty: passing through it says nothing.
+    expect(readMonthDraft('', '', false)).toEqual({ edited: false })
+  })
+
+  it('wpis: formy miesiąca, opróżnienie tylko przy allowEmpty, nieczytelny – invalid', () => {
+    expect(readMonthDraft('3/2027', '2026-11')).toEqual({ edited: true, month: '2027-03', invalid: false })
+    expect(readMonthDraft('03.2027', '')).toEqual({ edited: true, month: '2027-03', invalid: false })
+    expect(readMonthDraft('', '2026-11', true)).toEqual({ edited: true, month: null, invalid: false })
+    expect(readMonthDraft('', '2026-11', false)).toMatchObject({ edited: true, invalid: true })
+    expect(readMonthDraft('2027-13', '2026-11', true)).toMatchObject({ edited: true, invalid: true })
   })
 })

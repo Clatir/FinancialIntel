@@ -182,6 +182,17 @@ export function DateField(props: DateFieldProps) {
 export const monthFieldText = (value: string | null): string => (value ? monthLabel(value) : '')
 
 /**
+ * What the month field's draft means. `start` is the plain text the focus put in (the value of that moment): a draft equal
+ * to it is no edit – nothing is saved, Esc is not the field's, and a value changed under the field in the meantime
+ * („Cofnij”, a reload) stays what the field shows. An edit: the month (`null` – emptied) or `invalid` when it cannot be read.
+ */
+export function readMonthDraft(draft: string | null, start: string, allowEmpty?: boolean): { edited: false } | { edited: true; month: string | null; invalid: boolean } {
+  if (draft == null || draft === start) return { edited: false }
+  const month = parseMonthInput(draft)
+  return { edited: true, month: month ?? null, invalid: month === undefined || (month === null && !allowEmpty) }
+}
+
+/**
  * A month shown in words („listopad 2026”); typed as RRRR-MM, 03.2027 or 3/2027 – the focus brings the plain RRRR-MM to
  * edit. Empty = none when `allowEmpty`. Saved on leaving the field or Enter (B1): a month half typed never saves, one that
  * cannot be read goes back to the saved one with a message.
@@ -203,15 +214,18 @@ export function MonthField({
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // The plain text of the value when the focus came – what an untouched draft equals.
+  const start = useRef('')
   // Escape: the blur it causes runs with this render's draft – it must not save it.
   const cancelled = useRef(false)
-  const parsed = draft == null ? value : parseMonthInput(draft)
-  const invalid = draft != null && (parsed === undefined || (parsed === null && !allowEmpty))
+  const read = readMonthDraft(draft, start.current, allowEmpty)
+  const invalid = read.edited && read.invalid
   return (
     <input
       className={cx('input num', className)}
       spellCheck={false}
-      value={draft ?? monthFieldText(value)}
+      // Focused and untouched: the plain value as it is now (it may have changed under the field).
+      value={read.edited ? draft! : draft != null ? (value ?? '') : monthFieldText(value)}
       placeholder={placeholder}
       aria-invalid={invalid}
       aria-label={rest['aria-label']}
@@ -219,7 +233,8 @@ export function MonthField({
       onFocus={(e) => {
         // The plain month to edit (typing replaces it – it is selected, as AmountField does it); only while the field
         // still has the focus, `select()` would pull it back otherwise.
-        setDraft(value ?? '')
+        start.current = value ?? ''
+        setDraft(start.current)
         const el = e.currentTarget
         requestAnimationFrame(() => {
           if (document.activeElement === el) el.select()
@@ -227,17 +242,17 @@ export function MonthField({
       }}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        // A draft the focus made and nothing typed into is no edit – passing through an empty field says nothing.
-        if (draft != null && draft !== (value ?? '') && !cancelled.current) {
-          if (invalid) toast(`Nieprawidłowy miesiąc – zostaje ${value ? 'poprzedni' : 'pusty'} (wpisz RRRR-MM${allowEmpty ? ' albo zostaw puste' : ''}).`, 'error')
-          else if (parsed !== value) onChange(parsed ?? null)
+        if (read.edited && !cancelled.current) {
+          if (read.invalid) toast(`Nieprawidłowy miesiąc – zostaje ${value ? 'poprzedni' : 'pusty'} (wpisz RRRR-MM${allowEmpty ? ' albo zostaw puste' : ''}).`, 'error')
+          else if (read.month !== value) onChange(read.month)
         }
         cancelled.current = false
         setDraft(null)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape' && draft != null) {
+        // Only a real edit is taken back by Esc; otherwise it is not the field's (the window, a dialog hears it).
+        if (e.key === 'Escape' && read.edited) {
           e.stopPropagation()
           cancelled.current = true
           setDraft(null)
