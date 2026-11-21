@@ -3983,8 +3983,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   `update.ts`); potwierdzone 21.11.2026: panel Rozliczeń znika bez sald i osób poza „Dom” (T547), pasek miesiąca
   z kopert codziennych (T540), krok „Pensja i koperty” przy planie odziedziczonym zrobiony (T545). Poprawki przeglądu:
   reguła tytułu z historią zmienia tylko operacje swojego kierunku (`direction`, jak import; otwarta – `openId` – bierze
-  ją jak w edytorze), znak przy przelewie / pożyczce zostaje; licznik „Zapisz i zaktualizuj (N)” = `titleRuleChanges`
-  (pasujące i nie „już takie” – jak podgląd); `applyBulk` nie nadpisuje operacji zmienionych od podglądu (zostają ze
+  ją jak w edytorze), znak przy przelewie / pożyczce zostaje; licznik „Zapisz i zaktualizuj (N)” = `titleRulePlan` (plan podglądu:
+  kierunek, nie „już takie”, z otwartą, bez szkiców); `applyBulk` nie nadpisuje operacji zmienionych od podglądu (zostają ze
   słowem; nic zapisanego – reguła też nie); „Cofnij” samej reguły (`rulesUndo`). Kreator otwiera się sam także po
   zmianie folderu z Ustawień i po zdjęciu „tylko do odczytu”; „Cofnij” „Koperty ze średnich” usuwa nietkniętą kopię
   planu; link „rozlicz na Radarze” tylko przy `settlementsShown`; „Wyłącz / Włącz wszystkie” z „Cofnij”.

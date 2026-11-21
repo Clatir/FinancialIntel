@@ -9,7 +9,7 @@ import { CategoryField, useAccounts } from './pickers'
 import { FinancerSelect } from '../household/MemberPickers'
 import { useMembers } from '../household/actions'
 import { NO_CATEGORY_REFUSAL } from '../import/rules'
-import { applyTitleRule, findMatchingByTitle, titleKeyword, titleRuleChanges, type TitleRuleInput } from './titleRules'
+import { applyTitleRule, findMatchingByTitle, titleKeyword, titleRulePlan, type TitleRuleInput } from './titleRules'
 
 const TYPE_OPTIONS = [
   { value: 'refund', label: 'Zwrot / kategoria' },
@@ -54,6 +54,9 @@ function TitleRulePopover({
   patch: (p: Partial<Transaction>) => void
 }) {
   const transactions = useData((s) => s.records.transactions)
+  // Read by the count's plan (`titleRulePlan`): a draft or a docking changed – counted again.
+  const drafts = useData((s) => s.drafts)
+  const dockings = useData((s) => s.records.dockings)
   const members = useMembers()
   const accounts = useAccounts()
 
@@ -115,8 +118,13 @@ function TitleRulePopover({
     // Ticked while another keyword found some: none now – the rule only.
     updateHistory: updateHistory && matching.length > 0
   })
-  // The ones the rule changes (T549): of its direction, not already so – as the preview counts them.
-  const changes = updateHistory && matching.length > 0 ? titleRuleChanges(matching, inputOf()) : 0
+  // The ones the rule changes (T549) – the preview's own plan: of its direction, not already so, the open operation
+  // with them, no drafts and none of a newer version. Computed again only when what it reads changes.
+  const changes = useMemo(
+    () => (updateHistory && matching.length > 0 ? titleRulePlan(inputOf(), t).plan.before.length : 0),
+    // `inputOf` reads exactly the state listed.
+    [updateHistory, matching, drafts, dockings, t, keyword, title, activeKind, selectedType, categoryId, targetCounterparty, refundable, memberId, gift, counterAccountId, inflowKind]
+  )
 
   const handleApply = (close: () => void) => {
     const input = inputOf()
