@@ -578,7 +578,9 @@ function NewGoal({ readOnly }: { readOnly: boolean }) {
         <input className="input h-[26px]" placeholder="Nazwa, np. Rower" value={name} maxLength={80} disabled={readOnly} onChange={(e) => setName(e.currentTarget.value)} data-testid="starmap-new-name" />
         <div className="flex items-center gap-2">
           <AmountField className="h-[26px] w-[130px]" value={target} allowEmpty onChange={setTarget} aria-label="Kwota nowego celu" data-testid="starmap-new-target" />
-          <input type="month" className="input h-[26px] w-[150px]" value={deadline} disabled={readOnly} onChange={(e) => setDeadline(e.currentTarget.value)} aria-label="Termin nowego celu" />
+          <fieldset disabled={readOnly} className="contents">
+            <MonthField className="h-[26px] w-[150px]" value={deadline || null} allowEmpty placeholder="Termin RRRR-MM" onChange={(m) => setDeadline(m ?? '')} aria-label="Termin nowego celu" data-testid="starmap-new-deadline" />
+          </fieldset>
         </div>
         <button className="btn btn-accent h-[26px] self-start" disabled={readOnly} onClick={add} data-testid="starmap-new-add">
           Dodaj cel

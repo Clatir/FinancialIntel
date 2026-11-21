@@ -166,6 +166,11 @@ export function tickRow(id: string, on: boolean): void {
   useOperationsUi.setState({ tickAnchor: id })
 }
 
+/** A row outside the ticked ones becomes the only one ticked (as under the right button and for Delete, UX-71). */
+export function tickOnly(id: string): void {
+  if (!useOperationsUi.getState().ticked[id]) useOperationsUi.setState({ ticked: { [id]: true }, tickAnchor: id })
+}
+
 /** A plain click on a row: the anchor moves, the ticked set stays as it is (D105). */
 export function anchorTick(id: string): void {
   if (useOperationsUi.getState().tickAnchor !== id) useOperationsUi.setState({ tickAnchor: id })
