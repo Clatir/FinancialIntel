@@ -42,6 +42,23 @@ do gałęzi grupy. Słownik pojęć bez zmian (D106 pkt 1) – żaden krok nie z
 Razem ok. 9–13 h (z górką). Fale: Z1–Z5 równolegle; Z6–Z10 po scaleniu fali 1; Z11–Z13 po fali 2 (Z11 i Z12 – kreator,
 Z12 po Z11). Numery T: Z1 T535 … Z13 T547 (kolejno), Z14 – T548.
 
+### Stan Z14 (21.11.2026, sesja lokalna – przerwana limitem)
+- Scalone na gałęzi grupy (6f3e54a): Z6b (+ kolumny Radaru przy 1024 px, dzień po terminie w akcencie), Z12, E2E
+  `import`/`notes`, teksty bez wersji, `ui.md`, T535–T549, CHANGELOG `## 1.21.0`, wersja 1.21.0, poprawki przeglądu
+  high (A–E, 9719d50) i xhigh cz. 1 (reguła tytułu / `applyBulk`, 6f3e54a). Potwierdzone przez użytkownika: trzy T
+  z „Do Z14”, autostart w Szybkim starcie, „pusty folder” = bez startu i rekordów, bez akcji „Zapłacone poza budżetem”.
+- **W toku:** wykonawca xhigh cz. 2 w drzewie `.claude/worktrees/agent-a343728086a38309c` (bez commitu): kreator sam po
+  zmianie folderu z Ustawień / po zdjęciu tylko do odczytu (`wizard/state.ts`), „Cofnij” „Koperty ze średnich” usuwa
+  nietkniętą kopię planu (`month/actions.ts`), „osłony po” wiersza zbiorczego z ostatniego terminu (`radar/rows.ts`),
+  link „rozlicz na Radarze” tylko przy panelu rozliczeń (`BridgePage.tsx`). Przejrzeć diff, commit w drzewie, scalić.
+- **Zostało:** licznik „Zapisz i zaktualizuj (N)” w `TitleRuleAction.tsx` liczyć przez `bulkApplies` (kierunek);
+  `npm test`, build, pełne E2E (ostatnio: `ictj:174` znane, `system:195` i `z2-undo:32` niestabilne lokalnie); druga
+  runda `/code-review` tylko na poprawkach (9719d50, 6f3e54a, cz. 2); dopisać T549 (zdania z raportów); PR → CI → D71
+  → wydanie → archiwum; usunąć drzewa `.claude/worktrees/agent-*` (najpierw łącze `node_modules`).
+- Uwagi na później (przegląd): wstecz w Ustawieniach (`sameRoute` z zapamiętaną zakładką), „prezent od / dla” w
+  toastach i imporcie, „Skategoryzuj pozostałe (N)” liczy tylko import, Tab w menu „Podziel…”, szkic manewru po zmianie
+  miesiąca, `useInboxCount` liczony 2–3 razy na Mostku, wiersze `SettlementsPanel` bez `memo`.
+
 ### Kontrakt (wspólne)
 - Każdy krok: test, który bez zmiany pada (unit, gdzie się da; E2E dla przepływów klawiatury i ekranów), `npm run
   typecheck`, powiązane pliki testów. Istniejące E2E, które zmiana psuje (teksty, `data-testid`), poprawić w tym kroku.
