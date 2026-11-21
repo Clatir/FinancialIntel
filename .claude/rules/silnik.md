@@ -101,7 +101,7 @@ paths:
   startu; „Zapłacone (dziś)” (`payToday`) – płatność dziś policzona tą regułą; niezapłacony termin wcześniejszego
   miesiąca zostaje (`CargoStatus.carried`) do zapłaty – konsument mapujący stan po kontenerze filtruje `!carried`.
   Zaległe po kontenerze (T540: odprawa jedną linią, meldunek „Zaległe opłaty”; T548: wiersz listy Radaru –
-  `radar/rows.ts`, kalendarz bez zmian) – `lateFees` / `lateFeeText` / `lateFeeSpan` nad tym stanem, nigdy własna
+  `radar/rows.ts`, kalendarz bez zmian; „osłony po” – bieżąca suma według linii osłon, T551) – `lateFees` / `lateFeeText` / `lateFeeSpan` nad tym stanem, nigdy własna
   reguła; powiadomienia dalej raz na termin.
   Terminy naprzód na dniu z historii (`cargoDays` → `payDays`, `nextDueOf`), nigdy wprost z `dueDay`; `dueAt` – dzień
   ustawiony ręcznie. **Pułapka (T398):** płatność z datą po dziś płaci termin dopiero w swoim dniu – stan liczy płatności

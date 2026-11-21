@@ -42,6 +42,8 @@ paths:
   czyste `operations/pick.ts`. Lista otwarta ma własny Enter (wybór, nic nie zapisuje) i własny Esc (`ownsEscape`:
   `Modal` i Esc szybkiego wpisu go pomijają). Kontrahent – `CounterpartyField` (podpowiedzi z historii, maks. 8, Enter
   tylko po strzałce). „Podziel…” – jeden przycisk z menu (`SplitMenu`).
+  Lista w portalu ustawia `aria-controls` na polu – `Popover` ignoruje klik tylko w listę swojego pola (`inOwnList`, T553).
+  Słowa finansowania domownika w komunikatach – tylko `financeLabel` (`household/financeWords.ts`, T552).
 - Zapis zablokowany przy folderze tylko do odczytu albo w trakcie przełączania (`canWrite`, `useFolderLocked`);
   zapisy zwracają boolean.
 - `data-testid` w kebab-case z prefiksem ekranu (`operation-…`, `import-…`, `quick-…`, `phone-…`); stan w `data-*`
@@ -54,6 +56,7 @@ paths:
   minimum. Kilka toastów z „Cofnij” naraz – E2E szuka właściwego po tekście (`getByTestId('toast').filter(…)`).
 - Zakładki pamiętane na komputerze (`localStorage` z `try/catch`): grupy Ustawień – `settings/settingsNav.ts`
   (`SETTINGS_GROUPS`, `fi.settings.tab`, T543), zakładki Wywiadu – `intel/tabs.ts` (`INTEL_TABS`, `fi.intel.tab`, T539).
+  Trasa Ustawień w historii trzyma zakładkę po nazwie (`resolveRoute` w `navigate`, T553).
 - Wpływ od domownika z ekranu (Rozliczenia, „Oddał(a) gotówką”, T547) to szkic `newOperation` w edytorze – nigdy zapis
   wprost z panelu; liczby rozliczeń tylko z `calc/` (ekran ich nie liczy). Panel i każdy link do niego („rozlicz na
   Radarze”) – tylko według `settlementsShown` (`radar/settlements.ts`).
