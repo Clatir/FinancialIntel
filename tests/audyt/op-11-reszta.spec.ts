@@ -168,6 +168,9 @@ test('OP.38 reguła dla tytułu', async () => {
     await snap(page, 'OP.38-panel')
     const before = await f()
     await page.getByTestId('title-rule-apply-btn').click()
+    // 1.21.0 (T535): the history through the bulk changes' preview.
+    say('OP.38 podgląd zmian', await opt(page.getByTestId('operations-bulk-dialog')))
+    await page.getByTestId('operations-bulk-confirm').click()
     await page.waitForTimeout(900)
     const after = await f()
     say('OP.38 po zapisie', { toast: await toasts(page), przed: before, po: after, reguły: rules() })
@@ -181,6 +184,7 @@ test('OP.38 reguła dla tytułu', async () => {
     await page.getByTestId('title-rule-category').selectOption({ label: 'Jedzenie · na mieście' })
     await page.getByTestId('title-rule-update-history').check()
     await page.getByTestId('title-rule-apply-btn').click()
+    await page.getByTestId('operations-bulk-confirm').click()
     await page.waitForTimeout(900)
     await page.keyboard.press('Control+4')
     await page.waitForTimeout(800)

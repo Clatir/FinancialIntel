@@ -5,9 +5,27 @@
  */
 import { addDays, daysBetween } from '@shared/calc/dates'
 import { withKind } from '@shared/calc/kinds'
-import { shareOf } from '@shared/calc/share'
+import { shareOf, withAmount, withShare } from '@shared/calc/share'
 import { MAX_TAGS, tagKey, tagsOf, withTags } from '@shared/calc/tags'
-import type { Transaction, TxKind } from '@shared/schema'
+import { sameContentAs } from '@shared/merge'
+import { HOUSE_MEMBER_ID, type Share, type Transaction, type TxKind } from '@shared/schema'
+
+/**
+ * What „Ustaw regułę dla tytułu” decides for the operations its title fits (T535): the kind, the sign (a refund – an
+ * expense's money in), the category and who finances (a member, their gift, several people) or whose money an income is.
+ */
+export interface TitleTarget {
+  kind: TxKind
+  direction: 'in' | 'out' | null
+  categoryId?: string | null
+  refundable?: boolean
+  household?: boolean
+  memberId?: string | null
+  gift?: boolean
+  share?: Share | null
+  counterAccountId?: string | null
+  inflowKind?: 'repay' | 'income' | 'advance'
+}
 
 /**
  * A change of the ticked operations at once (F11, D105): deleted, moved onto another account, another kind, a shifted
@@ -31,6 +49,8 @@ export type BulkChange =
   /** Paid from a goal's money (null – not from a goal); a goal takes the container off. */
   | { kind: 'goal'; goalId: string | null }
   | { kind: 'loan'; loanId: string | null }
+  /** „Ustaw regułę dla tytułu” with the history (T535): the operations its title fits take the rule's decision. */
+  | { kind: 'titleRule'; rule: TitleTarget }
 
 /** The menu's mark of a change (D105): in effect on every ticked operation it fits (✓), on some („—”), on none. */
 export type OpState = 'on' | 'mixed' | 'off'
@@ -55,6 +75,39 @@ function without<K extends 'tags' | 'explained'>(t: Transaction, key: K): Transa
   const out = { ...t }
   delete out[key]
   return out
+}
+
+/**
+ * An operation with a title rule's decision (T535) – the rule's fields as the title rule set them before 1.21.0, on the
+ * operation of another kind as „Zmień rodzaj” leaves it (`withKind`: links of the old kind go); its amount through
+ * `withAmount` (a shared purchase's lines follow it), a shared purchase made one line again when the rule says one
+ * payer (`withShare` – never its lines left without their description). Whether it fits – `changedBy`.
+ */
+export function titleRuled(before: Transaction, r: TitleTarget): Transaction {
+  const kindChanged = r.kind !== before.kind
+  // A kind change drops the lines and the purchases paid back too, as the title rule always did.
+  const k = kindChanged ? { ...withKind(before, r.kind), splits: [], covers: [], coversOpening: undefined, coversOpeningMembers: undefined } : before
+  const abs = Math.abs(k.amount)
+  const amount = r.kind === 'expense' ? (r.direction === 'in' ? abs : -abs) : r.kind === 'income' ? abs : k.amount
+  const t = amount === k.amount ? k : withAmount(k, amount)
+  const base = { ...t, categoryId: null, refundable: false, memberId: null, gift: undefined, counterAccountId: null, advance: false, inflowKind: undefined }
+  if (r.kind === 'expense') {
+    const refundable = !!r.refundable
+    const categoryId = r.categoryId ?? null
+    if (!refundable && r.share) return withShare({ ...base, categoryId }, r.share)
+    const plain = shareOf(t) ? withShare(base, null) : base
+    return { ...plain, categoryId, refundable, memberId: refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : null, gift: refundable && r.gift ? true : undefined }
+  }
+  if (r.kind === 'income') {
+    const household = r.household ?? !!r.memberId
+    return { ...base, memberId: household ? (r.memberId ?? HOUSE_MEMBER_ID) : null, advance: household && r.inflowKind === 'advance', inflowKind: household ? r.inflowKind : undefined }
+  }
+  if (r.kind === 'transfer') {
+    const counter = r.counterAccountId ?? null
+    // Another account: its bank row and day go (as „Zmień rodzaj” – `changedBy` 'kind').
+    return { ...base, counterAccountId: counter, ...(counter !== t.counterAccountId ? { counterBank: undefined, counterDate: undefined } : {}) }
+  }
+  return base
 }
 
 /**
@@ -126,6 +179,16 @@ export function changedBy(t: Transaction, c: BulkChange, docked: ReadonlySet<str
       // The loan's own operation only: an inflow's lines repaying a loan (D100) are its parts, never changed in bulk.
       if (t.kind !== 'loan' || splitReceipt(t)) return null
       return t.loanId === c.loanId ? t : { ...t, loanId: c.loanId }
+    case 'titleRule': {
+      const r = c.rule
+      // As „Zmień rodzaj”: a docked one keeps its kind, a transfer never goes onto its own account.
+      if ((docked.has(t.id) && t.kind !== r.kind) || (r.kind === 'transfer' && r.counterAccountId && r.counterAccountId === t.accountId)) return null
+      // A split receipt (or an income's parts) of the same kind: its lines say the category and who pays – the editor
+      // sets none on the operation (`categorizeTicked` skips it too).
+      if (t.kind === r.kind && (t.kind === 'expense' || t.kind === 'income') && splitReceipt(t)) return null
+      const next = titleRuled(t, r)
+      return sameContentAs(next, t) ? t : next
+    }
   }
 }
 

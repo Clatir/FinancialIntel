@@ -33,7 +33,9 @@ paths:
   Ctrl / Shift / strzałki; kotwica `tickAnchor` czyszczona z filtrem). Nowa zmiana zbiorcza = wariant `BulkChange`
   w `bulkModel.ts` (`changedBy`: ta sama referencja – bez zmian, `null` – nie pasuje; warunki jak edytor), menu PPM
   (`OperationsMenu.tsx`, model `operationsMenuModel.ts`) i pasek wołają te same `bulkPlan` / `applyBulk`; zmiana pól
-  pieniędzy – przez wspólny podgląd (`bulkPreview.ts`), przełącznik – `applyBulk(..., { keepTicked: true })`.
+  pieniędzy – przez wspólny podgląd (`bulkPreview.ts`), przełącznik – `applyBulk(..., { keepTicked: true })`. Zmiana
+  operacji spoza zaznaczenia (reguła tytułu, T535) – `bulkPlanOf` i `openBulkPreview(…, { apply })`; jeden
+  `BulkPreviewHost` na ekranie (`OperationsPage`, telefon – `PhoneOperations`), nie w pasku zaznaczonych.
 - Zapis zablokowany przy folderze tylko do odczytu albo w trakcie przełączania (`canWrite`, `useFolderLocked`);
   zapisy zwracają boolean.
 - `data-testid` w kebab-case z prefiksem ekranu (`operation-…`, `import-…`, `quick-…`, `phone-…`); stan w `data-*`

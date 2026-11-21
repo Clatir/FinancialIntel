@@ -5,7 +5,7 @@ import { useData, useFolderLocked, useLockedReason } from '../../store/data'
 import { IconPlus } from '../../components/icons'
 import { TextField } from '../../components/ui'
 import { CategorySelect, useCategories } from '../operations/pickers'
-import { directionText, removeRule, ruleDecisionText, saveKeywordRule, setRuleManual } from './rules'
+import { addKeywordRule, directionText, removeRule, ruleDecisionText, setRuleManual } from './rules'
 import { useMembers } from '../household/actions'
 
 const NO_RULES: ImportRule[] = []
@@ -46,8 +46,9 @@ export function KeywordRules() {
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const opt = options.find((o) => o.value === option) ?? options[0]!
+  // With „Cofnij” (UX-24, T535); a refusal – at the field.
   const add = () => {
-    const err = saveKeywordRule({ keyword: word, direction: opt.direction, kind: opt.kind, categoryId: opt.kind === 'expense' ? categoryId : null, refundable: !!opt.memberId, memberId: opt.memberId ?? null })
+    const err = addKeywordRule({ keyword: word, direction: opt.direction, kind: opt.kind, categoryId: opt.kind === 'expense' ? categoryId : null, refundable: !!opt.memberId, memberId: opt.memberId ?? null })
     setError(err)
     if (!err) setWord('')
   }

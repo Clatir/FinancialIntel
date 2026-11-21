@@ -22,7 +22,7 @@ import {
   type TxKind
 } from '@shared/schema'
 import { ruleDecisionOf, type Choice } from '@shared/import/reconcile'
-import { sameContentAs } from '@shared/merge'
+import { deepEqual, sameContentAs } from '@shared/merge'
 import { memberName } from '@shared/calc/household'
 import { shareOf } from '@shared/calc/share'
 import { membersNow } from '../household/actions'
@@ -65,18 +65,54 @@ function financingOf(t: Transaction): Pick<ImportRule, 'refundable' | 'memberId'
   return t.refundable ? { refundable: true, memberId: t.memberId, gift: t.gift || undefined } : { refundable: false, memberId: null }
 }
 
-/** Remember the category of an operation for its brand (a decision in Operacje teaches the import too). */
+const NO_RULES: readonly ImportRule[] = []
+const rulesNow = (): readonly ImportRule[] => useData.getState().fi?.settings.import.rules ?? NO_RULES
+
+/**
+ * The rules an action wrote taken back (B66): each rule it added or changed – while it is still that one (by content:
+ * the settings read again after a save are other objects) – goes or is the one before again; the rules written
+ * meanwhile stay. `back` – the rules taken back, `kept` – those changed since (they stay, `undoKept` says it).
+ */
+export function undoRules(before: readonly ImportRule[], after: readonly ImportRule[]): { back: number; kept: number } {
+  const was = new Map(before.map((r) => [r.id, r]))
+  const set = new Map(after.filter((r) => !deepEqual(was.get(r.id), r)).map((r) => [r.id, r]))
+  if (!set.size) return { back: 0, kept: 0 }
+  let back = 0
+  const now = rulesNow()
+  const rules = now.flatMap((r) => {
+    const wrote = set.get(r.id)
+    if (!wrote || !deepEqual(wrote, r)) return [r]
+    back++
+    const old = was.get(r.id)
+    return old ? [old] : []
+  })
+  if (back) updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules } } }))
+  return { back, kept: set.size - back }
+}
+
+/** „Cofnij” of rules remembered (UX-24, T535): taken back while as the action left them – the rest said (`undoKept`). */
+const rulesUndo = (before: readonly ImportRule[], after: readonly ImportRule[]) => () => {
+  const { back, kept } = undoRules(before, after)
+  undoKept(back, kept, 'reguły')
+}
+
+/**
+ * Remember the category of an operation for its brand (a decision in Operacje teaches the import too) – with „Cofnij”
+ * (UX-24, T535): the rule as it was before, while still as this left it.
+ */
 export function rememberCategory(t: Transaction, label: string): void {
   if (!canWrite()) return
   const { brand } = targetOf(t)
   if (!brand.key || t.kind !== 'expense') return
   const direction = t.amount < 0 ? 'out' : 'in'
   const rule = { match: brand.key, direction, label: brand.brand?.label ?? bankNameOf(t), kind: 'expense', categoryId: t.categoryId, ...financingOf(t), household: false, counterAccountId: null } as const
-  updateSettings((f) => ({
+  const before = rulesNow()
+  const saved = updateSettings((f) => ({
     ...f,
     settings: { ...f.settings, import: { ...f.settings.import, rules: upsertRule(f.settings.import.rules, rule, { now: new Date().toISOString(), makeId: newId, hits: 1 }) } }
   }))
-  toast(`Zapamiętano: „${bankNameOf(t)}” → ${label}. Kolejne importy skategoryzują go same.`, 'success', 4500)
+  if (!saved) return
+  toast(`Zapamiętano: „${bankNameOf(t)}” → ${label}. Kolejne importy skategoryzują go same.`, 'success', 4500, { label: 'Cofnij', run: rulesUndo(before, rulesNow()) })
 }
 
 /**
@@ -489,11 +525,8 @@ export function applyRuleToHistory(items: ReadonlyArray<{ before: Transaction; a
   toast(`Reguła „${label}” zastosowana do historii: ${countLabel(now.length, 'operacja', 'operacje', 'operacji')}.`, 'success', 8000, { label: 'Cofnij', run: undo })
 }
 
-/**
- * A keyword of the user (D75): these words in the name or the title of an operation → the decision. The same keyword
- * and direction again changes it. Returns an error to show, or null.
- */
-export function saveKeywordRule(input: {
+/** A keyword rule to save (D75): the words, the direction and the decision. */
+export interface KeywordRuleInput {
   keyword: string
   direction: 'in' | 'out' | null
   kind: TxKind
@@ -508,15 +541,48 @@ export function saveKeywordRule(input: {
   share?: Share | null
   counterAccountId?: string | null
   inflowKind?: 'repay' | 'income' | 'advance'
-}): string | null {
+}
+
+const lockedMessage = (): string => (useData.getState().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE)
+
+/** The refusal of an expense's keyword without a category – shown at the category field (T535). */
+export const NO_CATEGORY_REFUSAL = 'Wybierz kategorię.'
+
+/**
+ * Why a keyword rule would be refused – before anything is written (T535: the title rule asks before its preview), null
+ * = it would be saved. The same checks `saveKeywordRule` makes.
+ */
+export function keywordRuleRefusal(input: KeywordRuleInput): string | null {
   // Said by the caller as an error, like the others (N2): never „zapamiętano” in a read-only folder, nor while another
   // folder opens (B31).
-  const locked = (): string => (useData.getState().switching ? SWITCHING_MESSAGE : READ_ONLY_MESSAGE)
-  if (useData.getState().status?.readOnly || useData.getState().switching) return locked()
+  if (useData.getState().status?.readOnly || useData.getState().switching) return lockedMessage()
   const match = normalizeKeyword(input.keyword)
   if (match.replace(/[^a-z?]/g, '').length < 3) return 'Słowo kluczowe musi mieć co najmniej 3 litery.'
   if (match.split(' ').every(isGenericWord)) return `„${input.keyword.trim()}” jest za ogólne – bank pisze je przy wielu operacjach. Wybierz słowo, które mówi, co to było.`
-  if (input.kind === 'expense' && !input.categoryId) return 'Wybierz kategorię.'
+  if (input.kind === 'expense' && !input.categoryId) return NO_CATEGORY_REFUSAL
+  return null
+}
+
+/**
+ * „Dodaj” of the keywords' list (UX-24, T535): the keyword saved, with „Cofnij” – the rules it wrote as they were before.
+ * Returns an error to show at the field, or null.
+ */
+export function addKeywordRule(input: KeywordRuleInput): string | null {
+  const before = rulesNow()
+  const err = saveKeywordRule(input)
+  if (err) return err
+  toast(`Zapamiętano słowo „${input.keyword.trim()}”.`, 'success', 4500, { label: 'Cofnij', run: rulesUndo(before, rulesNow()) })
+  return null
+}
+
+/**
+ * A keyword of the user (D75): these words in the name or the title of an operation → the decision. The same keyword
+ * and direction again changes it. Returns an error to show, or null.
+ */
+export function saveKeywordRule(input: KeywordRuleInput): string | null {
+  const refusal = keywordRuleRefusal(input)
+  if (refusal) return refusal
+  const match = normalizeKeyword(input.keyword)
   const now = new Date().toISOString()
   const cpConstraint = input.counterparty?.trim() || undefined
   const saved = updateSettings((f) => {
@@ -554,7 +620,7 @@ export function saveKeywordRule(input: {
     else next.push(rule)
     return { ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: next } } }
   })
-  return saved ? null : locked()
+  return saved ? null : lockedMessage()
 }
 
 // ------------------------------------------------------------------ names merged by the user (1.2.2, D78)

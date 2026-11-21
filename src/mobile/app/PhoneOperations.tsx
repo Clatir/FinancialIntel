@@ -21,6 +21,7 @@ import { useMarkFlags } from '@renderer/features/sensors/state'
 import { useMembers } from '@renderer/features/household/actions'
 import { OperationEditor } from '@renderer/features/operations/OperationEditor'
 import { BulkBar } from '@renderer/features/operations/OperationsPage'
+import { BulkPreviewHost } from '@renderer/features/operations/BulkChange'
 import { ExportVisible, ViewsBar, viewable } from '@renderer/features/operations/ListTools'
 import { operationRowText } from '@renderer/features/operations/rowText'
 import { useAccounts, useCategories } from '@renderer/features/operations/pickers'
@@ -39,7 +40,13 @@ const otherFilters = (f: OperationsFilter): boolean => narrows({ ...f, accounts:
 /** The list, or the operation open over it (leaving Operacje closes it – `Shell.tsx`). */
 export function PhoneOperations() {
   const selectedId = useOperationsUi((s) => s.selectedId)
-  return selectedId ? <EditorSheet id={selectedId} /> : <OperationsList />
+  return (
+    <>
+      {selectedId ? <EditorSheet id={selectedId} /> : <OperationsList />}
+      {/* The one preview of the screen (T535): the bar's changes and the editor's title rule open it. */}
+      <BulkPreviewHost />
+    </>
+  )
 }
 
 /** The computers' editor over the screen; „← Operacje” back to the list (an untouched new entry dropped). */

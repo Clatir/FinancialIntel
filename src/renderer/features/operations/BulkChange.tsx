@@ -32,7 +32,8 @@ const ACTION_LABEL: Record<Exclude<Action, ''>, string> = {
   explained: 'Wyjaśniona korekta',
   container: 'Ładownia',
   goal: 'Cel',
-  loan: 'Pożyczka'
+  loan: 'Pożyczka',
+  titleRule: 'Reguła dla tytułu'
 }
 
 /** The bar's changes (F11) – the others are the menu's (D105). */
@@ -122,7 +123,7 @@ function BulkPreview({ preview, onClose }: { preview: NonNullable<ReturnType<typ
   const cats = useCategories()
   const accounts = useAccounts()
   const balances = useRecordList('balances')
-  const { plan, effect, what } = preview
+  const { plan, effect, what, note, apply } = preview
   const n = plan.before.length
   const kind = plan.change.kind
   // The confirmed balances it changes (F12) – a correction made at a confirmation stops agreeing with the bank.
@@ -153,7 +154,9 @@ function BulkPreview({ preview, onClose }: { preview: NonNullable<ReturnType<typ
             disabled={!n}
             onClick={() => {
               onClose()
-              void applyBulk(plan, what)
+              // The title rule (T535): its rule first, then the same `applyBulk`.
+              if (apply) apply()
+              else void applyBulk(plan, what)
             }}
             data-testid="operations-bulk-confirm"
           >
@@ -203,6 +206,11 @@ function BulkPreview({ preview, onClose }: { preview: NonNullable<ReturnType<typ
           </div>
         )}
         {kind === 'delete' && n > 0 && <p className="text-dim">Usunięte zostają w historii – „Cofnij” po usunięciu albo Synchronizacja → Usunięte wpisy.</p>}
+        {note && (
+          <p className="text-dim" data-testid="operations-bulk-note">
+            {note}
+          </p>
+        )}
       </div>
     </Modal>
   )

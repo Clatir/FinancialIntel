@@ -263,3 +263,54 @@ describe('dawne zmiany paska bez zmian', () => {
     expect(gone).not.toBe(a)
   })
 })
+
+// T535 (D106 pkt 3, UX-1): „Ustaw regułę dla tytułu” changes the history as a bulk change – the rule's kind, sign,
+// category and who finances; the operations it does not fit (as the editor's and the bar's „Zmień rodzaj”) stay.
+describe('reguła tytułu (T535)', () => {
+  const rule = (r: Extract<BulkChange, { kind: 'titleRule' }>['rule']): BulkChange => ({ kind: 'titleRule', rule: r })
+
+  it('zwrot w kategorii: znak na plus, kategoria reguły; operacja już taka – ten sam obiekt', () => {
+    const a = tx({ amount: -3500, categoryId: null })
+    expect(changedBy(a, rule({ kind: 'expense', direction: 'in', categoryId: FOOD }))).toEqual({ ...a, amount: 3500, categoryId: FOOD, refundable: false, memberId: null })
+    const b = tx({ amount: 3500, categoryId: FOOD })
+    expect(changedBy(b, rule({ kind: 'expense', direction: 'in', categoryId: FOOD }))).toBe(b)
+  })
+
+  it('wydatek finansowany przez domownika i prezent; wpływ od domownika z celem wpłaty', () => {
+    const a = tx({ amount: -2000 })
+    expect(changedBy(a, rule({ kind: 'expense', direction: 'out', categoryId: FUN, refundable: true, memberId: HOUSE_MEMBER_ID, gift: true }))).toMatchObject({ categoryId: FUN, refundable: true, memberId: HOUSE_MEMBER_ID, gift: true, amount: -2000 })
+    const income = changedBy(a, rule({ kind: 'income', direction: 'in', household: true, memberId: HOUSE_MEMBER_ID, inflowKind: 'advance' }))!
+    expect(income).toMatchObject({ kind: 'income', amount: 2000, categoryId: null, memberId: HOUSE_MEMBER_ID, inflowKind: 'advance', advance: true, refundable: false })
+  })
+
+  it('inny rodzaj jak „Zmień rodzaj” (withKind): cel i kontener odpięte, linie paragonu odchodzą', () => {
+    const fromGoal = tx({ goalId: G1, containerId: null })
+    expect(changedBy(fromGoal, rule({ kind: 'income', direction: 'in' }))).toMatchObject({ kind: 'income', amount: 1000, goalId: null, containerId: null })
+    const r = receipt()
+    expect(changedBy(r, rule({ kind: 'transfer', direction: null, counterAccountId: XTB_WALLET_ACCOUNT_ID }))).toMatchObject({ kind: 'transfer', splits: [], counterAccountId: XTB_WALLET_ACCOUNT_ID, categoryId: null })
+  })
+
+  it('nie pasuje: zadokowana zostaje swoim rodzajem, przelew na własne konto, paragon z liniami (kategorie mówią linie)', () => {
+    const docked = tx({ kind: 'trading', amount: 30000, categoryId: null })
+    expect(changedBy(docked, rule({ kind: 'income', direction: 'in' }), new Set([docked.id]))).toBeNull()
+    expect(changedBy(docked, rule({ kind: 'trading', direction: null }), new Set([docked.id]))).toBe(docked)
+    expect(changedBy(tx(), rule({ kind: 'transfer', direction: null, counterAccountId: MBANK_ACCOUNT_ID }))).toBeNull()
+    expect(changedBy(receipt(), rule({ kind: 'expense', direction: 'out', categoryId: FOOD }))).toBeNull()
+    expect(bulkApplies([receipt(), tx()], rule({ kind: 'expense', direction: 'out', categoryId: FUN }))).toBe(1)
+  })
+
+  it('wspólny zakup: reguła „ja” zdejmuje podział na osoby (linie idą z opisem), nigdy linii bez opisu', () => {
+    const s = shared()
+    const next = changedBy(s, rule({ kind: 'expense', direction: 'out', categoryId: FUN }))!
+    expect(next).toMatchObject({ categoryId: FUN, splits: [], refundable: false, memberId: null })
+    expect(shareOf(next)).toBeNull()
+    expect(next.share ?? null).toBeNull()
+  })
+
+  it('przelew na inne konto: wiersz banku i dzień drugiej strony odchodzą (jak „Zmień rodzaj”)', () => {
+    const t = tx({ kind: 'transfer', counterAccountId: XTB_WALLET_ACCOUNT_ID, bothSides: true, counterDate: '2026-10-15', categoryId: null })
+    const next = changedBy(t, rule({ kind: 'transfer', direction: null, counterAccountId: null }))!
+    expect(next).toMatchObject({ counterAccountId: null })
+    expect(next.counterDate).toBeUndefined()
+  })
+})
