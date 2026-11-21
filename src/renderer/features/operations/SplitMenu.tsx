@@ -76,7 +76,11 @@ export function SplitMenu({ items, testId }: { items: SplitItem[]; testId: strin
                 e.preventDefault()
                 e.stopPropagation()
                 close(true)
-              } else if (e.key === 'Tab') close(false)
+              } else if (e.key === 'Tab') {
+                // Tab leaves the menu like any other: it closes, the focus is back on the button (not lost with the
+                // unmounted item) and the browser goes on from there – to the next field, or the previous with Shift.
+                close(true)
+              }
             }}
           >
             {items.map((it) => (

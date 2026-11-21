@@ -6,7 +6,7 @@ import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxK
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
 import { keywordMatcher } from '@shared/import/brands'
-import { isUncategorized, noNarrowing } from '@shared/operationsView'
+import { noNarrowing } from '@shared/operationsView'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { noteImportTrace, useWizard } from '../wizard/state'
@@ -22,7 +22,7 @@ import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../op
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
 import { DecisionFields, IMPORT_SHARE_MODES, RowLoanPart, RowShares, rowPartsOf } from './DecisionFields'
 import { DuplicatesNote, DuplicatesPanel } from './DuplicatesPanel'
-import { previewCounts, uncategorizedIn } from './counts'
+import { categorizeRest, previewCounts, uncategorizedIn } from './counts'
 import { JOIN_LABEL, REMEMBER_NOTE, THEMES_INTRO } from './notes'
 import { useLatestImport } from './batches'
 import { BankTelemetry } from './BankTelemetry'
@@ -1265,13 +1265,7 @@ function DonePanel() {
   const operationsMap = useData((s) => s.records.transactions)
   const latest = useLatestImport()
   // What the import made and is still an expense without a category (UX-39): from the operations as they are now.
-  const rest = useMemo(() => {
-    if (!batch || batch.undoneAt) return []
-    return batch.created.flatMap((id) => {
-      const t = operationsMap[id]?.record
-      return t && isUncategorized(t) ? [t.date] : []
-    })
-  }, [batch, operationsMap])
+  const rest = useMemo(() => (!batch || batch.undoneAt ? null : categorizeRest(batch.created, operationsMap)), [batch, operationsMap])
   if (!done) return null
   return (
     <Panel title="Import zakończony">
@@ -1295,17 +1289,19 @@ function DonePanel() {
           <button className="btn h-[24px]" onClick={() => navigate({ page: 'operations' })} data-testid="import-to-operations">
             Zobacz w Operacjach
           </button>
-          {rest.length > 0 && (
+          {rest && (
             <button
               className="btn h-[24px]"
+              title="Operacje bez kategorii od dnia najwcześniejszej z tego importu – także te spoza niego"
               onClick={() => {
                 // From the earliest of them (the file's period) – the operations still without a category, one after another.
-                showFilter({ period: { kind: 'range', from: [...rest].sort()[0]!, to: null }, ...noNarrowing(), marks: ['uncategorized'] })
+                showFilter({ period: { kind: 'range', from: rest.from, to: null }, ...noNarrowing(), marks: ['uncategorized'] })
                 navigate({ page: 'operations' })
               }}
               data-testid="import-categorize-rest"
+              data-count={rest.count}
             >
-              Skategoryzuj pozostałe ({rest.length})
+              Skategoryzuj pozostałe ({rest.count})
             </button>
           )}
           {/* F4: the whole file taken back at once (the latest import that stands). */}

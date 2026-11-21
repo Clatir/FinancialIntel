@@ -1,5 +1,6 @@
 // adapted from ICTTJ src/renderer/store/ui.ts @ 84a8339
 import { create } from 'zustand'
+import { readSettingsTab } from '../features/settings/settingsNav'
 
 /** Screens of the side menu (docs/specyfikacja.md, „Ekrany”). */
 export type Page = 'bridge' | 'operations' | 'import' | 'month' | 'cargo' | 'starmap' | 'radar' | 'command' | 'intel' | 'reports' | 'settings' | 'sync' | 'wizard' | 'inbox'
@@ -56,15 +57,25 @@ export function commitActiveField(): void {
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) el.blur()
 }
 
+/**
+ * Ustawienia without a named tab show the one remembered on this computer (`fi.settings.tab`): the route gets that tab
+ * by name, so „wstecz” returns to the tab that was shown, not to whichever is remembered by then (T553).
+ */
+function resolveRoute(route: Route): Route {
+  return route.page === 'settings' && !route.tab ? { page: 'settings', tab: readSettingsTab() } : route
+}
+
 /** The same screen (and the same Ustawienia tab) – not a place „wstecz” should stop at (UX-12). */
 export function sameRoute(a: Route, b: Route): boolean {
   if (a.page !== b.page) return false
-  return a.page !== 'settings' || (b.page === 'settings' && a.tab === b.tab)
+  if (a.page !== 'settings' || b.page !== 'settings') return true
+  return (a.tab ?? readSettingsTab()) === (b.tab ?? readSettingsTab())
 }
 
 export function navigate(route: Route): void {
   commitActiveField()
-  useUi.setState((s) => (sameRoute(s.route, route) ? { route } : { route, history: [...s.history.slice(-20), s.route], forward: [] }))
+  const to = resolveRoute(route)
+  useUi.setState((s) => (sameRoute(s.route, to) ? { route: to } : { route: to, history: [...s.history.slice(-20), resolveRoute(s.route)], forward: [] }))
 }
 
 export function goBack(): void {

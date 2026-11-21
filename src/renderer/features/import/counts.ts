@@ -2,6 +2,9 @@
  * What the import will do, counted from the plan and the user's choices (the „Podgląd” panel and the bar at the bottom
  * of the screen read the same numbers – UX-39). Pure: no store, no screen.
  */
+import { uncategorizedOf } from '@shared/calc/inbox'
+import { isUncategorized } from '@shared/operationsView'
+import type { Transaction } from '@shared/schema'
 import { choiceOf, createsRow, joins, movesHere, removesCopy, type ImportChoices, type ImportGroup, type ImportPlan, type RowPlan } from '@shared/import/reconcile'
 
 export interface PreviewCounts {
@@ -48,6 +51,22 @@ export function previewCounts(plan: ImportPlan, choices: ImportChoices): Preview
   const settle = n('settle') + settledFlags
   const nothing = created + merged + sides + n('settle') + removed + settledFlags + moved + copies === 0
   return { created, merged, sides, settle, settledFlags, removed, moved, copies, known, restored, excluded, nothing, total: created + merged + settle + removed + moved + copies }
+}
+
+/**
+ * „Skategoryzuj pozostałe” after an import (T553): the button opens Operacje from the earliest day of what the import made
+ * and left without a category – and the list there holds every expense without a category from that day, not only this
+ * import's. The number on the button is what that list holds (its label = its scope). `null` – the import left none.
+ */
+export function categorizeRest(created: readonly string[], byId: Readonly<Record<string, { record: Transaction } | undefined>>): { from: string; count: number } | null {
+  const days = created.flatMap((id) => {
+    const t = byId[id]?.record
+    return t && isUncategorized(t) ? [t.date] : []
+  })
+  if (!days.length) return null
+  const from = days.reduce((a, b) => (b < a ? b : a))
+  const all = Object.values(byId).flatMap((r) => (r ? [r.record] : []))
+  return { from, count: uncategorizedOf(all, from).count }
 }
 
 /**

@@ -1,6 +1,6 @@
 // adapted from ICTTJ src/renderer/components/Popover.tsx @ 84a8339
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { ownsEscape } from './AnchoredList'
+import { inOwnList, ownsEscape } from './AnchoredList'
 import { cx } from './ui'
 
 /** The gap kept between an open panel and the window's edge. */
@@ -67,10 +67,10 @@ export function Popover({
   useEffect(() => {
     if (!open) return
     // The list of a field in the panel (a combobox's options, a menu) is in a portal at the page's end – outside the box,
-    // yet not outside the panel: a click on it is not a click away.
+    // yet not outside the panel: a click on it is not a click away. A list of another element is (T553).
     const onDown = (e: MouseEvent) => {
       const t = e.target
-      if (t instanceof Element && t.closest('[role="listbox"],[role="menu"]')) return
+      if (t instanceof Element && inOwnList(ref.current, t)) return
       if (ref.current && !ref.current.contains(t as Node)) setOpen(false)
     }
     // Escape closes only the panel: caught before the page's own shortcuts (e.g. the scanner's Esc → dashboard).

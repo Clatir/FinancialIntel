@@ -59,6 +59,21 @@ describe('UX-12: „wstecz” i „dalej”', () => {
     expect(ui.useUi.getState().history).toHaveLength(2)
   })
 
+  it('U4 (T553): Ustawienia bez nazwanej zakładki to zapamiętana zakładka – Alt+← wraca do niej, nie do ostatniej', () => {
+    store.set('fi.settings.tab', 'accounts')
+    ui.navigate({ page: 'settings' }) // Ctrl+, – shows the remembered tab (accounts)
+    expect(ui.useUi.getState().route).toEqual({ page: 'settings', tab: 'accounts' })
+    ui.navigate({ page: 'settings', tab: 'accounts' }) // the same tab again: no new entry
+    expect(ui.useUi.getState().history).toHaveLength(1)
+    ui.navigate({ page: 'settings', tab: 'folder' })
+    store.set('fi.settings.tab', 'folder') // what the page remembers after showing it
+    ui.goBack()
+    expect(ui.useUi.getState().route).toEqual({ page: 'settings', tab: 'accounts' })
+    ui.goForward()
+    expect(ui.useUi.getState().route).toEqual({ page: 'settings', tab: 'folder' })
+    store.clear()
+  })
+
   it('„dalej” wraca tam, skąd zawrócił „wstecz”; nowy ekran czyści „dalej”', () => {
     ui.navigate({ page: 'operations' })
     ui.navigate({ page: 'month' })
