@@ -97,7 +97,8 @@ export function skipReason(c: BulkChange): string {
     case 'tag':
       return 'rodzaj bez tagów albo pełna lista'
     case 'titleRule':
-      return 'zadokowane, przelew na własne konto albo podział'
+      // The rule's direction (T549): a refund's rule never takes a purchase, an expense's never an inflow.
+      return 'zadokowane, przelew na własne konto, podział albo kwota w drugą stronę niż reguła'
     default:
       return 'zadokowane, przelew na własne konto'
   }

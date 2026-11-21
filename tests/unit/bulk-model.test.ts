@@ -270,8 +270,9 @@ describe('reguła tytułu (T535)', () => {
   const rule = (r: Extract<BulkChange, { kind: 'titleRule' }>['rule']): BulkChange => ({ kind: 'titleRule', rule: r })
 
   it('zwrot w kategorii: znak na plus, kategoria reguły; operacja już taka – ten sam obiekt', () => {
+    // The open one (its sign set by hand – the history's other ones of the rule's direction only, review of 1.21.0).
     const a = tx({ amount: -3500, categoryId: null })
-    expect(changedBy(a, rule({ kind: 'expense', direction: 'in', categoryId: FOOD }))).toEqual({ ...a, amount: 3500, categoryId: FOOD, refundable: false, memberId: null })
+    expect(changedBy(a, { kind: 'titleRule', rule: { kind: 'expense', direction: 'in', categoryId: FOOD }, openId: a.id })).toEqual({ ...a, amount: 3500, categoryId: FOOD, refundable: false, memberId: null })
     const b = tx({ amount: 3500, categoryId: FOOD })
     expect(changedBy(b, rule({ kind: 'expense', direction: 'in', categoryId: FOOD }))).toBe(b)
   })
@@ -279,12 +280,13 @@ describe('reguła tytułu (T535)', () => {
   it('wydatek finansowany przez domownika i prezent; wpływ od domownika z celem wpłaty', () => {
     const a = tx({ amount: -2000 })
     expect(changedBy(a, rule({ kind: 'expense', direction: 'out', categoryId: FUN, refundable: true, memberId: HOUSE_MEMBER_ID, gift: true }))).toMatchObject({ categoryId: FUN, refundable: true, memberId: HOUSE_MEMBER_ID, gift: true, amount: -2000 })
-    const income = changedBy(a, rule({ kind: 'income', direction: 'in', household: true, memberId: HOUSE_MEMBER_ID, inflowKind: 'advance' }))!
+    // Money in (a rule „in” takes the inflows only – review of 1.21.0).
+    const income = changedBy(tx({ amount: 2000 }), rule({ kind: 'income', direction: 'in', household: true, memberId: HOUSE_MEMBER_ID, inflowKind: 'advance' }))!
     expect(income).toMatchObject({ kind: 'income', amount: 2000, categoryId: null, memberId: HOUSE_MEMBER_ID, inflowKind: 'advance', advance: true, refundable: false })
   })
 
   it('inny rodzaj jak „Zmień rodzaj” (withKind): cel i kontener odpięte, linie paragonu odchodzą', () => {
-    const fromGoal = tx({ goalId: G1, containerId: null })
+    const fromGoal = tx({ goalId: G1, containerId: null, amount: 1000 })
     expect(changedBy(fromGoal, rule({ kind: 'income', direction: 'in' }))).toMatchObject({ kind: 'income', amount: 1000, goalId: null, containerId: null })
     const r = receipt()
     expect(changedBy(r, rule({ kind: 'transfer', direction: null, counterAccountId: XTB_WALLET_ACCOUNT_ID }))).toMatchObject({ kind: 'transfer', splits: [], counterAccountId: XTB_WALLET_ACCOUNT_ID, categoryId: null })
@@ -312,5 +314,35 @@ describe('reguła tytułu (T535)', () => {
     const next = changedBy(t, rule({ kind: 'transfer', direction: null, counterAccountId: null }))!
     expect(next).toMatchObject({ counterAccountId: null })
     expect(next.counterDate).toBeUndefined()
+  })
+
+  // Review of 1.21.0 (T549): a kind other than an expense or an income keeps the operation's sign – as the editor's
+  // „Przelew” and the title rule before 1.21.0; never an inflow turned into money out.
+  it('przelew, pożyczka, podatek, XTB: znak z operacji – wpływ +2000 zł zostaje +2000 zł', () => {
+    const inflow = tx({ kind: 'income', amount: 200000, categoryId: null })
+    for (const kind of ['transfer', 'loan', 'tax', 'trading'] as const) {
+      const r = rule({ kind, direction: null, ...(kind === 'transfer' ? { counterAccountId: XTB_WALLET_ACCOUNT_ID } : {}) })
+      expect(changedBy(inflow, r)).toMatchObject({ kind, amount: 200000 })
+    }
+    expect(changedBy(tx({ amount: -5000 }), rule({ kind: 'loan', direction: null }))).toMatchObject({ kind: 'loan', amount: -5000 })
+  })
+
+  // Review of 1.21.0 (T549): the rule's direction is the import's – the history's operations of the other sign do not fit
+  // (counted as skipped); the operation open in the editor takes the rule as the editor sets it, its sign too.
+  it('kierunek reguły: zwrot nie zmienia zakupu, wydatek nie zmienia wpływu – nie pasują; otwarta operacja bierze regułę', () => {
+    const refund = tx({ amount: 5000, categoryId: null })
+    const purchase = tx({ amount: -12000, categoryId: null })
+    const back = rule({ kind: 'expense', direction: 'in', categoryId: FOOD })
+    expect(changedBy(refund, back)).toMatchObject({ amount: 5000, categoryId: FOOD })
+    expect(changedBy(purchase, back)).toBeNull()
+    expect(changedBy(refund, rule({ kind: 'expense', direction: 'out', categoryId: FOOD }))).toBeNull()
+    expect(changedBy(purchase, rule({ kind: 'income', direction: 'in' }))).toBeNull()
+    expect(bulkApplies([refund, purchase], back)).toBe(1)
+    // No direction (a transfer, the other kinds): any sign.
+    expect(changedBy(purchase, rule({ kind: 'tax', direction: null }))).toMatchObject({ kind: 'tax', amount: -12000 })
+    // A zero amount has no direction to go against.
+    expect(changedBy(tx({ amount: 0, categoryId: null }), back)).toMatchObject({ categoryId: FOOD })
+    const open: BulkChange = { kind: 'titleRule', rule: { kind: 'expense', direction: 'in', categoryId: FOOD }, openId: purchase.id }
+    expect(changedBy(purchase, open)).toMatchObject({ amount: 12000, categoryId: FOOD })
   })
 })

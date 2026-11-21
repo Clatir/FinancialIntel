@@ -714,13 +714,43 @@ export interface BulkApplyOptions {
 }
 
 /**
- * The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields.
- * false – nothing written (a read-only folder, nothing to change).
+ * The plan's operations still as it read them (T549): the preview stays open while a sync, the autosave or another window
+ * may change them – one changed since (or deleted, or rewritten by a newer version) is left as it is, never written over
+ * with what the preview showed; `changed` – how many, said by the toast (`undoKept`'s words).
  */
-export async function applyBulk(plan: BulkPlan, what = '', opts: BulkApplyOptions = {}): Promise<boolean> {
-  if (!plan.before.length || !canWrite()) return false
+function stillAsRead(plan: BulkPlan): { plan: BulkPlan; changed: number } {
+  const now = useData.getState().records.transactions
+  const keep = plan.before.map((b) => {
+    const cur = now[b.id]
+    return !!cur && !cur.readOnly && sameContentAs(cur.record, b)
+  })
+  const changed = keep.filter((k) => !k).length
+  if (!changed) return { plan, changed }
+  return {
+    plan: { ...plan, before: plan.before.filter((_, i) => keep[i]), after: plan.after.filter((_, i) => keep[i]) },
+    changed
+  }
+}
+
+/** Nothing of the plan written: every one of its operations changed since the preview read them (T549). */
+function allChangedNote(n: number): void {
+  toast(n === 1 ? 'Nic nie zapisano – operacja zmieniła się od podglądu i zostaje, jak jest.' : `Nic nie zapisano – operacje zmieniły się od podglądu i zostają, jak są (${n}).`, 'info', 7000)
+}
+
+/**
+ * The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields.
+ * The operations changed since the plan was read stay as they are (`stillAsRead`). false – nothing written (a read-only
+ * folder, nothing to change, all of them changed since).
+ */
+export async function applyBulk(read: BulkPlan, what = '', opts: BulkApplyOptions = {}): Promise<boolean> {
+  if (!read.before.length || !canWrite()) return false
+  const { plan, changed } = stillAsRead(read)
+  if (!plan.before.length) {
+    allChangedNote(changed)
+    return false
+  }
   const n = plan.before.length
-  const tail = `${plan.skipped ? `, pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : ''}${newerNote(plan.newer)}`
+  const tail = `${plan.skipped ? `, pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : ''}${changed ? `, zmienione od podglądu zostają, jak są: ${changed}` : ''}${newerNote(plan.newer)}`
   if (!opts.keepTicked || plan.change.kind === 'delete') clearTicked()
   if (plan.change.kind === 'delete') {
     const ids = plan.before.map((t) => t.id)

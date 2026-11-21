@@ -180,8 +180,9 @@ describe('applyTargetToTransaction', () => {
 
 describe('applyTitleRule', () => {
   it('saves keyword rule and updates history across past and future dates with undo capability', () => {
-    const tPast = tx({ date: '2024-03-01', kind: 'expense', amount: -5000, title: 'Zwrot od ubezpieczyciela' })
-    const tFuture = tx({ date: '2027-02-15', kind: 'expense', amount: -5000, title: 'Zwrot od ubezpieczyciela za leki' })
+    // Money in (the rule „in” takes the inflows of the history – review of 1.21.0); the open one as the editor sets it.
+    const tPast = tx({ date: '2024-03-01', kind: 'expense', amount: 5000, title: 'Zwrot od ubezpieczyciela' })
+    const tFuture = tx({ date: '2027-02-15', kind: 'expense', amount: 5000, title: 'Zwrot od ubezpieczyciela za leki' })
     const tCurrent = tx({ date: '2026-10-14', kind: 'expense', amount: -5000, title: 'Zwrot od ubezpieczyciela' })
 
     load([tPast, tFuture, tCurrent])
@@ -223,8 +224,9 @@ describe('applyTitleRule', () => {
     // After undo, transactions are restored
     const restoredRecords = data.useData.getState().records.transactions
     expect(restoredRecords[tPast.id]?.record.kind).toBe('expense')
-    expect(restoredRecords[tPast.id]?.record.amount).toBe(-5000)
+    expect(restoredRecords[tPast.id]?.record.amount).toBe(5000)
     expect(restoredRecords[tFuture.id]?.record.kind).toBe('expense')
+    expect(restoredRecords[tCurrent.id]?.record.amount).toBe(-5000)
   })
 
   it('classifies incoming transfer from counterparty Y with title Y as category Z', async () => {
@@ -289,8 +291,8 @@ describe('reguła tytułu przez zmiany zbiorcze (T535)', () => {
   })
 
   it('z historią: najpierw wspólny podgląd – nic nie zapisane, reguła też nie; zatwierdzenie zapisuje oba', () => {
-    const past = tx({ date: '2024-03-01', title: 'Zwrot od ubezpieczyciela' })
-    const future = tx({ date: '2027-02-15', title: 'Zwrot od ubezpieczyciela za leki' })
+    const past = tx({ date: '2024-03-01', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const future = tx({ date: '2027-02-15', amount: 1000, title: 'Zwrot od ubezpieczyciela za leki' })
     const current = tx({ title: 'Zwrot od ubezpieczyciela' })
     const other = tx({ title: 'Biedronka' })
     load([past, future, current, other])
@@ -313,17 +315,17 @@ describe('reguła tytułu przez zmiany zbiorcze (T535)', () => {
   })
 
   it('„Cofnij” cofa tylko niezmienione od tego czasu i zdejmuje regułę', async () => {
-    const a = tx({ date: '2024-03-01', title: 'Zwrot od ubezpieczyciela' })
-    const b = tx({ date: '2025-03-01', title: 'Zwrot od ubezpieczyciela' })
+    const a = tx({ date: '2024-03-01', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const b = tx({ date: '2025-03-01', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
     load([a, b])
     applyTitleRule({ ...income, updateHistory: true })
     useBulkPreview.getState().preview!.apply!()
     await Promise.resolve()
     const undo = lastToast()!.action!.run
     // Changed since: its kind again by hand.
-    data.updateRecord('transactions', b.id, (r) => ({ ...r, kind: 'expense', amount: -1000, note: 'ręcznie' }))
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, kind: 'expense', amount: 1000, note: 'ręcznie' }))
     undo()
-    expect(rec(a.id)).toMatchObject({ kind: 'expense', amount: -1000 })
+    expect(rec(a.id)).toMatchObject({ kind: 'expense', amount: 1000 })
     expect(rec(b.id)).toMatchObject({ kind: 'expense', note: 'ręcznie' })
     expect(rulesNow()).toEqual([])
     expect(lastToast()?.text).toBe('Cofnięto 1 z 2 – jedna zmieniła się w międzyczasie i zostaje bez zmian.')
@@ -337,7 +339,8 @@ describe('reguła tytułu przez zmiany zbiorcze (T535)', () => {
       balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: nextId(), createdAt: AT, updatedAt: AT, accountId: MBANK_ACCOUNT_ID, date: '2026-10-01', kind: 'opening', amount: 100000 }),
       balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: nextId(), createdAt: AT, updatedAt: AT, accountId: MBANK_ACCOUNT_ID, date: '2026-10-10', kind: 'confirmation', amount: 99000 })
     ]
-    applyTitleRule({ ...income, updateHistory: true })
+    // The open one: its sign as the editor sets it (the history's others – of the rule's direction only).
+    applyTitleRule({ ...income, updateHistory: true }, a)
     const { plan } = useBulkPreview.getState().preview!
     expect(confirmedChanges(plan.before.map((t, i) => [t, plan.after[i]!] as const), balances)).toEqual([{ accountId: MBANK_ACCOUNT_ID, date: '2026-10-10', delta: 2000 }])
     expect(rec(a.id)).toEqual(a)
@@ -363,7 +366,7 @@ describe('reguła tytułu przez zmiany zbiorcze (T535)', () => {
   })
 
   it('reguła odmówiona przy zatwierdzeniu (folder tylko do odczytu w międzyczasie) – historia bez zmian', () => {
-    const a = tx({ title: 'Zwrot od ubezpieczyciela' })
+    const a = tx({ amount: 1000, title: 'Zwrot od ubezpieczyciela' })
     load([a])
     applyTitleRule({ ...income, updateHistory: true })
     const preview = useBulkPreview.getState().preview!
@@ -371,6 +374,104 @@ describe('reguła tytułu przez zmiany zbiorcze (T535)', () => {
     preview.apply!()
     expect(rec(a.id)).toEqual(a)
     expect(rulesNow()).toEqual([])
+  })
+})
+
+const settle = () => new Promise((r) => setTimeout(r, 0))
+
+// Review of 1.21.0 (T549): the rule's direction in the history, the preview's operations changed meanwhile, the words of
+// a history left as it is, „Cofnij” of the rule alone.
+describe('reguła tytułu – poprawki po przeglądzie 1.21.0 (T549)', () => {
+  const FOOD = defaultCategoryId(1)
+  const income = { keyword: 'ubezpieczyciel', kind: 'income', direction: 'in' } as const
+  const refundRule = { keyword: 'zara', kind: 'expense', direction: 'in', categoryId: FOOD } as const
+
+  it('kierunek: „Zwrot Zara” +50 i −120 – reguła zwrotu z historią zmienia tylko +50, zakup pominięty ze słowem', async () => {
+    const refund = tx({ amount: 5000, title: 'Zwrot Zara', categoryId: null })
+    const purchase = tx({ amount: -12000, title: 'Zwrot Zara', categoryId: null })
+    load([refund, purchase])
+    expect(applyTitleRule({ ...refundRule, updateHistory: true })).toMatchObject({ ok: true, preview: true, count: 1 })
+    const preview = useBulkPreview.getState().preview!
+    expect(preview.plan.before.map((t) => t.id)).toEqual([refund.id])
+    expect(preview.plan.skipped).toBe(1)
+    preview.apply!()
+    await settle()
+    expect(rec(refund.id)).toMatchObject({ amount: 5000, categoryId: FOOD })
+    expect(rec(purchase.id)).toEqual(purchase)
+    expect(lastToast()?.text).toBe('Zastosowano regułę dla tytułu „zara”: 1 operacja, pominięte (zmiana do nich nie pasuje): 1 · reguła zapamiętana dla kolejnych importów.')
+  })
+
+  it('kierunek: reguła wydatku nie zamienia wpływów o tym tytule; otwarta operacja bierze regułę jak w edytorze', async () => {
+    const inflow = tx({ amount: 3000, title: 'Zara zakupy', categoryId: null })
+    const open = tx({ amount: 4000, title: 'Zara zakupy', categoryId: null })
+    const buy = tx({ amount: -2000, title: 'Zara zakupy', categoryId: null })
+    load([inflow, open, buy])
+    applyTitleRule({ keyword: 'zara', kind: 'expense', direction: 'out', categoryId: FOOD, updateHistory: true }, open)
+    useBulkPreview.getState().preview!.apply!()
+    await settle()
+    expect(rec(inflow.id)).toEqual(inflow)
+    expect(rec(open.id)).toMatchObject({ amount: -4000, categoryId: FOOD })
+    expect(rec(buy.id)).toMatchObject({ amount: -2000, categoryId: FOOD })
+  })
+
+  it('operacja zmieniona po otwarciu podglądu (synchronizacja, autozapis) nie jest nadpisana – zostaje ze słowem', async () => {
+    const a = tx({ amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const b = tx({ date: '2025-03-01', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    load([a, b])
+    applyTitleRule({ ...income, updateHistory: true })
+    const preview = useBulkPreview.getState().preview!
+    expect(preview.plan.before).toHaveLength(2)
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, note: 'z drugiego komputera' }))
+    preview.apply!()
+    await settle()
+    expect(rec(a.id)).toMatchObject({ kind: 'income' })
+    expect(rec(b.id)).toMatchObject({ kind: 'expense', note: 'z drugiego komputera' })
+    expect(rulesNow()).toHaveLength(1)
+    expect(lastToast()?.text).toBe('Zastosowano regułę dla tytułu „ubezpieczyciel”: 1 operacja, zmienione od podglądu zostają, jak są: 1 · reguła zapamiętana dla kolejnych importów.')
+  })
+
+  it('wszystkie zmienione od podglądu: nic nie zapisane, reguła też nie – ze słowem', async () => {
+    const a = tx({ amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    load([a])
+    applyTitleRule({ ...income, updateHistory: true })
+    const preview = useBulkPreview.getState().preview!
+    data.updateRecord('transactions', a.id, (r) => ({ ...r, kind: 'income' }))
+    preview.apply!()
+    await settle()
+    expect(rec(a.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    expect(rulesNow()).toEqual([])
+    expect(lastToast()?.text).toBe('Nic nie zapisano – operacja zmieniła się od podglądu i zostaje, jak jest.')
+  })
+
+  it('„Zapisz i zaktualizuj”, gdy w historii nic się nie zmieni: toast mówi, ile już takich i ile pominiętych – z „Cofnij” reguły', () => {
+    const already = tx({ kind: 'income', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const out = tx({ amount: -1000, title: 'Zwrot od ubezpieczyciela' })
+    load([already, out])
+    expect(applyTitleRule({ ...income, updateHistory: true })).toMatchObject({ ok: true, count: 0 })
+    expect(useBulkPreview.getState().preview).toBeNull()
+    expect([rec(already.id), rec(out.id)]).toEqual([already, out])
+    expect(lastToast()?.text).toBe('Reguła dla tytułu „ubezpieczyciel” zapamiętana na przyszłość. Operacje w historii bez zmian – już takie: 1, pominięte (zmiana do nich nie pasuje): 1.')
+    expect(rulesNow()).toHaveLength(1)
+    lastToast()!.action!.run()
+    expect(rulesNow()).toEqual([])
+  })
+
+  it('sama reguła (bez historii) ma „Cofnij”: reguła znika, inne zostają; zmieniona od tego czasu zostaje ze słowem', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela' })
+    load([current])
+    expect(addKeywordRule({ keyword: 'automat', direction: 'out', kind: 'expense', categoryId: FOOD })).toBeNull()
+    applyTitleRule(income, current, vi.fn())
+    const undo = lastToast()!.action!
+    expect(undo.label).toBe('Cofnij')
+    undo.run()
+    expect(rulesNow().map((r) => r.match)).toEqual(['automat'])
+
+    applyTitleRule(income, current, vi.fn())
+    const again = lastToast()!.action!.run
+    data.updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: f.settings.import.rules.map((r) => (r.match === 'ubezpieczyciel' ? { ...r, household: true } : r)) } } }))
+    again()
+    expect(rulesNow()).toHaveLength(2)
+    expect(lastToast()!.text).toBe('Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.')
   })
 })
 
