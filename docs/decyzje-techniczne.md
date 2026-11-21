@@ -4015,3 +4015,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   wpisywanie jak dotąd; „Podziel…” (`SplitMenu`) także w szybkim wpisie; menu PPM Operacji – własne pole szukania
   kategorii (`search` w modelu, `categoryQuery`, `filterChoices`); ptaszki propozycji Ładowni – szkic
   `useDraft('cargo:picked')`; `MenuBox` do ustawienia pozycji `opacity 0`, nie `visibility: hidden` (fokus w podmenu).
+- **T556** (1.21.1, U7) Testy nie zależą od zegara ani od kolejności IPC: kopia fixture'a dla `BankFiles` dostaje świeży
+  mtime (Windows zachowuje mtime źródła, obserwator pomija pliki starsze niż `BANK_FILE_DAYS` – stąd dawna czerwień
+  tylko w starym checkoucie); `quickWindow` w `ap20.spec.ts` czeka na dane okna szybkiego wpisu ogrodzeniem round-trip
+  IPC i fokusem kwoty, bez czasu; skrypty `tests/audyt/*` przez `pickCategory`, `openForm`, `splitQuick` /
+  `splitOperation` i `tests/audyt/wywiad.ts` (`intelTab`, `openPanel`, `wholeIntel`).
