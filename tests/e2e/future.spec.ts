@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, openIntel } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -227,7 +227,7 @@ test('1.8.0 Wywiad: kurs na 12 miesięcy i symulator manewrów (zakup, pensja za
   const { app, page, dataDir: dir, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     const course = page.getByTestId('intel-course')
     await expect(course.getByTestId('intel-course-summary')).toContainText('Osłony pełne')
     await expect(course.getByTestId('intel-course-months').locator('tbody tr')).toHaveCount(12)

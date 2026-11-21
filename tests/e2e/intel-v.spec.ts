@@ -5,7 +5,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { formatPln, plural } from '../../src/shared/format'
 import { GLOSSARY } from '../../src/shared/glossary'
-import { launch } from './app'
+import { launch, openIntel } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -79,8 +79,7 @@ test('tagi i wyprawy (1.10.0, F17): karta wyprawy z celem, „Pokaż w Operacjac
   const { app, page, dataDir: dir, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
-    await expect(page.getByTestId('page-intel')).toBeVisible()
+    await openIntel(page, 'spending')
     // The expedition: its money across categories – the receipt's own line only.
     const trip = page.locator('[data-testid="intel-expedition"][data-tag="Chorwacja"]')
     await expect(trip.getByTestId('intel-expedition-spent')).toHaveText(zlText(zl(880)))
@@ -173,8 +172,7 @@ test('Wywiad do szczegółu (1.10.0, F20, F24, F25): podkategorie i komórka →
   const { app, page, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
-    await expect(page.getByTestId('page-intel')).toBeVisible()
+    await openIntel(page, 'structure')
 
     // F25: the fuel balance – last month 6 000 − 1 250 (79,2%), the median of the 6 months before now 88,3%.
     const balance = page.locator(`[data-testid="intel-fuel-row"][data-month="${last}"]`).getByTestId('intel-fuel-balance')
@@ -195,6 +193,11 @@ test('Wywiad do szczegółu (1.10.0, F20, F24, F25): podkategorie i komórka →
     await page.getByRole('radio', { name: 'siła floty netto' }).click()
     await expect.poll(async () => Number(await page.getByTestId('intel-wealth-chart').getAttribute('data-second'))).toBeGreaterThan(10)
 
+    // UX-74: a month of the fuel balance – its operations in Operacje.
+    await page.locator(`[data-testid="intel-fuel-row"][data-month="${last}"]`).getByTestId('intel-fuel-open').click()
+    await expect(page.getByTestId('page-operations')).toBeVisible()
+    await openIntel(page, 'spending')
+
     // F20: the categories open their subcategories; a cell – its operations.
     const food = page.locator('[data-testid="intel-spend-row"][data-label="Jedzenie"]')
     await food.getByTestId('intel-spend-toggle').click()
@@ -210,7 +213,7 @@ test('Wywiad do szczegółu (1.10.0, F20, F24, F25): podkategorie i komórka →
     await expect(page.getByTestId('operations-outflow')).toHaveText(zlText(-zl(1100)))
 
     // „Namierzone cele”: the brands of the period, the most money first; a click – the brand's whole history.
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'spending')
     const target = page.getByTestId('intel-target').first()
     await expect(target).toHaveAttribute('data-name', 'BIEDRONKA')
     await expect(target.getByTestId('intel-target-total')).toHaveText(formatPln(zl(5 * 600 + 500)))
@@ -218,9 +221,12 @@ test('Wywiad do szczegółu (1.10.0, F20, F24, F25): podkategorie i komórka →
     await expect(page.getByTestId('operations-outflow')).toHaveText(zlText(-zl(13 * 600 + 500)))
 
     // A month against its averages: the food over them – the accent only there.
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'spending')
     await expect(page.getByTestId('intel-comparison-month')).toHaveValue(last)
     await expect(page.locator(`[data-testid="intel-comparison-row"][data-id="${FOOD}"]`)).toHaveAttribute('data-over', 'true')
+    // UX-74: the category's amount – its operations of the month in Operacje.
+    await page.locator(`[data-testid="intel-comparison-row"][data-id="${FOOD}"]`).getByTestId('intel-comparison-open').click()
+    await expect(page.getByTestId('page-operations')).toBeVisible()
 
     // The counterparty's year in the editor („Rozpoznanie celu”).
     await page.keyboard.press('Control+k')
@@ -295,7 +301,7 @@ test('„Skąd ta liczba?” i słowniczek (1.10.0, F29), osobista inflacja z CP
     await expect(page.getByTestId('shortcuts')).toHaveCount(0)
 
     // The personal inflation: the same shop's receipt +10% year on year; the CPI of GUS typed by hand.
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'spending')
     await expect(page.getByTestId('intel-inflation-personal')).toHaveText('+10%')
     await expect(page.locator('[data-testid="intel-inflation-brand"][data-name="BIEDRONKA"]')).toContainText('+10%')
     await expect(page.getByTestId('intel-inflation-cpi')).toHaveText('nie wpisano')

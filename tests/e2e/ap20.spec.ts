@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { warsawNow } from '../../src/shared/calc/dates'
 import { defaultCategoryId, MBANK_ACCOUNT_ID, XTB_WALLET_ACCOUNT_ID } from '../../src/shared/schema/budget'
-import { launch } from './app'
+import { intelTab, launch, openIntel } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -123,11 +123,13 @@ test('AP-20: Wywiad – treść dziennika, nazwy z banku czytelne, „połącz n
   const { app, page, dataDir: dir, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
-    await expect(page.getByTestId('page-intel')).toBeVisible()
+    await openIntel(page, 'log')
     // SW sp. 11: what the log says, not only its counts.
     await expect(page.getByTestId('intel-log-entry')).toHaveCount(1)
     await expect(page.getByTestId('intel-log-entry')).toContainText('„wyprzedaż” · Allegro · impuls')
+    // UX-55: the entry's date with the year.
+    await expect(page.getByTestId('intel-log-entry').locator('.num').first()).toHaveText(/^\d{2}\.\d{2}\.\d{4}$/)
+    await intelTab(page, 'spending')
     // WY.13: the ATM by its machine, without the bank's date; the bank's capitals as a person writes them.
     const names = async () => (await page.getByTestId('intel-target').evaluateAll((els) => els.map((e) => e.getAttribute('data-name')))).sort()
     await expect.poll(names).toEqual(['Allegro', 'Bankomat Euronet 0412', 'Kawiarnia Mokka', 'Mokka'])

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, monthRange, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { intelTab, launch, openIntel } from './app'
 import { seedFolder, seedId, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
@@ -38,7 +38,7 @@ test('N3 AP-18: symulator – „teraz” = zasięg Mostka, resztka miesiąca os
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     const bridge = ((await page.getByTestId('state-range').textContent()) ?? '').trim()
     expect(bridge).toMatch(/\d+,\d mies\./)
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     const sim = page.getByTestId('intel-maneuver')
     // „Teraz” = Mostek (AF-33); the month's rest (+1 000 zł of Tomek, −3 000 zł of the buoy) in its own row.
     await expect(sim.getByTestId('maneuver-range').locator('td').nth(1)).toContainText(bridge)
@@ -51,7 +51,18 @@ test('N3 AP-18: symulator – „teraz” = zasięg Mostka, resztka miesiąca os
     await sim.getByTestId('maneuver-goal-name').fill('Audyt')
     await sim.getByLabel('Termin nowego celu').fill('2027-13')
     await expect(sim.getByTestId('maneuver-goal-deadline')).toHaveAttribute('aria-invalid', 'true')
-    await expect(sim).toContainText('Termin jako RRRR-MM')
+    // Leaving the field with a month that cannot be read: said, the field goes back to the saved (empty) term.
+    await sim.getByLabel('Termin nowego celu').press('Tab')
+    await expect(page.getByText('Nieprawidłowy miesiąc')).toBeVisible()
+    await expect(sim.getByTestId('maneuver-goal-deadline')).toHaveValue('')
+    await sim.getByLabel('Termin nowego celu').fill('2027-06')
+    await sim.getByLabel('Termin nowego celu').press('Tab')
+    await expect(sim.getByTestId('maneuver-goal-deadline')).toHaveValue('2027-06')
+    // UX-17: the form is a draft – another tab and back loses nothing.
+    await intelTab(page, 'structure')
+    await intelTab(page, 'forecasts')
+    await expect(sim.getByTestId('maneuver-goal-name')).toHaveValue('Audyt')
+    await expect(sim.getByTestId('maneuver-goal-deadline')).toHaveValue('2027-06')
     await sim.getByTestId('maneuver-goal-rate').getByRole('switch').click()
     await expect(sim.getByTestId('maneuver-goal-rate').getByRole('switch')).toHaveAttribute('aria-checked', 'true')
     await sim.getByTestId('maneuver-clear').click()
@@ -86,7 +97,7 @@ test('N3 AP-18: kurs przy pustych osłonach i kadłubie – pensja częściowa i
   const { app, page, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     const summary = page.getByTestId('intel-course-summary')
     await expect(summary.getByTestId('intel-course-partial').locator('td').nth(2)).not.toHaveText('nie')
     await expect(summary.getByTestId('intel-course-short').locator('td').nth(2)).toContainText('zł')

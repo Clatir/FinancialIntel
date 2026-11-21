@@ -3,15 +3,16 @@
  * the average) and the maneuvers' simulator (F35 – „co jeśli”: the same course with a changed input side by side; nothing
  * is stored, „Zastosuj” only where it is an ordinary edit – the salary of a month on).
  */
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { addMonths } from '@shared/calc/dates'
 import { course, COURSE_KINDS, COURSE_LABEL, courseIncome, courseInputOf, maneuver, MANEUVER_GOAL, type Course, type CourseInput, type CourseKind, type Maneuver } from '@shared/calc/course'
 import { SHIP_CLASS_LABEL, shipClass, type FleetState } from '@shared/calc/fleet'
 import { CAP_REASON } from '@shared/calc/why'
 import { rangeText } from '@shared/format'
-import { AmountField, plnText } from '../../components/fields'
+import { AmountField, MonthField, plnText } from '../../components/fields'
 import { Field, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { useData } from '../../store/data'
+import { useDraft } from '../../store/drafts'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
 import { monthLabel, plMonth } from '../../lib/format'
@@ -108,8 +109,9 @@ export function CoursePanel({ fleet, input }: { fleet: FleetState; input: Course
               <tr className="text-dim">
                 <th className="py-0.5 text-left font-normal">Miesiąc</th>
                 {courses.map((c) => (
-                  <th key={c.kind} className="text-right font-normal">
-                    osłony · kadłub
+                  <th key={c.kind} className="text-right font-normal" data-testid="intel-course-months-head" data-kind={c.kind}>
+                    {COURSE_LABEL[c.kind]}
+                    <span className="block text-[10.5px]">osłony · kadłub</span>
                   </th>
                 ))}
               </tr>
@@ -210,13 +212,12 @@ const rangeClass = (r: number | null) => (r == null ? '—' : `${rangeText(r)} �
 const classOf = (range: number | null) => (range == null ? '—' : SHIP_CLASS_LABEL[shipClass(range)])
 
 export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: CourseInput | null }) {
-  const [kind, setKind] = useState<CourseKind>('median')
-  const [f, setF] = useState<Form>(() => blankForm(fleet.month))
+  // The form is a draft (AP-8, UX-17): leaving Wywiad – or just another tab – loses nothing typed.
+  const [kind, setKind, clearKind] = useDraft<CourseKind>('intel.maneuver-kind', () => 'median')
+  const [f, setF, clearForm] = useDraft<Form>('intel.maneuver', () => blankForm(fleet.month))
   const set = (p: Partial<Form>) => setF((x) => ({ ...x, ...p }))
   const m = useMemo(() => maneuverOf(f), [f])
   const changed = formChanged(f, blankForm(fleet.month))
-  // A term typed that is not a month (WY sp. 3, „2027-13”): said at the field – the goal counts without a term.
-  const badDeadline = f.goalDeadline !== '' && !MONTH_RE.test(f.goalDeadline)
   const [before, after] = useMemo(() => {
     if (!input) return [null, null]
     const base = { ...input, income: courseIncome(fleet.incomeStats, kind) }
@@ -263,19 +264,11 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
               <span className="text-muted">%</span>
             </div>
           </Field>
-          <Field label="Nowy cel" labelWidth={130} hint={badDeadline ? 'Termin jako RRRR-MM (np. 2027-06) – inaczej cel liczy się bez terminu i bez raty.' : undefined}>
+          <Field label="Nowy cel" labelWidth={130}>
             <div className="flex flex-wrap items-center gap-2">
               <input className="input h-[24px] w-[110px]" value={f.goalName} maxLength={80} placeholder="nazwa" onChange={(e) => set({ goalName: e.currentTarget.value })} aria-label="Nazwa nowego celu" data-testid="maneuver-goal-name" />
               <AmountField className="h-[24px] w-[100px]" value={f.goalTarget} allowEmpty onChange={(goalTarget) => set({ goalTarget })} aria-label="Kwota nowego celu" data-testid="maneuver-goal" />
-              <input
-                className="input num h-[24px] w-[76px]"
-                value={f.goalDeadline}
-                placeholder="RRRR-MM"
-                onChange={(e) => set({ goalDeadline: e.currentTarget.value.trim() })}
-                aria-label="Termin nowego celu"
-                aria-invalid={badDeadline}
-                data-testid="maneuver-goal-deadline"
-              />
+              <MonthField className="h-[24px] w-[76px]" value={f.goalDeadline || null} allowEmpty onChange={(goalDeadline) => set({ goalDeadline: goalDeadline ?? '' })} aria-label="Termin nowego celu" data-testid="maneuver-goal-deadline" />
               <Toggle checked={f.goalRate} onChange={(goalRate) => set({ goalRate })} label="rata z pensji" data-testid="maneuver-goal-rate" />
             </div>
           </Field>
@@ -337,7 +330,10 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
               </button>
             )}
             {changed && (
-              <button className="whitespace-nowrap text-[11.5px] text-muted hover:text-fg-strong" onClick={() => setF(blankForm(fleet.month))} data-testid="maneuver-clear">
+              <button className="whitespace-nowrap text-[11.5px] text-muted hover:text-fg-strong" onClick={() => {
+                  clearForm()
+                  clearKind()
+                }} data-testid="maneuver-clear">
                 wyczyść manewr
               </button>
             )}

@@ -1,345 +1,77 @@
 /**
- * Wywiad (spec „Wywiad i raporty”, E8, D73): the structure of the own money in the language of ICT – the wealth week by
- * week with its drawdown and BOS / CHoCH (1.10.0: beside it the net worth – F24), the fuel balance of the months (F25),
- * the killzones of spending, the FVG of the envelopes (plan against fact), the spending over time with the cargo as the
- * Order Block – to the detail (F20) –, the brands, a month against its averages, the range forecast without any payout,
- * the expeditions (F17), the personal inflation (F36), the captain's log; the shields and the hull at each month's end
- * (AP-31); the forecast for years beside the course (AP-44).
+ * Wywiad (spec „Wywiad i raporty”, E8, D73) in tabs (D106 pt 6, T539): the structure of the own money in the language of ICT.
+ * „Struktura” – the wealth week by week with its drawdown and BOS / CHoCH (beside it the net worth – F24), the fuel balance
+ * (F25), the shields and the hull at each month's end (AP-31); „Wydatki” – the FVG of the envelopes, a month against its
+ * averages, the spending over time with the cargo as the Order Block (F20), the brands, the killzones, the expeditions (F17),
+ * the personal inflation (F36); „Prognozy” – the range forecast, the course and the maneuvers' simulator, the forecast for
+ * years (AP-44); „Dziennik” – the captain's log. The last tab is kept on this computer.
  */
-import { useMemo, useState } from 'react'
-import { addDays, addMonths, isoWeekOf, monthOf, monthRange } from '@shared/calc/dates'
-import { killzoneNote } from '@shared/calc/game'
-import { glossaryOf } from '@shared/glossary'
-import { openDays, scheduledDays } from '@shared/calc/scheduled'
-import { killzoneGrid, logAccuracy, logEntries, rangeForecast, spendingByMonth } from '@shared/calc/intel'
-import { dm } from '@shared/calc/briefing'
-import { debriefing } from '@shared/calc/plan'
-import { sum, upToDay } from '@shared/calc/operations'
-import { rangeText } from '@shared/format'
+import { useState } from 'react'
 import { useData } from '../../store/data'
 import { useFleet } from '../../store/fleet'
-import { useGameRecords } from '../../store/game'
-import { useRecordList } from '../../store/records'
-import { amountsHidden, plnText, signedPln } from '../../components/fields'
-import { Meter } from '../../components/meters'
-import { Columns } from '../../components/layout'
-import { Empty, Panel, Segmented, cx } from '../../components/ui'
-import { monthGenLabel, monthLabel, plDate } from '../../lib/format'
-import { useCategories } from '../operations/pickers'
-import { openOperation } from '../operations/state'
-import { KillzoneMap, WealthChart } from './charts'
-import { CoursePanel, ManeuverPanel, useCourseInput } from './Course'
-import { CushionPanel } from './Cushion'
-import { ForecastPanel } from './Forecast'
-import { useNetWorth, useWealth } from './wealth'
-import { ComparisonPanel, SpendingTable, TargetsPanel } from './Drill'
-import { ExpeditionsPanel } from './Expeditions'
-import { FuelPanel } from './Fuel'
-import { InflationPanel } from './Inflation'
+import { Empty, Segmented, cx } from '../../components/ui'
+import { ForecastsTab } from './ForecastsTab'
+import { LogTab } from './LogTab'
+import { SpendingTab } from './SpendingTab'
+import { StructureTab } from './StructureTab'
+import { INTEL_TABS, PERIODS, readIntelTab, storeIntelTab, tabReadsPeriod, type IntelTab, type Period } from './tabs'
 
-const zl = (g: number) => `${plnText(g)} zł`
-/** The log's entries shown in Wywiad (AP-20): the newest of the period. */
-const LOG_SHOWN = 12
-type Period = '3' | '6' | '12'
-const PERIODS: Array<{ value: Period; label: string }> = [
-  { value: '3', label: '3 mies.' },
-  { value: '6', label: '6 mies.' },
-  { value: '12', label: '12 mies.' }
-]
-
-/** Which line of the wealth the structure and the drawdown read (F24), kept on this computer. */
-type Basis = 'accounts' | 'net'
-const BASIS_KEY = 'fi.intel.wealthBasis'
-function readBasis(): Basis {
-  try {
-    return localStorage.getItem(BASIS_KEY) === 'net' ? 'net' : 'accounts'
-  } catch {
-    return 'accounts'
-  }
+/** What the 3 / 6 / 12 months switch reads on the tab – said beside it. */
+const PERIOD_NOTE: Partial<Record<IntelTab, string>> = {
+  spending: 'dotyczy: wydatków w czasie, namierzonych celów i Killzones',
+  log: 'dotyczy: trafności i wpisów dziennika'
 }
 
 export function IntelPage() {
   const fleet = useFleet()
   const settings = useData((s) => s.fi?.settings ?? null)
-  const transactions = useRecordList('transactions')
-  const plans = useRecordList('months')
-  const containers = useRecordList('containers')
-  const cats = useCategories()
+  const [tab, setTabState] = useState<IntelTab>(readIntelTab)
   const [period, setPeriod] = useState<Period>('6')
-  // The day and the month only: the fleet is a new object every minute, the analyses change with the day.
-  const today = fleet?.today ?? null
-  const month = fleet?.month ?? null
-  const accounts = useWealth(today)
-  const net = useNetWorth(accounts.points, today, fleet?.household ?? null)
-  const [basis, setBasisState] = useState<Basis>(readBasis)
-  const setBasis = (b: Basis) => {
-    setBasisState(b)
-    try {
-      localStorage.setItem(BASIS_KEY, b)
-    } catch {
-      /* storage unavailable: the choice lives for the session */
-    }
+  const setTab = (t: IntelTab) => {
+    setTabState(t)
+    storeIntelTab(t)
   }
-  // The line the structure, the peak and the drawdown are of; the other one drawn thin beside it.
-  const chosen = basis === 'net' && net.points.length ? net : accounts
-  const { points: wealth, ...structure } = chosen
-  const second = chosen === net ? accounts.points : net.points
-  const months = useMemo(() => (month ? monthRange(addMonths(month, -(Number(period) - 1)), month) : []), [month, period])
-  const killzones = useMemo(() => (today && months.length ? killzoneGrid(transactions, `${months[0]}-01`, today) : null), [transactions, months, today])
-  // The week's mission (AP-30): a killzone mission's hour said beside the period's – one „Twoja killzone”.
-  const game = useGameRecords()
-  const weekMission = useMemo(() => (today ? (game.flatMap((g) => g.missions).find((m) => m.week === isoWeekOf(today)) ?? null) : null), [game, today])
-  // The month in progress up to today (AP-36), as the debriefing and the fuel balance beside it.
-  const spending = useMemo(() => spendingByMonth(today ? upToDay(transactions, today) : transactions, settings?.categories ?? [], months), [transactions, settings, months, today])
-  const log = useMemo(() => (settings ? logAccuracy(transactions, settings.orders, months) : []), [transactions, settings, months])
-  const logWritten = useMemo(() => (today && months.length ? logEntries(transactions, `${months[0]}-01`, today, LOG_SHOWN) : { entries: [], total: 0 }), [transactions, months, today])
-  const [fvgMonth, setFvgMonth] = useState<string | null>(null)
-  // The buoys' money by month for the range's variant (F16): their open days of two years, a late one this month.
-  const scheduled = useRecordList('scheduled')
-  const buoys = useMemo(() => {
-    if (!today || !month) return undefined
-    const out = new Map<string, number>()
-    for (const d of openDays(scheduledDays(scheduled, transactions, today, addDays(today, -33), addDays(today, 760))))
-      if (d.scheduled.amount != null) out.set(d.date < today ? month : monthOf(d.date), (out.get(d.date < today ? month : monthOf(d.date)) ?? 0) + d.scheduled.amount)
-    return out
-  }, [scheduled, transactions, today, month])
-  const courseInput = useCourseInput(fleet)
   if (!fleet || !settings) return <Empty>Wczytywanie…</Empty>
-  const fvgOf = fvgMonth ?? (fleet.start && addMonths(fleet.month, -1) >= fleet.start.slice(0, 7) ? addMonths(fleet.month, -1) : fleet.month)
-  const brief = debriefing(fvgOf, { transactions, categories: settings.categories, plans, log: fleet.log, alarms: fleet.alarms, containers, today: fleet.today })
-  const forecast = rangeForecast({ shields: fleet.shields.amount, hull: fleet.hull.amount, debt: fleet.debt, costs: fleet.costs.average, month: fleet.month, plans: buoys })
-  const peak = wealth.length ? Math.max(...wealth.map((p) => p.value)) : 0
-  const maxDd = wealth.reduce((m, p) => Math.min(m, p.drawdown), 0)
-  const maxSpend = Math.max(1, ...spending.rows.flatMap((r) => r.values), ...spending.cargo)
-  const lastNet = net.points.at(-1)
-  const lastAccounts = accounts.points.at(-1)
-  const fvgMonths = monthRange(fleet.start ? fleet.start.slice(0, 7) : fleet.month, fleet.month).reverse().slice(0, 12)
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="page-intel">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
         <h1 className="text-[15px] font-medium text-fg-strong">Wywiad</h1>
         <span className="text-[12px] text-muted">struktura pieniędzy w języku ICT</span>
+        <div role="tablist" aria-label="Zakładki Wywiadu" className="ml-3 flex items-center gap-1" data-testid="intel-tabs">
+          {INTEL_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`intel-tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls="intel-tabpanel"
+              title={t.title}
+              onClick={() => setTab(t.id)}
+              className={cx('h-[24px] border px-2.5 text-[12px] transition-colors duration-150', tab === t.id ? 'border-accent bg-accent-soft text-accent' : 'border-line-strong text-muted hover:bg-hover hover:text-fg-strong')}
+              data-testid={`intel-tab-${t.id}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <span className="flex-1" />
-        <Segmented size="sm" value={period} onChange={setPeriod} options={PERIODS} aria-label="Okres analiz" />
+        {tabReadsPeriod(tab) && (
+          <>
+            <span className="text-[11px] text-dim" data-testid="intel-period-note">
+              {PERIOD_NOTE[tab]}
+            </span>
+            <span className="text-[12px] text-muted">Okres</span>
+            <Segmented size="sm" value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ ...p }))} aria-label="Okres analiz" data-testid="intel-period" />
+          </>
+        )}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <Columns id="intel" tracks={['minmax(460px,3fr)', 'minmax(360px,2fr)']} className="grid min-h-full items-start">
-          <div className="flex min-w-0 flex-col">
-            <Panel title="Krzywa majątku" testId="intel-wealth">
-              {wealth.length < 3 ? (
-                <Empty>Za mało danych – krzywa pojawi się po dwóch tygodniach historii.</Empty>
-              ) : (
-                <div className="flex flex-col gap-2 text-[12px]">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Segmented
-                      size="sm"
-                      value={chosen === net ? 'net' : 'accounts'}
-                      onChange={setBasis}
-                      options={[
-                        { value: 'accounts', label: 'na kontach', title: 'Suma sald kont budżetu' },
-                        { value: 'net', label: 'siła floty netto', title: 'Konta + należności (domownicy, pożyczki udzielone) − dług (pożyczki wzięte, pieniądze domowników)' }
-                      ]}
-                      aria-label="Linia majątku"
-                    />
-                    <span className="text-[11px] text-dim">struktura i drawdown liczone na wybranej linii, druga – przerywana</span>
-                  </div>
-                  <div className="flex flex-wrap items-baseline gap-4">
-                    <Fact label="Na kontach" value={lastAccounts ? zl(lastAccounts.value) : '—'} strong={chosen !== net} testId="intel-wealth-accounts" />
-                    {lastNet && <Fact label="Siła floty netto" value={zl(lastNet.value)} strong={chosen === net} testId="intel-wealth-net" />}
-                    <Fact label="Szczyt" value={zl(peak)} />
-                    <Fact label="Największy drawdown" value={zl(maxDd)} />
-                    <Fact
-                      label="Struktura"
-                      value={structure.trend === 'up' ? 'bullish – wyższe szczyty' : structure.trend === 'down' ? 'bearish – niższe dołki' : 'bez struktury'}
-                      testId="intel-trend"
-                    />
-                  </div>
-                  <WealthChart points={wealth} marks={structure.marks} net={second} />
-                  <span className="text-[11px] text-dim">
-                    Na kontach – suma sald kont budżetu na koniec każdego tygodnia, z pieniędzmi pożyczonymi i depozytem domowników. Siła floty netto – do tego należności
-                    (domownicy, pożyczki udzielone) minus dług (pożyczki wzięte, pieniądze domowników na kontach): wzięta pożyczka jej nie podnosi. BOS – przebicie
-                    ostatniego swingu zgodnie z trendem, CHoCH – pierwsze przebicie przeciw trendowi (zmiana charakteru). Pod spodem drawdown od szczytu.
-                  </span>
-                  {structure.marks.length > 0 && (
-                    <div className="flex flex-col" data-testid="intel-marks">
-                      {structure.marks
-                        .slice(-5)
-                        .reverse()
-                        .map((m) => (
-                          <span key={m.date + m.kind} className="text-[11.5px]">
-                            <span className="num text-dim">{plDate(m.date)}</span> <span className={m.kind === 'choch' ? 'text-accent' : 'text-fg-strong'}>{m.kind === 'choch' ? 'CHoCH' : 'BOS'}</span>{' '}
-                            {m.direction === 'up' ? 'w górę' : 'w dół'} – poziom {zl(m.level)}
-                          </span>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Panel>
-            <FuelPanel fleet={fleet} />
-            <CushionPanel month={fleet.month} />
-            <Panel title="Wydatki w czasie" testId="intel-spending">
-              <SpendingTable months={months} spending={spending} max={maxSpend} />
-            </Panel>
-            <TargetsPanel from={`${months[0] ?? fleet.month}-01`} to={fleet.today} aliases={settings.import.aliases} />
-            <Panel title="Killzones wydatków" testId="intel-killzones-panel">
-              {!killzones || !killzones.withTime ? (
-                <Empty>Brak zakupów z godziną w tym okresie – godzinę mają wpisy z szybkiego wpisu i Operacji (import z mBanku jej nie ma).</Empty>
-              ) : (
-                <div className="flex flex-col gap-1.5 text-[12px]">
-                  <KillzoneMap cells={killzones.cells} />
-                  <span className="text-[11px] text-dim">
-                    Zakupy z godziną: {killzones.withTime}, bez godziny: {killzones.withoutTime}. {killzoneNote(Number(period), weekMission)}
-                  </span>
-                </div>
-              )}
-            </Panel>
-          </div>
-          <div className="flex min-w-0 flex-col">
-            <Panel title={`FVG kopert – ${monthLabel(fvgOf)}`} name="FVG kopert" testId="intel-fvg">
-              <div className="flex flex-col gap-1.5 text-[12px]">
-                <select className="input h-[24px] self-start" value={fvgOf} onChange={(e) => setFvgMonth(e.currentTarget.value)} aria-label="Miesiąc FVG" data-testid="intel-fvg-month">
-                  {fvgMonths.map((m) => (
-                    <option key={m} value={m}>
-                      {monthLabel(m)}
-                    </option>
-                  ))}
-                </select>
-                {!brief.envelopes.length && <span className="text-muted">Bez kopert w tym miesiącu.</span>}
-                {brief.envelopes.map((e) => (
-                  <div key={e.categoryId} className="flex flex-col gap-0.5" data-testid="intel-fvg-row">
-                    <div className="flex items-baseline gap-2">
-                      <span className="min-w-0 flex-1 truncate">{cats.label(e.categoryId)}</span>
-                      <span className="num text-dim">
-                        {plnText(e.spent)} / {plnText(e.limit)}
-                      </span>
-                      {/* Neutral and without a sign while the amounts are hidden (B61, WY sp. 5) – as on the screens of the month. */}
-                      <span className={cx('num w-[96px] text-right', !amountsHidden() && (e.gap < 0 ? 'text-down' : 'text-up'))}>{e.gap >= 0 && !amountsHidden() ? `+${plnText(e.gap)} zł` : `${signedPln(e.gap)} zł`}</span>
-                    </div>
-                    <Meter value={e.spent} max={e.limit} over />
-                  </div>
-                ))}
-                <span className="text-[11px] text-dim">Fair Value Gap: luka między planem a faktem – na plus zostało w kopercie, na minus przekroczenie.</span>
-              </div>
-            </Panel>
-            <ComparisonPanel month={fleet.month} start={fleet.start} covered={fleet.historyMonths} />
-            <Panel title="Prognoza zasięgu" testId="intel-range">
-              <div className="flex flex-col gap-1.5 text-[12px]">
-                <span className="text-fg-strong" data-testid="intel-range-text">
-                  {forecast.emptyIn == null
-                    ? 'Brak średnich kosztów – prognoza po pierwszym pełnym miesiącu.'
-                    : `Bez żadnej wypłaty paliwa starczy na ${rangeText(forecast.emptyIn)} (${monthLabel(forecast.emptyMonth!)}).`}
-                </span>
-                {forecast.plansEmpty !== undefined && (
-                  <span className="text-[11.5px] text-muted" data-testid="intel-range-plans">
-                    Z bojami (zaplanowane wydatki i wpływy): {forecast.plansEmpty ? `do ${monthGenLabel(forecast.plansEmpty)}` : 'starczy dłużej niż prognoza'} – druga kreska w każdym miesiącu.
-                  </span>
-                )}
-                {forecast.points.map((p) => (
-                  <div key={p.month} className="flex items-center gap-2 text-[11.5px]">
-                    <span className="w-[70px] text-dim">{monthLabel(p.month).slice(0, 3)} {p.month.slice(2, 4)}</span>
-                    <div className="flex flex-1 flex-col gap-[2px]">
-                      <div className="h-[5px] bg-line">
-                        <div className="h-full bg-accent" style={{ width: `${forecast.points[0]!.fuel ? (p.fuel / forecast.points[0]!.fuel) * 100 : 0}%` }} />
-                      </div>
-                      {p.withPlans != null && (
-                        <div className="h-[3px] bg-line" title={`Z bojami: ${zl(p.withPlans)}`}>
-                          <div className="h-full bg-fg-strong" style={{ width: `${forecast.points[0]!.fuel ? Math.min(100, (p.withPlans / forecast.points[0]!.fuel) * 100) : 0}%` }} />
-                        </div>
-                      )}
-                    </div>
-                    <span className="num w-[90px] text-right">{plnText(p.fuel)}</span>
-                  </div>
-                ))}
-                <span className="text-[11px] text-dim">Osłony (bufor na pensje) i kadłub (fundusz awaryjny) pomniejszone o dług, wydawane po średnich kosztach netto.</span>
-              </div>
-            </Panel>
-            <CoursePanel fleet={fleet} input={courseInput} />
-            {/* AP-44: the forecast for years beside the course – its first year is the course. */}
-            <ForecastPanel fleet={fleet} input={courseInput} />
-            <ManeuverPanel fleet={fleet} input={courseInput} />
-            <ExpeditionsPanel />
-            <InflationPanel fleet={fleet} />
-            <Panel title="Dziennik kapitański" testId="intel-log">
-              <table className="w-full text-[11.5px]">
-                <thead>
-                  <tr className="text-dim">
-                    <th className="py-0.5 text-left font-normal">Miesiąc</th>
-                    <th className="text-right font-normal">plan</th>
-                    <th className="text-right font-normal">impuls</th>
-                    <th className="text-right font-normal">bez oznaczenia</th>
-                    <th className="text-right font-normal">trafność</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {log.map((l) => {
-                    const marked = l.plan.count + l.impulse.count
-                    return (
-                      <tr key={l.month} data-testid="intel-log-row">
-                        <td className="py-0.5">{monthLabel(l.month)}</td>
-                        <td className="num text-right">
-                          {l.plan.count} · {plnText(l.plan.amount)}
-                        </td>
-                        <td className="num text-right">
-                          {l.impulse.count} · {plnText(l.impulse.amount)}
-                        </td>
-                        <td className="num text-right text-dim">{l.unmarked}</td>
-                        <td className="num text-right text-fg-strong">{marked ? `${Math.round((l.plan.count / marked) * 100)}%` : '—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              <span className="text-[11px] text-dim">
-                Trafność = zakupy zaplanowane wśród oznaczonych. Impulsy łącznie: {sum(log.map((l) => l.impulse.count))} na {zl(sum(log.map((l) => l.impulse.amount)))}.
-              </span>
-              {/* What was written in the log (AP-20, SW sp. 11), the newest first – a click opens the operation. */}
-              {logWritten.total > 0 && (
-                <div className="mt-1.5 flex flex-col border-t border-line pt-1 text-[11.5px]" data-testid="intel-log-entries">
-                  <span className="label pb-0.5">Wpisy dziennika</span>
-                  {logWritten.entries.map((e) => (
-                    <button
-                      key={e.id}
-                      type="button"
-                      className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-baseline gap-x-2 py-[2px] text-left hover:bg-hover"
-                      onClick={() => openOperation({ id: e.id, date: e.date })}
-                      title="Pokaż operację"
-                      data-testid="intel-log-entry"
-                    >
-                      <span className="num text-muted">{dm(e.date)}</span>
-                      <span className="min-w-0 truncate">
-                        <span className="text-fg-strong">„{e.note}”</span>
-                        <span className="text-dim">
-                          {' '}
-                          · {e.name || 'wydatek'}
-                          {e.impulse ? ` · ${e.impulse === 'plan' ? 'plan' : 'impuls'}` : ''}
-                        </span>
-                      </span>
-                      <span className="num text-right">{plnText(e.amount)}</span>
-                    </button>
-                  ))}
-                  {logWritten.total > logWritten.entries.length && (
-                    <span className="pt-0.5 text-[11px] text-dim">
-                      {logWritten.entries.length} najnowszych z {logWritten.total} – reszta w Operacjach (filtr znaczników).
-                    </span>
-                  )}
-                </div>
-              )}
-            </Panel>
-          </div>
-        </Columns>
+      <div className="min-h-0 flex-1 overflow-auto" role="tabpanel" id="intel-tabpanel" aria-labelledby={`intel-tab-${tab}`} data-tab={tab} data-testid="intel-tabpanel">
+        {tab === 'structure' && <StructureTab fleet={fleet} />}
+        {tab === 'spending' && <SpendingTab fleet={fleet} settings={settings} period={period} />}
+        {tab === 'forecasts' && <ForecastsTab fleet={fleet} />}
+        {tab === 'log' && <LogTab fleet={fleet} settings={settings} period={period} />}
       </div>
-    </div>
-  )
-}
-
-function Fact({ label, value, strong, testId }: { label: string; value: string; strong?: boolean; testId?: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="label">{label}</span>
-      <span className={cx('num', strong ? 'text-[16px] text-fg-strong' : 'text-fg')} data-testid={testId}>
-        {value}
-      </span>
     </div>
   )
 }
