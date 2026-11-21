@@ -597,6 +597,9 @@ function FinishButton({ locked, needs, saveError, onFinish }: { locked: string |
   )
 }
 
+/** A member's balance at the start is one of the two (UX-6): the tooltip of the field off while the other has an amount. */
+const OPENING_EITHER = 'Albo ma oddać, albo zaliczka'
+
 function WizardHouseholdSection({ readOnly }: { readOnly: boolean }) {
   const members = useMembers().filter((m) => !m.archived)
   const [name, setName] = useState('')
@@ -610,39 +613,45 @@ function WizardHouseholdSection({ readOnly }: { readOnly: boolean }) {
       <span className="label">Domownicy i rozliczenia na start (opcjonalnie)</span>
       <Note>Osoby, z którymi dzielisz wydatki. Jeśli na start ktoś ma Ci oddać za wcześniejsze zakupy albo trzymasz jego zaliczkę na koncie, wpisz kwotę.</Note>
       <div className="flex flex-col gap-1.5">
-        {members.map((m) => (
-          <div key={m.id} className="flex flex-wrap items-center gap-2" data-testid="wizard-member-row" data-name={m.name}>
-            <span className="w-[120px] truncate text-fg-strong" title={m.name}>
-              {m.name}
-            </span>
-            <label className="flex items-center gap-1.5 text-muted">
-              <span>ma oddać</span>
-              <AmountField
-                className="h-[24px] w-[100px]"
-                value={m.opening.owed || null}
-                allowEmpty
-                placeholder="0,00"
-                disabled={readOnly}
-                onChange={(v) => patchMember(m.id, { opening: { owed: Math.max(0, v ?? 0), deposit: 0, since: null } })}
-                aria-label={`${m.name} ma oddać`}
-                data-testid="wizard-member-owed"
-              />
-            </label>
-            <label className="flex items-center gap-1.5 text-muted">
-              <span>zaliczka</span>
-              <AmountField
-                className="h-[24px] w-[100px]"
-                value={m.opening.deposit || null}
-                allowEmpty
-                placeholder="0,00"
-                disabled={readOnly}
-                onChange={(v) => patchMember(m.id, { opening: { owed: 0, deposit: Math.max(0, v ?? 0), since: null } })}
-                aria-label={`${m.name} zaliczka`}
-                data-testid="wizard-member-deposit"
-              />
-            </label>
-          </div>
-        ))}
+        {members.map((m) => {
+          // Either owed or a deposit (UX-6): the empty field is off while the other has an amount – never one zeroed
+          // without a word. Both set (an older record): both stay open, a change of one clears the other as before.
+          const owedOff = !m.opening.owed && m.opening.deposit > 0
+          const depositOff = !m.opening.deposit && m.opening.owed > 0
+          return (
+            <div key={m.id} className="flex flex-wrap items-center gap-2" data-testid="wizard-member-row" data-name={m.name}>
+              <span className="w-[120px] truncate text-fg-strong" title={m.name}>
+                {m.name}
+              </span>
+              <label className={cx('flex items-center gap-1.5 text-muted', owedOff && 'opacity-60')} title={owedOff ? `${OPENING_EITHER} – żeby wpisać „ma oddać”, wyczyść zaliczkę.` : undefined} data-testid="wizard-member-owed-label">
+                <span>ma oddać</span>
+                <AmountField
+                  className="h-[24px] w-[100px]"
+                  value={m.opening.owed || null}
+                  allowEmpty
+                  placeholder="0,00"
+                  disabled={readOnly || owedOff}
+                  onChange={(v) => patchMember(m.id, { opening: { owed: Math.max(0, v ?? 0), deposit: 0, since: null } })}
+                  aria-label={`${m.name} ma oddać`}
+                  data-testid="wizard-member-owed"
+                />
+              </label>
+              <label className={cx('flex items-center gap-1.5 text-muted', depositOff && 'opacity-60')} title={depositOff ? `${OPENING_EITHER} – żeby wpisać zaliczkę, wyczyść „ma oddać”.` : undefined} data-testid="wizard-member-deposit-label">
+                <span>zaliczka</span>
+                <AmountField
+                  className="h-[24px] w-[100px]"
+                  value={m.opening.deposit || null}
+                  allowEmpty
+                  placeholder="0,00"
+                  disabled={readOnly || depositOff}
+                  onChange={(v) => patchMember(m.id, { opening: { owed: 0, deposit: Math.max(0, v ?? 0), since: null } })}
+                  aria-label={`${m.name} zaliczka`}
+                  data-testid="wizard-member-deposit"
+                />
+              </label>
+            </div>
+          )
+        })}
       </div>
       <div className="flex items-center gap-2">
         <TextField className="h-[24px] w-[180px]" value={name} onChange={setName} placeholder="Imię domownika, np. Ania" maxLength={40} data-testid="wizard-member-name" />

@@ -14,6 +14,7 @@ import { addRecord, canWrite, deleteOrSay, listOf, NEWER_RECORD_MESSAGE, updateR
 import { toast } from '../../store/ui'
 import { playSound } from '../../lib/sounds'
 import { plnText } from '../../components/fields'
+import { plDate } from '../../lib/format'
 
 /** A split changed in the window (grosze); null = the docking order, as proposed. */
 export interface SplitDraft {
@@ -181,9 +182,27 @@ export function confirmTopUp(txId: string): boolean {
 }
 
 /** An ICTTJ entry that is not the budget's money (it went elsewhere): left out of the docking, until brought back. */
-export function skipEntry(id: string, skip: boolean): void {
-  updateSettings((f) => {
+export function skipEntry(id: string, skip: boolean): boolean {
+  return updateSettings((f) => {
     const list = f.settings.ictj.skipped.filter((x) => x !== id)
     return { ...f, settings: { ...f.settings, ictj: { ...f.settings.ictj, skipped: skip ? [...list, id] : list } } }
   })
+}
+
+/**
+ * „Pomiń wpis” in the docking window (UX-9): the delivery's entry left out of the docking, with „Cofnij” bringing it back
+ * (`skipEntry(id, false)`) – while it is still skipped (brought back meanwhile: nothing written). false = nothing written.
+ */
+export function skipDelivery(d: Pick<Delivery, 'entry' | 'transaction' | 'direction'>): boolean {
+  const e = d.entry
+  if (!e || !canWrite() || !skipEntry(e.id, true)) return false
+  // The direction's own word (N43): a return goes out of the bank.
+  const then = d.transaction ? `${d.direction === 'out' ? 'wypływ' : 'wpływ'} w banku zostaje w budżecie zwykłą kolejnością dokowania` : 'FI nie będzie go dokować'
+  toast(`Pominięto wpis z ICTTJ: ${plnText(e.amount)} zł z ${plDate(e.date)} – ${then}.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      if (useData.getState().fi?.settings.ictj.skipped.includes(e.id)) skipEntry(e.id, false)
+    }
+  })
+  return true
 }
