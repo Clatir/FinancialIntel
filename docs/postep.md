@@ -5,10 +5,80 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 20 KB, sprawdza CI – D103).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan (21.11.2026):** **1.21.0 wydane** (21.11.2026, PR #70 – grupa „Ergonomia”, D106, T535–T549: Szybki start
-kreatora, rozliczenia z domownikami w Radarze, reguła tytułu przez zmiany zbiorcze i „Cofnij” wszędzie, Wywiad
-i Ustawienia w zakładkach, skróty, toasty, Mostek, Meldunki, Radar). Wpis grupy z „Uwagami na później” – archiwum
-`postep-od-1.15.4.md` (Grep „Grupa 1.21.0”). Następna grupa – na komendę użytkownika (D67).
+**Stan (21.11.2026):** **1.21.0 wydane** (PR #70). W toku **grupa 1.21.1 „Uwagi na później”** (komenda użytkownika
+21.11: P1 + U0–U8 jednym ciągiem) – gałąź `claude/1.21.1-uwagi`, sekcja niżej. Wpis grupy 1.21.0 – archiwum
+`postep-od-1.15.4.md` (Grep „Grupa 1.21.0”).
+
+## Grupa 1.21.1 – uwagi na później (T550–T557, 21.11.2026)
+
+Sesja główna Opus 5.5 · high; wykonawcy z `.claude/agents/` w drzewach (`isolation: worktree`, pułapki – skill `etap`).
+Źródło: „Uwagi na później” wpisu 1.21.0 w archiwum. Przyjęte propozycje (21.11, komenda „całość jednym ciągiem”):
+filtra godzin Killzones w Operacjach **nie** ma (nowa funkcja); `MonthField` pokazuje miesiąc słownie („listopad
+2026”), wpisywanie jak dotąd; podpowiedź oprocentowania – poza grupą.
+
+| # | Krok | Wykonawca · przegląd | Model · thinking | Czas | Stan |
+| --- | --- | --- | --- | --- | --- |
+| P1 | Porządek lokalny: drzewa `FI-wt` (już puste – zostają `_logi*`, `_notatki`), scalone gałęzie lokalne, `git pull` | sesja główna | Opus 5.5 · high | 5 min | ✅ 21.11 |
+| U0 | Kontrakt, tabela, numery T | sesja główna | Opus 5.5 · high | 15 min | ✅ 21.11 |
+| U1 | „Cofnij” i `applyBulk` | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 40–60 min | |
+| U2 | Radar: „osłony po” wiersza zbiorczego zaległych | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 20–30 min | |
+| U3 | Słowa w toastach i imporcie, toast `settleDue` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 20–30 min | |
+| U4 | Nawigacja i menu | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | |
+| U5 | Edytor i pola | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 45–60 min | |
+| U6 | Wydajność Mostku i Rozliczeń | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–20 min | |
+| U7 | Stabilność testów, skrypty `tests/audyt/*` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 30–45 min | |
+| U8 | Pełne testy + E2E, `/code-review` (xhigh: U1, U2; high: reszta), CHANGELOG `## 1.21.1`, wersja, PR, CI, wydanie | sesja główna | Opus 5.5 · high | 45–60 min + CI | |
+
+Fale: U1, U2, U3, U4, U6 równolegle; U5, U7 po scaleniu fali 1; U8 na końcu. Numery T: U1 T550 … U7 T556, U8 T557.
+
+### Kontrakt (wspólne)
+- Jak w 1.21.0 (archiwum, „Kontrakt (wspólne)”): test, który bez zmiany pada (unit, gdzie się da; E2E dla klawiatury
+  i ekranów); `npm run typecheck`; powiązane pliki testów; zepsute istniejące E2E poprawić w tym kroku. Teksty przez
+  `plnText` / `plDate` / `countLabel`; „Cofnij” przez `toast` z akcją (`UNDO_MIN_MS`, `store/ui.ts:89`) i `undoKept`;
+  zmiany pól pieniędzy wielu operacji tylko przez `bulkPlan` / `applyBulk` (`operations/state.ts:595`, `:745`).
+- Nowy test store'u albo czysty moduł renderera testowany w node – dopisz do `include` / `exclude` w `tsconfig.web.json`.
+- Słownik pojęć bez zmian (D106 pkt 1). Bez zmian w `src/shared/calc/` poza prezentacją wskazaną w kroku.
+- Wykonawca nie commituje; raport: pliki, testy (wynik), proponowane zdanie T, uwagi na później.
+
+### Kontrakt kroków
+- **U1 (T550):** (a) „Cofnij” samej reguły tytułu (`operations/TitleRuleAction.tsx`, `import/rules.ts:413`, `:487` –
+  toasty 6000 ms) cofa też łatkę szkicu edytora i trwa co najmniej `UNDO_MIN_MS` (akcja w `toast` – nie stała ms);
+  (b) „Cofnij” „Koperty ze średnich” (`month/actions.ts:76`, `MonthPage.tsx:211`) w minionym miesiącu usuwa też plan
+  następnego miesiąca utworzony tym samym `editPlan`, a wynik `deleteOrSay` sprawdza (porażka = toast błędu, nie cisza);
+  (c) `applyBulk` (`operations/state.ts:745`): operacja, która od podglądu stała się wpisem nowszej wersji aplikacji,
+  liczona jako `newer` (jak `SaveResult.newer`, `main/datastore/store.ts:162`), nie „zmienione od podglądu”. Testy unit.
+- **U2 (T551):** wiersz zbiorczy zaległych opłat kontenera w Radarze (`radar/rows.ts`, `RadarPage.tsx:332–378`, Z6b)
+  – „osłony po” wierszy między wierszem zbiorczym a późniejszymi terminami tej grupy odejmuje te terminy (bieżąca suma
+  jak dla wierszy pojedynczych). Tylko `rows.ts` / prezentacja; test unit `rows` + `radar.spec`.
+- **U3 (T552):** toasty i opcje mówią nowymi słowami etykiet Z7 (`OperationEditor.tsx:473` – „Finansuje” / „Czyj
+  zakup”, menu `operationsMenuModel.ts:144–145` – „kupione dla: X (odda)” / „prezent dla: X”): `operationsMenuModel.ts`
+  `command.label`, `OperationsPage.tsx:558`, `import/options.ts:92–93`, `import/KeywordRules.tsx:26`, `QuickApp.tsx:515`
+  – „Kupione dla: X” / „Prezent dla: X” (komunikat zgodny z pozycją menu, którą użytkownik kliknął). Toast `settleDue`
+  (`cargo/actions.ts:227`) – mówi, ile terminów rozliczono i do którego dnia (`countLabel`, `plDate`), nie tylko
+  o ostatnim. Testy: unit tekstów + poprawione E2E.
+- **U4 (T553):** (a) wstecz / dalej w Ustawieniach: `sameRoute` (`store/ui.ts:60`) traktuje Ustawienia z inną
+  zapamiętaną zakładką (`settingsNav.ts`, `fi.settings.tab`) jako inną trasę – Alt+← wraca do poprzedniej zakładki;
+  (b) Tab w menu „Podziel…” (`operations/SplitMenu.tsx`) przechodzi między pozycjami / zamyka menu jak inne menu
+  (wzorzec `AnchoredList.tsx`); (c) `Popover.tsx:73` zamyka się na klik w `listbox` / `menu` innego elementu strony –
+  ignoruje tylko swoje (`contains` w swoim drzewie albo w liście, którą sam otworzył); (d) szkic manewru w Wywiadzie
+  (`intel/Course.tsx` / `ForecastsTab.tsx`) po zmianie miesiąca – czyszczony albo przenoszony według istniejącego
+  wzorca szkiców (rozstrzygnij T, opisz w raporcie); (e) „Skategoryzuj pozostałe (N)” (`ImportPage.tsx:1308`) liczy
+  wszystkie widoczne nieskategoryzowane, nie tylko z bieżącego importu – albo etykieta mówi „z tego importu” (wybierz
+  zgodnie z tym, na czym akcja działa – etykieta = zakres akcji). Testy unit + E2E.
+- **U5 (T554):** (a) szukanie kategorii w menu PPM Operacji (`operationsMenuModel.ts`) i „Podziel…” w szybkim wpisie
+  (`quick/QuickApp.tsx`) – `CategoryField` / `SplitMenu` jak w edytorze (Z7); (b) `DateField` (`components/fields.tsx:122`)
+  z `allowEmpty`, lokalny `RangeDay` (`OperationsPage.tsx:101`) zastąpiony nim; (c) `MonthField` (`fields.tsx:178`)
+  pokazuje miesiąc słownie („listopad 2026”, `monthLabel`), wpisywanie RRRR-MM / 03.2027 / 3/2027 bez zmian;
+  (d) ptaszki propozycji Ładowni (`CargoPage.tsx:111`) – szkic przez nawigację jak inne szkice (`store/drafts` albo
+  wzorzec w pobliżu). Testy unit + E2E.
+- **U6 (T555):** `useInboxCount` (`inbox/state.ts:148`) liczony raz na Mostek (`App.tsx:199`, `BridgePage.tsx:216`,
+  `:375`) – jedno obliczenie (memo w store albo przekazanie wartości); wiersze `SettlementsPanel` w `memo`. Test unit
+  (licznik obliczeń) – bez zmiany wyników.
+- **U7 (T556):** `tests/e2e/ap20.spec.ts:53` – stabilne czekanie na okno szybkiego wpisu (bez `waitForTimeout`);
+  `tests/fs/bank-files.test.ts` – przyczyna czerwieni tylko w głównym folderze repo (2 testy; w świeżym drzewie 4/4) –
+  ustal i popraw albo opisz; skrypty `tests/audyt/*` (poza CI) – odwołania do starych miejsc (formularze Radaru,
+  zakładki Wywiadu, Ustawienia, `selectOption` kategorii, `radar-member-open`) przepisane na obecne (typecheck
+  i `--list` bez uruchamiania maszyny).
 
 ## Otwarte
 - **Odbiór zbiorczy 1.15.5–1.19.1:** maszyna wirtualna przez Cowork (48 punktów, `docs/audyt/maszyna.md`, wynik →
@@ -16,9 +86,6 @@ i Ustawienia w zakładkach, skróty, toasty, Mostek, Meldunki, Radar). Wpis grup
   „do potwierdzenia” z ciągów zaakceptowane 05.11.2026 – tabela w archiwum (Grep „Do potwierdzenia”).
 - **Rzeczy otwarte z grup** (archiwum, punkty „Otwarte” N1–R2): podpowiedź oprocentowania, pomiar Workera w maszynie
   (IM.55), niestabilny `ap20.spec.ts:53`.
-- **Porządek lokalny** (Sonnet 5.5 · medium, ok. 0,25 h): drzewa `C:\CC-Projekty\FI-wt\*` (gałęzie scalone, bez zmian) do
-  usunięcia – najpierw łącza `node_modules` / `.tools` (`[System.IO.Directory]::Delete(<łącze>, $false)`), potem
-  `git worktree remove`; scalone gałęzie `claude/1.15.*`–`1.17.*`; `git pull` w `C:\CC-Projekty\FinancialIntel`.
 - **Testy tylko lokalnie czerwone (15.11, CI zielone):** `tests/fs/bank-files.test.ts` (2) w głównym folderze repo
   (w świeżym drzewie 4/4 – przyczyna nieznana) i `ictj.spec.ts:172` (ICTTJ zainstalowany na tym komputerze).
 - **Node lokalnie:** systemowy 20.12 jest za stary (`check-node.mjs`) – na początek `PATH` folder
