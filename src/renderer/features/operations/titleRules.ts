@@ -10,7 +10,7 @@ import { counterpartyKey } from '@shared/import/names'
 import type { ImportRule, Transaction } from '@shared/schema'
 import { canWrite, useData } from '../../store/data'
 import { toast } from '../../store/ui'
-import { keywordRuleRefusal, saveKeywordRule, undoRules, type KeywordRuleInput } from '../import/rules'
+import { keywordRuleRefusal, rulesUndo, saveKeywordRule, undoRules, type KeywordRuleInput } from '../import/rules'
 import { titleRuled, type TitleTarget } from './bulkModel'
 import { openBulkPreview } from './bulkPreview'
 import { applyBulk, bulkEffect, bulkPlanOf, type BulkPlan } from './state'
@@ -116,13 +116,27 @@ const rulesNow = (): readonly ImportRule[] => useData.getState().fi?.settings.im
 
 /**
  * The bulk change of the history (T535): the operations the keyword fits (and the counterparty, when asked) and the open
- * one – of any date; drafts, those of a newer version and those it does not fit stay (`bulkPlanOf`).
+ * one – of any date; drafts, those of a newer version and those it does not fit (another direction – T549) stay
+ * (`bulkPlanOf`). `done` – those already as the rule leaves them (said when nothing changes – AP-15).
  */
-export function titleRulePlan(input: TitleRuleInput, current?: Transaction): BulkPlan {
-  const all = useData.getState().records.transactions
+export function titleRulePlan(input: TitleRuleInput, current?: Transaction): { plan: BulkPlan; done: number } {
+  const { records, drafts } = useData.getState()
+  const all = records.transactions
   const ids = findMatchingByTitle(all, input.keyword, undefined, input.counterparty).map((t) => t.id)
   if (current && all[current.id] && !ids.includes(current.id)) ids.unshift(current.id)
-  return bulkPlanOf(ids, { kind: 'titleRule', rule: targetOf(input) })
+  const plan = bulkPlanOf(ids, { kind: 'titleRule', rule: targetOf(input), ...(current ? { openId: current.id } : {}) })
+  const taken = ids.filter((id) => !drafts[id]).length
+  return { plan, done: taken - plan.before.length - plan.skipped - plan.newer }
+}
+
+/** The history the rule leaves as it is (AP-15): how many are so already, skipped, of a newer version. */
+function unchangedText(plan: BulkPlan, done: number): string {
+  const parts = [
+    done ? `już takie: ${done}` : '',
+    plan.skipped ? `pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : '',
+    plan.newer ? `zapisane przez nowszą wersję aplikacji: ${plan.newer}` : ''
+  ].filter(Boolean)
+  return parts.length ? ` Operacje w historii bez zmian – ${parts.join(', ')}.` : ''
 }
 
 /**
@@ -147,21 +161,24 @@ export function applyTitleRule(input: TitleRuleInput, currentTransaction?: Trans
   const cp = input.counterparty?.trim()
   const what = `„${cp ? `${cp} · ${keyword}` : keyword}”`
   const draft = !!currentTransaction && !!useData.getState().drafts[currentTransaction.id]
-  if (input.updateHistory) {
-    const plan = titleRulePlan(input, currentTransaction)
-    if (plan.before.length) {
-      openBulkPreview(plan, bulkEffect(plan), what, {
-        note: 'Razem ze zmianą zapisze się reguła – kolejne importy rozpoznają ten tytuł same.',
-        apply: () => void confirmTitleRule(plan, rule, what, draft ? applied : undefined)
-      })
-      return { ok: true, preview: true, count: plan.before.length }
-    }
+  const history = input.updateHistory ? titleRulePlan(input, currentTransaction) : null
+  if (history?.plan.before.length) {
+    const { plan } = history
+    openBulkPreview(plan, bulkEffect(plan), what, {
+      note: 'Razem ze zmianą zapisze się reguła – kolejne importy rozpoznają ten tytuł same.',
+      apply: () => void confirmTitleRule(plan, rule, what, draft ? applied : undefined)
+    })
+    return { ok: true, preview: true, count: plan.before.length }
   }
 
+  const before = rulesNow()
   const err = saveKeywordRule(rule)
   if (err) return { ok: false, error: err }
   if (!input.updateHistory || draft) applied?.()
-  toast(`Reguła dla tytułu „${keyword}” zapamiętana na przyszłość.`, 'success', 5000)
+  // The history asked for and nothing of it to change: said how many and why (AP-15) – never a bare „na przyszłość”.
+  const unchanged = history ? unchangedText(history.plan, history.done) : ''
+  // „Cofnij” of the rule (T535, as „Zapamiętaj”): while it is as this left it – changed since, it stays, said.
+  toast(`Reguła dla tytułu „${keyword}” zapamiętana na przyszłość.${unchanged}`, 'success', 5000, { label: 'Cofnij', run: rulesUndo(before, rulesNow()) })
   return { ok: true, count: 0 }
 }
 

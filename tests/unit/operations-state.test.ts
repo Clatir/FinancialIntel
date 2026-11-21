@@ -588,3 +588,62 @@ describe('poprawki po przeglądzie 1.20.0: „Cofnij” tagu po jednym tagu, zaz
     api.deleteRecords.mockReset()
   })
 })
+
+// Review of 1.21.0 (T549): the preview's plan is read when it opens – an operation changed before its confirmation (a
+// sync, the autosave, another window) is never written over with what the preview showed; it stays, said in the toast.
+describe('podgląd zmiany zbiorczej: operacje zmienione od jego otwarcia zostają (przegląd 1.21.0)', () => {
+  it('zmiana pól: zmieniona od podglądu zostaje, jak jest – reszta zapisana, toast mówi ile', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    const plan = ops.bulkPlan([a.id, b.id], { kind: 'account', accountId: XTB_WALLET_ACCOUNT_ID })
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, note: 'z synchronizacji' }))
+    expect(await ops.applyBulk(plan)).toBe(true)
+    expect(current(a.id).accountId).toBe(XTB_WALLET_ACCOUNT_ID)
+    expect(current(b.id)).toMatchObject({ accountId: MBANK_ACCOUNT_ID, note: 'z synchronizacji' })
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Przeniesiono na konto: 1 operacja, zmienione od podglądu zostają, jak są: 1.')
+    // „Cofnij” – of the one written only.
+    lastUndo()()
+    expect(current(a.id).accountId).toBe(MBANK_ACCOUNT_ID)
+    expect(current(b.id).note).toBe('z synchronizacji')
+  })
+
+  it('zapis tylko znaczników (ta sama treść) nie jest zmianą – operacja zapisana', async () => {
+    const a = tx({ counterparty: 'A' })
+    load([a])
+    ops.tickOperations([a.id], true)
+    const plan = ops.bulkPlan([a.id], { kind: 'impulse', to: 'plan' })
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { [a.id]: { ...s.records.transactions[a.id]!, record: { ...a, updatedAt: '2026-10-02T10:00:00.000Z' } } } } }))
+    expect(await ops.applyBulk(plan)).toBe(true)
+    expect(current(a.id).impulse).toBe('plan')
+  })
+
+  it('wszystkie zmienione albo usunięte od podglądu: nic nie zapisane – ze słowem', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    const plan = ops.bulkPlan([a.id, b.id], { kind: 'impulse', to: 'plan' })
+    data.updateRecord('transactions', a.id, (r) => ({ ...r, impulse: 'impulse' }))
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { [a.id]: s.records.transactions[a.id]! } } }))
+    expect(await ops.applyBulk(plan)).toBe(false)
+    expect(current(a.id).impulse).toBe('impulse')
+    expect(data.useData.getState().records.transactions[b.id]).toBeUndefined()
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Nic nie zapisano – operacje zmieniły się od podglądu i zostają, jak są (2).')
+  })
+
+  it('usunięcie: zmieniona od podglądu nie jest usunięta – zostaje ze słowem', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    api.deleteRecords.mockImplementation(async (_c: string, ids: string[]) => ids.map((id) => ({ id })))
+    ops.tickOperations([a.id, b.id], true)
+    const plan = ops.bulkPlan([a.id, b.id], { kind: 'delete' })
+    data.updateRecord('transactions', b.id, (r) => ({ ...r, note: 'ważne' }))
+    expect(await ops.applyBulk(plan)).toBe(true)
+    expect(Object.keys(data.useData.getState().records.transactions)).toEqual([b.id])
+    expect(ui.useUi.getState().toasts.map((t) => t.text)).toContain('Usunięto 1 operację, zmienione od podglądu zostają, jak są: 1.')
+    api.deleteRecords.mockReset()
+  })
+})

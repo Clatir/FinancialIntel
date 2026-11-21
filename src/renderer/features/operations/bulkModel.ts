@@ -49,8 +49,12 @@ export type BulkChange =
   /** Paid from a goal's money (null – not from a goal); a goal takes the container off. */
   | { kind: 'goal'; goalId: string | null }
   | { kind: 'loan'; loanId: string | null }
-  /** „Ustaw regułę dla tytułu” with the history (T535): the operations its title fits take the rule's decision. */
-  | { kind: 'titleRule'; rule: TitleTarget }
+  /**
+   * „Ustaw regułę dla tytułu” with the history (T535): the operations its title fits take the rule's decision – those of
+   * its direction (T549, as the import reads it); `openId` – the operation open in the editor, the rule set on it by hand:
+   * it takes the rule as the editor sets it, of either sign.
+   */
+  | { kind: 'titleRule'; rule: TitleTarget; openId?: string }
 
 /** The menu's mark of a change (D105): in effect on every ticked operation it fits (✓), on some („—”), on none. */
 export type OpState = 'on' | 'mixed' | 'off'
@@ -81,14 +85,16 @@ function without<K extends 'tags' | 'explained'>(t: Transaction, key: K): Transa
  * An operation with a title rule's decision (T535) – the rule's fields as the title rule set them before 1.21.0, on the
  * operation of another kind as „Zmień rodzaj” leaves it (`withKind`: links of the old kind go); its amount through
  * `withAmount` (a shared purchase's lines follow it), a shared purchase made one line again when the rule says one
- * payer (`withShare` – never its lines left without their description). Whether it fits – `changedBy`.
+ * payer (`withShare` – never its lines left without their description). The sign: an expense's by the rule's direction,
+ * an income's on the plus; another kind keeps the operation's (T549 – as the editor's „Przelew” and the title rule
+ * before 1.21.0; `withKind` would give a transfer, a loan, a tax or XTB its money out). Whether it fits – `changedBy`.
  */
 export function titleRuled(before: Transaction, r: TitleTarget): Transaction {
   const kindChanged = r.kind !== before.kind
   // A kind change drops the lines and the purchases paid back too, as the title rule always did.
   const k = kindChanged ? { ...withKind(before, r.kind), splits: [], covers: [], coversOpening: undefined, coversOpeningMembers: undefined } : before
   const abs = Math.abs(k.amount)
-  const amount = r.kind === 'expense' ? (r.direction === 'in' ? abs : -abs) : r.kind === 'income' ? abs : k.amount
+  const amount = r.kind === 'expense' ? (r.direction === 'in' ? abs : -abs) : r.kind === 'income' ? abs : before.amount
   const t = amount === k.amount ? k : withAmount(k, amount)
   const base = { ...t, categoryId: null, refundable: false, memberId: null, gift: undefined, counterAccountId: null, advance: false, inflowKind: undefined }
   if (r.kind === 'expense') {
@@ -183,6 +189,9 @@ export function changedBy(t: Transaction, c: BulkChange, docked: ReadonlySet<str
       const r = c.rule
       // As „Zmień rodzaj”: a docked one keeps its kind, a transfer never goes onto its own account.
       if ((docked.has(t.id) && t.kind !== r.kind) || (r.kind === 'transfer' && r.counterAccountId && r.counterAccountId === t.accountId)) return null
+      // The rule's direction (T549): the import gives it the rows of that direction only – the history's money of the
+      // other sign is something else (a purchase is no refund, an inflow no expense); the open operation – set by hand.
+      if (t.id !== c.openId && ((r.direction === 'in' && t.amount < 0) || (r.direction === 'out' && t.amount > 0))) return null
       // A split receipt (or an income's parts) of the same kind: its lines say the category and who pays – the editor
       // sets none on the operation (`categorizeTicked` skips it too).
       if (t.kind === r.kind && (t.kind === 'expense' || t.kind === 'income') && splitReceipt(t)) return null

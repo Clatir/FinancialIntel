@@ -91,7 +91,7 @@ export function undoRules(before: readonly ImportRule[], after: readonly ImportR
 }
 
 /** „Cofnij” of rules remembered (UX-24, T535): taken back while as the action left them – the rest said (`undoKept`). */
-const rulesUndo = (before: readonly ImportRule[], after: readonly ImportRule[]) => () => {
+export const rulesUndo = (before: readonly ImportRule[], after: readonly ImportRule[]) => () => {
   const { back, kept } = undoRules(before, after)
   undoKept(back, kept, 'reguły')
 }
