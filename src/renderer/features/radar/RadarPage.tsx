@@ -4,10 +4,10 @@
  * accounts' balances ahead (F26); the loans both ways with their schedules (new, repayment / installment, close), the
  * receivables (the house, the loans given) and the PIT-38 deadline (the amount stays in ICTTJ).
  */
-import { useContext, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
 import type { AccountAhead } from '@shared/calc/ahead'
-import { dm } from '@shared/calc/briefing'
+import { dm, lateFeeText } from '@shared/calc/briefing'
 import { addDays, addMonths, daysInMonth } from '@shared/calc/dates'
 import { loanPayers, type LoanState } from '@shared/calc/loans'
 import { impliedLoanRate } from '@shared/calc/payoff'
@@ -38,7 +38,9 @@ import { PayoffPanel } from './Payoff'
 import { useFuture } from './future'
 import { RadarCalendar } from './Calendar'
 import { KIND_LABEL, TARGET_TITLE, radarTarget } from './labels'
+import { radarRows } from './rows'
 import { SettlementsPanel } from './SettlementsPanel'
+import { useCargoStatuses } from '../cargo/status'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -96,7 +98,7 @@ export function RadarPage() {
               ) : !items.length ? (
                 <Empty>Nic na radarze w najbliższych 90 dniach.</Empty>
               ) : (
-                <Timeline items={items} />
+                <Timeline items={items} today={fleet.today} />
               )}
             </Panel>
             <BuoysPanel
@@ -298,9 +300,12 @@ function openTarget(t: NonNullable<ReturnType<typeof radarTarget>>): void {
   focusRecord(t.focus, t.id, { page: t.focus === 'container' ? 'cargo' : 'radar' })
 }
 
-function Timeline({ items }: { items: RadarItem[] }) {
+function Timeline({ items, today }: { items: RadarItem[]; today: string }) {
   // The phone (T311): two lines – the day, the name and the amount; the kind, the note and the shields after it under them.
   const compact = useContext(CompactContext)
+  // A container's overdue dues in one row, as the briefing says them (UX-30, T548) – the fees' state of the radar's items.
+  const cargo = useCargoStatuses()
+  const rows = useMemo(() => radarRows(items, cargo, today), [items, cargo, today])
   return (
     <div className="flex flex-col text-[12px]">
       {/* The columns named (UX-35): the phone's two-line rows say it in the line itself. */}
@@ -316,20 +321,32 @@ function Timeline({ items }: { items: RadarItem[] }) {
           </span>
         </div>
       )}
-      {items.map((i, n) => {
+      {rows.map(({ item: i, late, span }, n) => {
         const month = i.date.slice(0, 7)
-        const newMonth = n === 0 || items[n - 1]!.date.slice(0, 7) !== month
+        const newMonth = n === 0 || rows[n - 1]!.item.date.slice(0, 7) !== month
         const day = <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(i.date).slice(0, 5)}</span>
         const kind = <span className={cx('shrink-0 text-[11px] text-dim', !compact && 'w-[72px]')}>{KIND_LABEL[i.kind]}</span>
         const target = radarTarget(i)
+        // A container's overdue dues (UX-30): the briefing's whole line in the hint – the row's own may be cut. The row
+        // says them in its name's place, the notes' column with it (the phone: the container, its dues in the second line).
+        const hint = target ? (late ? `${lateFeeText(late, zl, today)}\n${TARGET_TITLE[target.focus]}` : TARGET_TITLE[target.focus]) : undefined
+        const label = !late ? (
+          i.name
+        ) : compact ? (
+          late.name
+        ) : (
+          <>
+            {late.name}: <span className="text-accent">{span}</span>
+          </>
+        )
         const name = target ? (
-          <button type="button" className="min-w-0 flex-1 truncate text-left text-fg-strong hover:underline" onClick={() => openTarget(target)} title={TARGET_TITLE[target.focus]} data-testid="radar-item-open" data-target={target.focus}>
-            {i.name}
+          <button type="button" className="min-w-0 flex-1 truncate text-left text-fg-strong hover:underline" onClick={() => openTarget(target)} title={hint} data-testid="radar-item-open" data-target={target.focus}>
+            {label}
           </button>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-fg-strong">{i.name}</span>
+          <span className="min-w-0 flex-1 truncate text-fg-strong">{label}</span>
         )
-        const note = i.overdue ? i.note || 'po terminie' : i.note
+        const note = late ? span : i.overdue ? i.note || 'po terminie' : i.note
         const amount = (
           <span className={cx('num text-right', compact ? 'shrink-0 whitespace-nowrap' : 'w-[110px]', i.direction === 'in' ? 'text-up' : 'text-fg')}>
             {i.amount == null ? '—' : `${i.direction === 'in' ? '+' : i.direction === 'out' ? '−' : ''}${zl(i.amount)}`}
@@ -344,7 +361,7 @@ function Timeline({ items }: { items: RadarItem[] }) {
             {i.shieldsAfter != null ? zl(i.shieldsAfter) : ''}
           </span>
         )
-        const row = { 'data-testid': 'radar-item', 'data-kind': i.kind, 'data-overdue': i.overdue ? 'yes' : undefined }
+        const row = { 'data-testid': 'radar-item', 'data-kind': i.kind, 'data-overdue': i.overdue ? 'yes' : undefined, 'data-dues': late ? String(late.dues.length) : undefined }
         return (
           <div key={i.key} className="flex flex-col">
             {newMonth && <span className="label pt-2 first:pt-0">{monthLabel(month)}</span>}
@@ -366,7 +383,7 @@ function Timeline({ items }: { items: RadarItem[] }) {
                 {day}
                 {kind}
                 {name}
-                <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{note}</span>
+                {!late && <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{note}</span>}
                 {amount}
                 {shields}
               </div>

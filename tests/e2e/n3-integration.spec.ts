@@ -73,11 +73,15 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
     await expect(row).toHaveAttribute('data-due', lateDue)
     await expect(row).toHaveAttribute('data-carried', 'yes')
 
-    // Radar: the same due on its day.
+    // Radar: the same due on its day – with this month's overdue too, both in one row there, as in the briefing (UX-30).
     await page.keyboard.press('Control+7')
     const late = page.locator('[data-testid="radar-item"][data-kind="fixed"]').filter({ hasText: 'Czynsz' }).filter({ hasText: dm(lateDue) })
     await expect(late).toHaveAttribute('data-overdue', 'yes')
-    await expect(late).toContainText(`po terminie ${daysBetween(lateDue, today)} dni`)
+    if (both) {
+      await expect(late).toHaveAttribute('data-dues', '2')
+      await expect(late.getByTestId('radar-item-open')).toHaveText(`Czynsz: 2 terminy bez płatności (${mon(prev)}–${mon(month)})`)
+      await expect(page.locator('[data-testid="radar-item"][data-kind="fixed"][data-overdue="yes"]')).toHaveCount(1)
+    } else await expect(late).toContainText(`po terminie ${daysBetween(lateDue, today)} dni`)
 
     // Dowództwo: the order says what today's energy is – capped by the month's – and what breaks it (the allowance).
     await page.keyboard.press('Control+8')
