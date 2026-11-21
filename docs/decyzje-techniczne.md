@@ -3969,3 +3969,16 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T547** (Z13, UX-82) Rozliczenia z domownikami – panel w Radarze i przejścia z Mostka / Meldunków; liczby tylko z
   `calc/` (bez zmian silnika); „Oddał(a) gotówką” otwiera szkic wpływu (`newOperation`) w edytorze, nie zapisuje wprost;
   panel znika, gdy nie ma sald ani osób poza „Dom”.
+- **T546** (Z12, UX-79, D106 pkt 11) Kreator startu otwiera się sam raz w nowym pustym folderze (bez `budget.start`,
+  bez rekordów, plików z błędami i konfliktów, zapisywalnym) – znacznik `fi.wizard.auto:<folder>` w `localStorage`
+  zapisywany w chwili otwarcia, per komputer; bez działającego `localStorage` nie otwiera się sam wcale. E2E wyłączają
+  to `FI_WIZARD_AUTO=0` w `launch()` (`AppInfo.wizardAuto`). „Szybki start” to tryb `quick` tego samego kreatora (salda,
+  pensja, koperty codzienne; reszta z jego wyliczeń, opisana na ekranie, start z Windows domyślnie włączony – potwierdzone
+  21.11.2026), zapis tym samym `finishWizard` / `writeStart` (T446).
+- **T548** (Z6b, UX-30) Kilka zaległych terminów jednego kontenera (`lateFees`, > 1) to jeden wiersz listy „Na radarze”
+  w miejscu najstarszego terminu: tekst `lateFeeSpan` w miejscu nazwy i uwag, kwota – suma, dymek – `lateFeeText`
+  (`features/radar/rows.ts`, czyste). Pozycje `radar()`, kalendarz i salda kont naprzód bez zmian; bez akcji „Zapłacone
+  poza budżetem” przy wierszu (zostaje w Meldunkach – potwierdzone 21.11.2026).
+- **T549** (Z14, zamknięcie 1.21.0) Teksty okna bez numerów wersji („zapisany dawniej …”, `VERSION_PENDING` tylko
+  `update.ts`); potwierdzone 21.11.2026: panel Rozliczeń znika bez sald i osób poza „Dom” (T547), pasek miesiąca
+  z kopert codziennych (T540), krok „Pensja i koperty” przy planie odziedziczonym zrobiony (T545).

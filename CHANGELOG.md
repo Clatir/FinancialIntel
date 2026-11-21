@@ -1,5 +1,23 @@
 # Financial Intel – zmiany
 
+## 1.21.0
+
+Ergonomia – mniej klikania, więcej podpowiedzi i „Cofnij” wszędzie, gdzie coś zmieniasz (nazwy w aplikacji bez zmian):
+
+- **Szybki start kreatora:** w nowym, pustym folderze danych kreator startu otwiera się sam (raz na komputerze). Na pierwszym kroku „Szybki start” – wpisujesz tylko salda kont, pensję i koperty codzienne, resztę kreator ustawia sam i mówi, co ustawił; „Uruchom budżet” zapisuje start jak dotąd. Wszystkie kroki są nadal pod „Wszystkie kroki”.
+- **Rozliczenia z domownikami:** nowy panel w Radarze z saldami domowników, z przejściem z Mostka i Meldunków; „Oddał(a) gotówką” otwiera gotowy szkic wpływu w edytorze. Panel znika, gdy nie ma sald ani osób poza „Dom”.
+- **Mostek i Meldunki:** zaległe opłaty jednego kontenera jedną linią („Czynsz: 3 terminy bez płatności (sie–paź), razem …”) – na Mostku, w Meldunkach i na liście Radaru; pasek miesiąca „wydano X z Y” z kopert codziennych; licznik meldunków; puste panele chowają się same i wracają z danymi; koperty z tempem („+120 zł ponad tempo”) i przejściem do ich operacji.
+- **Lista Operacji i edytor:** edytor schowany, gdy nic nie wybrano (lista na całą szerokość); `Ctrl+Enter` zapisuje i zaczyna nowy wpis; pusty wynik z wyjściem; kolejka operacji bez kategorii. Kategoria z wyszukiwaniem i ostatnio używanymi, kontrahent z podpowiedziami z historii, „kupione dla: X (odda)” i „prezent dla: X”, jeden przycisk „Podziel…” (na kategorie albo na osoby).
+- **Reguła dla tytułu i „Zapamiętaj”:** zmiana wcześniejszych operacji domyślnie odznaczona, po zaznaczeniu ten sam podgląd skutku co przy zmianach zbiorczych; „Zapamiętaj” i dodanie reguły mają „Cofnij”.
+- **„Cofnij” i podsumowania:** koperty ze średnich, łupy i pominięcie wpisu z ICTTJ można cofnąć; kreator pokazuje wybory „albo – albo”.
+- **Okno:** toasty zostają dłużej przy dłuższym tekście i stoją, gdy najedziesz na nie myszą; `Alt+←` / `Alt+→` – wstecz i dalej między ekranami; skróty jednym zapisem w menu, palecie (`Ctrl+K`) i ściągawce (`F1`), ukrycie kwot to `Ctrl+Shift+4`; dolne pozycje menu ze skrótem w dymku.
+- **Wywiad w zakładkach** (Struktura, Wydatki, Prognozy, Dziennik – pamięta ostatnią), legendy wykresów i przejście z wykresu do operacji; symulator zachowuje wpisane wartości.
+- **Ustawienia w grupach** („Budżet (wspólne)”, „Ten komputer”, „Dane i system”, pamięć ostatniej), powiadomienia w grupach z „włącz / wyłącz wszystkie” i ciszą nocną; Synchronizacja – konflikty na górze; pierwszy start pokazuje znalezione dane.
+- **Import i eksport:** pasek z licznikami, „Skategoryzuj pozostałe”, krótki wstęp „temat / marka”, scalanie duplikatów; po eksporcie „Pokaż w folderze”.
+- **Radar, Mapa gwiezdna, Ładownia, Plan miesiąca, Dowództwo:** nagłówki kolumn i sekcji, przejścia z osi do operacji, formularze za przyciskiem, propozycje Ładowni dodawane zbiorczo; Plan miesiąca z krokami początku miesiąca (plan przeniesiony z poprzedniego miesiąca liczy się jako gotowy), pasek dnia w Dowództwie, skutek dokowania, braki kroków w kreatorze.
+- **Teksty bez numerów wersji:** komunikaty mówią, co się zmieniło („zapisany dawniej jako…”), zamiast „przed 1.7.0”.
+
+
 ## 1.20.0
 
 Zmiany grupowe na liście Operacji:
