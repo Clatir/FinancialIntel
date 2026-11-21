@@ -42,6 +42,7 @@ import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
 import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
 import { glossaryOf, ictOf } from '@shared/glossary'
+import { openSettlements } from '../radar/settlements'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 // Cut down (N56): never the threshold of a class the ship has not reached.
@@ -860,6 +861,7 @@ function Receivables({ fleet }: { fleet: FleetState }) {
         <button className="self-start text-[11.5px] text-accent hover:underline" onClick={() => openRefundables()}>
           wydatki domowników ›
         </button>
+        <button className="self-start text-[11.5px] text-accent hover:underline" onClick={() => openSettlements()} title="Radar: zakupy do oddania i zwroty każdej osoby" data-testid="bridge-settlements">rozlicz na Radarze ›</button>
         <p className="text-[11px] text-dim">Wpłata domownika najpierw wyrównuje to, co ma oddać; reszta to jego zaliczka albo przychód (Ustawienia → Domownicy).</p>
       </div>
     </Panel>

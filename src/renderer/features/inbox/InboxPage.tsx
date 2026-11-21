@@ -13,6 +13,7 @@ import { keepReturned, readDeletedBank } from '../import/returned'
 import { useData } from '../../store/data'
 import { keepAdvances } from '../household/actions'
 import { TransferPairs } from './TransferPairs'
+import { openSettlements } from '../radar/settlements'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -121,6 +122,12 @@ function Report({ item, onOpen, onPreview }: { item: InboxItem; onOpen: () => vo
       {item.kind === 'advances' && item.ref && (
         <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => keepAdvances(item.ref!)} data-testid="inbox-dismiss">
           zostaw
+        </button>
+      )}
+      {/* A member's purchases still owed (UX-82): their settlements in Radar – the purchases, the money to assign, „Oddał(a)…”. */}
+      {item.kind === 'refunds' && item.ref && (
+        <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => openSettlements(item.ref)} data-testid="inbox-settle">
+          Rozlicz
         </button>
       )}
       {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}
