@@ -429,7 +429,7 @@ export class PhoneHost {
         return { ok: true, snapshot: await this.open() }
       }),
       repairSettings: pcOnly('repairSettings'),
-      defaultDataDir: call('defaultDataDir', () => ({ dir: MIRROR, oneDrive: true })),
+      defaultDataDir: call('defaultDataDir', () => ({ dir: MIRROR, oneDrive: true, exists: false })),
       pickDataDir: pcOnly('pickDataDir'),
       openDataDir: pcOnly('openDataDir'),
       cancelOpen: call('cancelOpen', () => undefined),

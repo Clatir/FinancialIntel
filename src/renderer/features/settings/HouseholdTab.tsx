@@ -47,8 +47,8 @@ export function HouseholdTab() {
     >
       <p className="mb-2 text-[11.5px] text-muted">
         Wydatek, który finansuje domownik (cały albo część paragonu), nie zjada energii i nie jest Twoim kosztem: najpierw bierze z jego zaliczki, resztę
-        pożyczają osłony, aż odda. Jego wpłata najpierw wyrównuje to, co ma oddać, reszta to zaliczka albo przychód. Zakupy oznaczone przed 1.3.0 („do
-        zwrotu”) należą do pierwszej osoby z listy – zmień jej imię, jeśli to konkretna osoba.
+        pożyczają osłony, aż odda. Jego wpłata najpierw wyrównuje to, co ma oddać, reszta to zaliczka albo przychód. Zakupy oznaczone dawnym „do
+        zwrotu” należą do pierwszej osoby z listy – zmień jej imię, jeśli to konkretna osoba.
       </p>
       <SinceRow />
       <AssignFromRow />

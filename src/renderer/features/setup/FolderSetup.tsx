@@ -28,7 +28,7 @@ export function FolderSetup() {
   const why = useData((s) => s.setupProblem)
   const [busy, setBusy] = useState(false)
   const [confirmNew, setConfirmNew] = useState(false)
-  const [proposal, setProposal] = useState<{ dir: string; oneDrive: boolean } | null>(null)
+  const [proposal, setProposal] = useState<{ dir: string; oneDrive: boolean; exists: boolean } | null>(null)
   const [progress, resetProgress] = useOpenProgress()
   // A computer that never had a folder (AP-28): an existing budget opened here is new to it – its own settings are to set.
   const [firstRun, setFirstRun] = useState(false)
@@ -127,15 +127,24 @@ export function FolderSetup() {
             <button
               className="btn btn-accent h-[62px] flex-col items-start justify-center gap-0.5 px-3"
               disabled={busy}
-              onClick={() => run(() => api.openDataDir(proposal.dir, true))}
+              // A budget already there (its fi.json – another computer's, brought by OneDrive) is opened, never made anew (UX-47).
+              onClick={() => run(() => api.openDataDir(proposal.dir, !proposal.exists))}
               data-testid="setup-default"
+              data-found={proposal.exists ? 'yes' : 'no'}
             >
               <span className="flex items-center gap-2 text-[13px]">
-                <IconPlus size={14} /> {proposal.oneDrive ? 'Utwórz w OneDrive (zalecane)' : 'Utwórz w Dokumentach'}
+                {proposal.exists ? <IconFolder size={14} /> : <IconPlus size={14} />}{' '}
+                {proposal.exists
+                  ? proposal.oneDrive
+                    ? 'Otwórz dane z OneDrive (znalezione)'
+                    : 'Otwórz dane z Dokumentów (znalezione)'
+                  : proposal.oneDrive
+                    ? 'Utwórz w OneDrive (zalecane)'
+                    : 'Utwórz w Dokumentach'}
               </span>
               <span className="num max-w-full truncate text-[11px] text-muted" data-testid="setup-default-dir">
                 {proposal.dir}
-                {!proposal.oneDrive && ' – OneDrive nie jest skonfigurowany na tym komputerze'}
+                {!proposal.oneDrive && !proposal.exists && ' – OneDrive nie jest skonfigurowany na tym komputerze'}
               </span>
             </button>
           )}

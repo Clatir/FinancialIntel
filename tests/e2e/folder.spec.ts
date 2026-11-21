@@ -157,7 +157,7 @@ test('konflikt (AP-27): karta z kontrahentem, datą i kwotą, różnice po polsk
     // Which operation it is – never the file name with its ULID.
     const subject = page.getByTestId('conflict-subject')
     await expect(subject).toContainText(`Mokka · ${day} · −12,00 zł`)
-    await expect(page.getByTestId('conflict-by-copy')).toHaveText('zapisał komputer LAPTOP')
+    await expect(page.getByTestId('conflict-by-copy')).toHaveText('wersja z komputera LAPTOP')
     await expect(page.locator('[data-testid^="conflict:"]')).not.toContainText('.json')
     // The differences by Polish names: „Tagi” with the word, no „tags”, no JSON.
     const changes = page.getByTestId('conflict-changes')

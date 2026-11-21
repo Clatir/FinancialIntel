@@ -80,7 +80,7 @@ test('skrót szybkiego wpisu (1.5.3, B29): Ctrl+Alt+litera polskiego znaku zamie
     await expect.poll(async () => (await json(join(userData, 'config.json'))).prefs?.quickShortcut).toBe('Control+Alt+B')
 
     await page.keyboard.press('Control+,')
-    await page.getByTestId('settings-tab-notify').click()
+    await page.getByTestId('settings-tab-system').click()
     const field = page.getByTestId('settings-shortcut')
     await field.click()
     await page.keyboard.press('Control+Alt+KeyE')

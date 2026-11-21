@@ -310,8 +310,11 @@ export interface FiApi {
   loadCurrent(): Promise<OpenFolderResult | null>
   /** A broken fi.json taken from its history (B109), then the folder opened. */
   repairSettings(dir: string): Promise<OpenFolderResult>
-  /** Proposed folder for new data: `OneDrive\FinancialIntel`, without OneDrive `Dokumenty\FinancialIntel`. */
-  defaultDataDir(): Promise<{ dir: string; oneDrive: boolean }>
+  /**
+   * Proposed folder for new data: `OneDrive\FinancialIntel`, without OneDrive `Dokumenty\FinancialIntel`; `exists` – it
+   * already holds a budget (fi.json there), so the proposal opens it instead of creating one (UX-47).
+   */
+  defaultDataDir(): Promise<{ dir: string; oneDrive: boolean; exists: boolean }>
   /** Show a folder picker. mode=create initializes an empty folder as new data. */
   pickDataDir(mode: 'open' | 'create'): Promise<OpenFolderResult>
   /** `force`: new data also in the remembered folder found empty or missing – the user confirmed it (B53). */
