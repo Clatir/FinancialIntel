@@ -25,7 +25,7 @@ import { Modal } from '../../components/Modal'
 import { IconBack, IconNext } from '../../components/icons'
 import { dayLabel, monthGenLabel, monthLabel, plDate } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
-import { coverEnvelope, decideLoot, setEnvelope, setEnvelopes, setSalary, usePlans } from './actions'
+import { coverEnvelope, decideLoot, lootSplitText, setEnvelope, setProposedEnvelopes, setSalary, usePlans } from './actions'
 import { YearPlanPanel } from './YearPlan'
 import { EnvelopeBars, monthElapsed } from './EnvelopeBars'
 import { IncomePanel } from './IncomePanel'
@@ -183,8 +183,8 @@ export function MonthPage() {
       toast(p.months.length ? 'Brak wydatków w kategoriach z kopertą w pełnych miesiącach historii – nic do zaproponowania.' : 'Za mało historii: koperty ze średnich po pierwszym pełnym miesiącu z danymi.', 'info', 5000)
       return
     }
-    setEnvelopes(m, limits)
-    toast(`Koperty ze średnich z ${p.months.length} mies. (${p.months.map((x) => monthLabel(x)).join(', ')}).`, 'info', 4000)
+    // „Cofnij” sets the limits from before back (UX-7) – hand-set ones are never lost by a click.
+    setProposedEnvelopes(m, limits, `Koperty ze średnich z ${p.months.length} mies. (${p.months.map((x) => monthLabel(x)).join(', ')}).`)
   }
 }
 
@@ -598,6 +598,7 @@ function DebriefPanel({ brief, shown, fleet, today, plans, readOnly }: { brief: 
   const keptChosen = Object.fromEntries(spare.filter((e) => (kept[e.categoryId] ?? 0) > 0).map((e) => [e.categoryId, Math.min(e.gap, kept[e.categoryId]!)]))
   const keptTotal = Object.values(keptChosen).reduce((a, b) => a + b, 0)
   const toShields = Math.max(0, lootAmount - next - goalsTotal - keptTotal)
+  const overLoot = next + goalsTotal + keptTotal > lootAmount
   usePlusFanfare(brief)
   return (
     <Panel title={`Debriefing – ${monthLabel(brief.month)}${brief.month !== shown ? ' (ostatni zamknięty miesiąc)' : ''}`} testId="month-debrief">
@@ -722,13 +723,20 @@ function DebriefPanel({ brief, shown, fleet, today, plans, readOnly }: { brief: 
                 </div>
               ))}
               <Row label="do osłon (reszta)" value={zl(toShields)} />
+              {/* What the confirmation does, in one line (UX-8) – or why it cannot (the button off says it beside it). */}
+              <p className={cx('text-[11.5px]', overLoot ? 'text-down' : 'text-muted')} data-testid="loot-summary" data-state={overLoot ? 'over' : 'ok'}>
+                {overLoot
+                  ? `Podział przekracza łupy o ${zl(next + goalsTotal + keptTotal - lootAmount)} – zmniejsz kwoty.`
+                  : `Po zatwierdzeniu: ${lootSplitText({ goals: goalsTotal, envelopes: keptTotal, nextMonth: next, shields: toShields })}.`}
+              </p>
               <div className="flex items-center gap-2">
                 <button
                   className="btn btn-accent h-[24px]"
-                  disabled={readOnly || next + goalsTotal + keptTotal > lootAmount}
+                  disabled={readOnly || overLoot}
                   onClick={() => {
-                    decideLoot(brief.month, lootAmount, { nextMonth: next, goals: chosen, envelopes: keptChosen })
-                    setEditingLoot(false)
+                    // „Cofnij” in the toast gives the split typed back to the form (the draft a decision clears).
+                    const typed = loot
+                    if (decideLoot(brief.month, lootAmount, { nextMonth: next, goals: chosen, envelopes: keptChosen }, () => setLoot(typed))) setEditingLoot(false)
                   }}
                   data-testid="loot-confirm"
                 >

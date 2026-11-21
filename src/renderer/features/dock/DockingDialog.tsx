@@ -18,7 +18,7 @@ import { AmountField, plnText } from '../../components/fields'
 import { Badge, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { closeDocking, useDeliveries, useDocking } from './state'
-import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, undockDelivery, walletOperation, type SplitDraft } from './actions'
+import { dockDelivery, dockingOf, removeExtraDockings, skipDelivery, undockDelivery, walletOperation, type SplitDraft } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -119,13 +119,13 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
       testId="docking-dialog"
       footer={
         <>
+          {/* At the footer's left, away from „Anuluj” and „Zadokuj”; „Cofnij” in the toast brings the entry back (UX-9). */}
           {e && d.state !== 'docked' && (
             <button
               className="btn h-[26px]"
               disabled={readOnly}
               onClick={() => {
-                skipEntry(e.id, true)
-                closeDocking()
+                if (skipDelivery(d)) closeDocking()
               }}
               title={
                 d.transaction
