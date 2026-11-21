@@ -3988,3 +3988,25 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   słowem; nic zapisanego – reguła też nie); „Cofnij” samej reguły (`rulesUndo`). Kreator otwiera się sam także po
   zmianie folderu z Ustawień i po zdjęciu „tylko do odczytu”; „Cofnij” „Koperty ze średnich” usuwa nietkniętą kopię
   planu; link „rozlicz na Radarze” tylko przy `settlementsShown`; „Wyłącz / Włącz wszystkie” z „Cofnij”.
+- **T550** (1.21.1, U1) „Cofnij” samej reguły tytułu cofa też pola, które reguła ustawiła otwartej operacji
+  (`editorEdit`, `titleRules.ts`), póki są takie, jak je zostawiła – zmienione od tego czasu zostają ze słowem. „Cofnij”
+  „Koperty ze średnich” w minionym miesiącu usuwa kopię planu następnego miesiąca z tego samego `editPlan`, gdy jest
+  nietknięta (`asWritten`), a następny miesiąc bez niej ma tę samą pensję i koperty; odmowa usunięcia – toast błędu
+  i powrót limitów. `applyBulk` liczy operacje zapisane od podglądu przez nowszą wersję jako `newer`, nie „zmienione”.
+  `deleteOrSay` zwraca `Promise<boolean>`. Toasty z akcją bez stałej liczby ms (minimum daje `toast` – `UNDO_MIN_MS`).
+- **T551** (1.21.1, U2) „osłony po” listy Radaru to bieżąca suma wierszy w kolejności listy (`radar/rows.ts`
+  `withShields`): późniejsze terminy wiersza zbiorczego przesuwają osłony jego i wierszy pod nim, aż do swojego dnia,
+  o tyle, o ile przesuwa je linia osłon (różnica `shieldsAfter`), nigdy o kwotę wprost. Opłat linia nie liczy (F27) –
+  wiersze opłat, także zbiorcze, nie mają osłon; wiersze pomiędzy bez zmian.
+- **T552** (1.21.1, U3) Finansowanie domownika jednym zestawem słów (`household/financeWords.ts` `financeLabel`:
+  „Kupione dla: X” / „Prezent dla: X”) w listach importu, regułach słów kluczowych, toastach menu PPM i paska
+  zbiorczego oraz w podglądzie szybkiego wpisu; etykieta pola zostaje „Finansuje”, nagłówki eksportu bez zmian. Toast
+  `settleDue` podaje liczbę rozliczonych zaległych terminów kontenera (`carried`, do klikniętego) i ostatni dzień.
+- **T553** (1.21.1, U4) Ustawienia bez nazwanej zakładki dostają zapamiętaną już w `navigate` (`resolveRoute`, historia
+  trzyma zakładkę po nazwie); Tab w `SplitMenu` zamyka menu z fokusem na przycisku; `Popover` ignoruje tylko listę, na
+  którą wskazuje pole w jego drzewie (`inOwnList`, `aria-controls` – nowa lista w portalu musi go ustawiać); szkic
+  manewru przesuwa miesiące spoza zakresu selectów na najbliższy dostępny (`rebaseManeuverMonths`, wpisane zostaje);
+  liczba na „Skategoryzuj pozostałe” = to, co pokaże otwierana lista (`categorizeRest`).
+- **T555** (1.21.1, U6) Liczba Meldunków liczona raz (`useInboxCountHost` w menu bocznym, na telefonie
+  `PhoneInboxWatcher`) i publikowana w `store/inboxCount`; Mostek i jego odpięte okna ją tylko czytają. Wiersze zakupów
+  w Rozliczeniach – `memo` z prymitywów (flaga ukrytych kwot w propsach).
