@@ -485,3 +485,22 @@ nowe dopisuj na końcu z datą i wskaż, którą zastępują. Decyzje techniczne
   (tylko korekty), ładownia albo cel (wykluczają się) i pożyczka (tylko operacje rodzaju „pożyczka”) – z podglądem
   skutku; operacje z podziałem paragonu pominięte przy ładowni, celu i pożyczce i policzone w komunikacie (wspólny zakup
   przyjmuje zmianę), tagi, plan / impuls i „wyjaśniona” działają na całej operacji; (3) każda zmiana z „Cofnij”.
+- **D106** (21.11.2026) Grupa 1.21.0 „Ergonomia” – usprawnienia z przeglądu `docs/przeglad-ux.md` (identyfikatory UX-…),
+  jednym ciągiem, **jedno wydanie na końcu** (wyjątek od „wydanie na grupę” z D104 – cztery dawne grupy P, S, C, U i trzy
+  rzeczy „na później” na jednej gałęzi, jeden PR, jedno CI). Odpowiedzi użytkownika: (1) **słownik pojęć bez zmian** –
+  nazwy (odkładka / zbiornik, kontener, asteroida, boja, wpis / operacja, „Raport wachty dnia”, „Okręt”, słowa
+  rozstrzygania konfliktów) zostają; poprawki tekstów tylko tam, gdzie brakuje nagłówka, legendy albo podpisu;
+  (2) „Premium / Discount” przy kopertach tylko przy przekroczeniu tempa („+120 zł ponad tempo”, termin ICT w dymku);
+  (3) „Ustaw regułę dla tytułu”: zmiana historii domyślnie odznaczona, po zaznaczeniu zawsze wspólny podgląd zmian
+  zbiorczych z pytaniem przy potwierdzonych saldach i „Cofnij” cofającym tylko niezmienione; (4) puste panele Mostka
+  (domownicy bez sald i bez osób, Dokowanie bez ICTTJ, wiersz tradingu przy zerach, „Odsłuch: brak głosu”) chowają się
+  same i wracają z danymi; (5) Meldunki = jedna lista „do zrobienia” – także zaległe opłaty zgrupowane po kontenerze;
+  Odprawa pokazuje je zgrupowane, z licznikiem meldunków; (6) Wywiad w zakładkach: Struktura / Wydatki / Prognozy /
+  Dziennik, z pamięcią ostatniej; (7) Ustawienia w grupach „Budżet (wspólne)” / „Ten komputer” / „Dane i system”, tryb
+  „Scalaj / Zawsze pytaj” do „Folder i kopie” z linkiem z Synchronizacji, skrót szybkiego wpisu do „Zasobnik i start”,
+  cisza nocna pokazana w Powiadomieniach, grupy powiadomień z „włącz / wyłącz wszystkie”, pamięć ostatniej zakładki;
+  (8) edytor operacji schowany, gdy nic nie wybrano (lista na całą szerokość); (9) edytor: „kupione dla: X (odda)”
+  i „prezent dla: X” zamiast „finansuje: X” / „prezent od: X”, jeden przycisk „Podziel…” (na kategorie albo na osoby);
+  (10) menu boczne: dolne pozycje (Meldunki, Synchronizacja, Ustawienia) ze skrótem tylko w dymku; (11) do ciągu
+  dochodzą: zbiorcze dodawanie propozycji Ładowni, „szybki start” kreatora (sam otwiera się w pustym folderze, tryb
+  trzech pól: salda, pensja, koperty codzienne) i ekran rozliczeń z domownikami.
