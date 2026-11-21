@@ -5,7 +5,7 @@ import { newId } from '@shared/ids'
 import { sameContentAs } from '@shared/merge'
 import { containerSchema, MBANK_ACCOUNT_ID, SCHEMA_VERSION, transactionSchema, type Container, type Transaction } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
-import { toast } from '../../store/ui'
+import { toast, undoKept } from '../../store/ui'
 import { plnText } from '../../components/fields'
 import { countLabel, monthGenLabel, plDate } from '../../lib/format'
 import { deleteWithUndo } from '../history/actions'
@@ -73,6 +73,40 @@ export function addContainer(draft: ContainerDraft): string | null {
   addRecord('containers', record)
   linkPayments(record.id, record.counterparty, true)
   return record.id
+}
+
+/**
+ * The history's proposals added together (UX-81): each by `addContainer` as „Do ładowni” does (its payments linked); one
+ * toast with „Cofnij” – it takes back the containers still as they were added (with their links) and says about those
+ * changed since (`undoKept`). Returns the ids added.
+ */
+export function addProposals(list: readonly RecurringPayment[]): string[] {
+  if (!canWrite() || !list.length) return []
+  const added: Container[] = []
+  for (const p of list) {
+    const draft = draftFromPayment(p)
+    const id = addContainer({ ...draft, name: draft.name.trim() })
+    const record = id ? useData.getState().records.containers[id]?.record : undefined
+    if (record) added.push(record)
+  }
+  if (!added.length) return []
+  toast(`Dodano do ładowni: ${countLabel(added.length, 'kontener', 'kontenery', 'kontenerów')}.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      let back = 0
+      for (const record of added) {
+        const cur = useData.getState().records.containers[record.id]?.record
+        if (!cur || !sameContentAs(cur, record)) continue
+        // Their payments are ordinary expenses again, as after deleting a container (B58).
+        const still = listOf(useData.getState().records.transactions).filter((t) => t.containerId === record.id)
+        if (still.length) replaceRecords('transactions', still.map((t) => ({ ...t, containerId: null })))
+        deleteOrSay('containers', record.id)
+        back++
+      }
+      undoKept(back, added.length - back, 'kontenery')
+    }
+  })
+  return added.map((c) => c.id)
 }
 
 /** Where linking starts (T379): the month before the budget's first month (`linkFromOf`); null = no budget yet. */

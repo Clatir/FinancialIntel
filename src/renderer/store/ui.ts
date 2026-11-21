@@ -17,7 +17,7 @@ export interface Toast {
 }
 
 /** Records the palette opens on their screens (F19). */
-export type FocusKind = 'container' | 'goal' | 'loan' | 'member'
+export type FocusKind = 'container' | 'goal' | 'loan' | 'member' | 'buoy'
 
 interface UiState {
   route: Route

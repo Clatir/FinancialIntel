@@ -120,6 +120,16 @@ test('ładownia pilnuje cen i opłat (1.9.0, F9, F23): nowa cena z „Zaktualizu
       .poll(async () => (await records(dir, 'containers')).filter((c) => c.name === 'ENERGA').map((c) => [c.amount, c.cycleMonths, c.variable]))
       .toEqual([[zl(230), 1, true]])
 
+    // The ticked proposals together (Z10, UX-81): „Dodaj zaznaczone (1)”, then „Cofnij” takes the container back.
+    await proposal('WODOCIĄGI').getByTestId('cargo-proposal-pick').check()
+    await page.getByTestId('cargo-proposals-add-picked').click()
+    await expect(page.locator('[data-testid="cargo-row"][data-name="WODOCIĄGI"]')).toHaveCount(1)
+    await expect(proposal('WODOCIĄGI')).toHaveCount(0)
+    await page.getByTestId('toast-action').filter({ hasText: 'Cofnij' }).last().click()
+    await expect(page.locator('[data-testid="cargo-row"][data-name="WODOCIĄGI"]')).toHaveCount(0)
+    await expect(proposal('WODOCIĄGI')).toHaveCount(1)
+    await expect.poll(async () => (await records(dir, 'containers')).filter((c) => c.name === 'WODOCIĄGI').length).toBe(0)
+
     // The new price: the simulation, „Zaktualizuj” from this month on – the months before keep the old amount.
     const row = (name: string) => page.locator(`[data-testid="cargo-row"][data-name="${name}"]`)
     await expect(row('Netflix').getByTestId('cargo-row-price')).toHaveText('cięższy')

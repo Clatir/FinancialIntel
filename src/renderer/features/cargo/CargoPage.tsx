@@ -26,6 +26,7 @@ import { AccountSelect, CategorySelect } from '../operations/pickers'
 import { monthGenLabel, monthLabel, plMonth } from '../../lib/format'
 import {
   addContainer,
+  addProposals,
   archiveContainer,
   clearPast,
   deleteContainer,
@@ -107,6 +108,10 @@ export function CargoPage() {
   const setDraft = (d: ContainerDraft | null) => (d ? setForm((f) => ({ ...f, draft: d })) : clearForm())
   const openDraft = (d: ContainerDraft) => setForm((f) => ({ draft: d, key: f.key + 1 }))
   const [showArchived, setShowArchived] = useState(false)
+  // The history's proposals ticked for „Dodaj zaznaczone” (UX-81): only a choice of the moment, nothing typed.
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  // The over-the-line question answered „yes” for this very set of ticks – another tick asks again.
+  const [overOk, setOverOk] = useState('')
   // Opened from the palette (F19): selected, the archive shown for an archived one.
   useFocusRecord('container', (id) => {
     setSelected(id)
@@ -121,6 +126,12 @@ export function CargoPage() {
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const sim = (change: Parameters<typeof simulateCargo>[1]) =>
     simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)
+  const pickedList = proposals.filter((p) => picked.has(p.key))
+  const pickedKey = pickedList.map((p) => p.key).join('|')
+  // All the ticked ones as one cost: the load line and the range after adding them together.
+  const pickedSim = pickedList.length ? sim({ add: { amount: sum(pickedList.map((p) => monthlyShare({ amount: p.amount, cycleMonths: p.cycleMonths, schedule: p.schedule }))), cycleMonths: 1 } }) : null
+  const pickedOver = !!pickedSim?.after.over
+  const tick = (key: string, on: boolean) => setPicked((x) => new Set(on ? [...x, key] : [...x].filter((k) => k !== key)))
   const priceOf = new Map(watch.prices.map((p) => [p.containerId, p]))
   const deadOf = new Map(watch.dead.map((d) => [d.containerId, d]))
   const current = selected ? containers.find((c) => c.id === selected) : undefined
@@ -159,6 +170,19 @@ export function CargoPage() {
                 <Empty>Ładownia jest pusta. Dodaj stałe opłaty (czynsz, abonamenty, raty) albo opłaty okresowe (OC, przeglądy) – także z propozycji z historii.</Empty>
               ) : (
                 <div className="flex flex-col text-[12px]">
+                  {/* The columns named (UX-35): the type, the cycle, the state, this month's amount and the monthly mass. */}
+                  <div className="flex items-center gap-2 border-b border-line px-1 pb-1 text-[10.5px] text-dim" data-testid="cargo-columns">
+                    <span className="min-w-0 flex-1">kontener</span>
+                    <span className="w-[66px]">rodzaj</span>
+                    <span className="w-[90px] text-right">cykl</span>
+                    <span className="w-[132px] text-right">stan</span>
+                    <span className="w-[96px] text-right" title="Kwota płatności w tym miesiącu">
+                      w tym miesiącu
+                    </span>
+                    <span className="w-[112px] text-right" title="Średnio miesięcznie – masa ładunku (opłata okresowa: rata zbiornika)">
+                      średnio / mies.
+                    </span>
+                  </div>
                   {visible.map((c) => (
                     <button
                       key={c.id}
@@ -168,19 +192,21 @@ export function CargoPage() {
                       data-name={c.name}
                       data-focus={`container:${c.id}`}
                     >
-                      <span className="min-w-0 flex-1 truncate text-fg-strong">{c.name}</span>
-                      {priceOf.has(c.id) && (
-                        <span className="text-[10.5px] text-accent" title={priceText(priceOf.get(c.id)!, c, zl)} data-testid="cargo-row-price">
-                          {priceOf.get(c.id)!.to > c.amount ? 'cięższy' : 'lżejszy'}
-                        </span>
-                      )}
-                      {deadOf.has(c.id) && (
-                        <span className="text-[10.5px] text-accent" title={deadText(deadOf.get(c.id)!)} data-testid="cargo-row-dead">
-                          anulowana?
-                        </span>
-                      )}
-                      <span className="text-[11px] text-dim">{TYPE_LABEL[c.type as ContainerType] ?? c.type}</span>
-                      <span className="w-[96px] truncate text-right text-[11px] text-muted" title={cycleText(c)}>
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span className="min-w-0 truncate text-fg-strong">{c.name}</span>
+                        {priceOf.has(c.id) && (
+                          <span className="shrink-0 text-[10.5px] text-accent" title={priceText(priceOf.get(c.id)!, c, zl)} data-testid="cargo-row-price">
+                            {priceOf.get(c.id)!.to > c.amount ? 'cięższy' : 'lżejszy'}
+                          </span>
+                        )}
+                        {deadOf.has(c.id) && (
+                          <span className="shrink-0 text-[10.5px] text-accent" title={deadText(deadOf.get(c.id)!)} data-testid="cargo-row-dead">
+                            anulowana?
+                          </span>
+                        )}
+                      </span>
+                      <span className="w-[66px] truncate text-[11px] text-dim">{TYPE_LABEL[c.type as ContainerType] ?? c.type}</span>
+                      <span className="w-[90px] truncate text-right text-[11px] text-muted" title={cycleText(c)}>
                         {cycleText(c)}
                       </span>
                       <StateBadge s={status.get(c.id)} late={lateOf.get(c.id)} />
@@ -191,16 +217,16 @@ export function CargoPage() {
                         const catchUp = catchUpOf(c, month, tankById.get(c.id), sinkingTaken.get(c.id))
                         return (
                           <span
-                            className="num w-[86px] text-right text-[11px] text-muted"
+                            className="num flex w-[112px] flex-col items-end text-[11px] text-muted"
                             title={
                               catchUp != null
                                 ? `Rata nominalna: ${zl(monthlyShare(c))}/mies. · rata wyrównawcza w tym cyklu (do terminu): ${zl(catchUp)}/mies.`
                                 : 'Średnio miesięcznie (opłata okresowa: rata zbiornika, ostatnia z resztą groszy)'
                             }
                           >
-                            {zl(monthlyWeight(c, month))}/m
+                            <span className="whitespace-nowrap">{zl(monthlyWeight(c, month))}/mies.</span>
                             {catchUp != null && (
-                              <span className="ml-1 text-[10px] text-accent" data-testid="cargo-row-catchup">
+                              <span className="whitespace-nowrap text-[10px] text-accent" data-testid="cargo-row-catchup">
                                 ({zl(catchUp)})
                               </span>
                             )}
@@ -239,8 +265,19 @@ export function CargoPage() {
                   <p className="mb-1 text-[11px] text-dim">
                     Ten sam kontrahent co miesiąc, co 2, 3 albo 6 miesięcy, co rok albo w stałych miesiącach roku; rachunek o zmiennej kwocie – z kwotą z roku (75. percentyl). Każdą propozycję trzeba potwierdzić.
                   </p>
+                  <label className="mb-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                    <input
+                      type="checkbox"
+                      checked={pickedList.length === proposals.length}
+                      disabled={readOnly}
+                      onChange={(e) => setPicked(e.currentTarget.checked ? new Set(proposals.map((p) => p.key)) : new Set())}
+                      data-testid="cargo-proposals-pick-all"
+                    />{' '}
+                    zaznacz wszystkie ({proposals.length})
+                  </label>
                   {proposals.map((p) => (
                     <div key={p.key} className="flex items-center gap-2 border-b border-line/70 py-1 last:border-b-0" data-testid="cargo-proposal" data-name={p.label} data-cycle={p.cycleMonths}>
+                      <input type="checkbox" checked={picked.has(p.key)} disabled={readOnly} onChange={(e) => tick(p.key, e.currentTarget.checked)} aria-label={`Zaznacz: ${p.label}`} data-testid="cargo-proposal-pick" />
                       <span className="min-w-0 flex-1 truncate">
                         {p.label}
                         {p.fresh && <span className="ml-1.5 text-[10.5px] text-accent">nowa</span>}
@@ -258,6 +295,34 @@ export function CargoPage() {
                       </button>
                     </div>
                   ))}
+                  {pickedSim && (
+                    <div className={cx('mt-1.5 flex flex-col gap-1 border-l-2 pl-2', pickedOver ? 'border-down' : 'border-line-strong')} data-testid="cargo-proposals-sim">
+                      {pickedOver && (
+                        <div className="text-[12px] text-down" data-testid="cargo-proposals-over">
+                          Ponad linię zanurzenia: {fmtPct(pickedSim.after.pct)} pensji, limit {fleet.cargo.limitPct}%.
+                        </div>
+                      )}
+                      <SimulationLine sim={pickedSim} verb="po dodaniu" />
+                    </div>
+                  )}
+                  {pickedList.length > 0 &&
+                    (pickedOver && overOk !== pickedKey ? (
+                      <button className="btn btn-accent mt-1.5 h-[24px] self-start" disabled={readOnly} onClick={() => setOverOk(pickedKey)} data-testid="cargo-proposals-add-over">
+                        Dodaj zaznaczone mimo przekroczenia ({pickedList.length})…
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-accent mt-1.5 h-[24px] self-start"
+                        disabled={readOnly}
+                        onClick={() => {
+                          addProposals(pickedList)
+                          setPicked(new Set())
+                        }}
+                        data-testid="cargo-proposals-add-picked"
+                      >
+                        {pickedOver ? `Tak, dodaj ponad linię (${pickedList.length})` : `Dodaj zaznaczone (${pickedList.length})`}
+                      </button>
+                    ))}
                 </div>
               )}
               {ignored > 0 && (

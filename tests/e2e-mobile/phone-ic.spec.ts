@@ -167,6 +167,8 @@ test('Plan miesiąca i Radar – zmiany z telefonu idą na OneDrive', async ({ p
   await page.getByTestId('phone-nav-more').click()
   await page.getByTestId('phone-more-radar').click()
   await expect(page.getByTestId('page-radar')).toBeVisible()
+  // „Nowa boja” sits behind „+ Boja” (Z10, UX-75).
+  await page.getByTestId('radar-new-buoy-open').click()
   const buoy = page.getByTestId('radar-new-buoy')
   await buoy.getByTestId('buoy-name').fill('Przegląd auta')
   await buoy.getByTestId('buoy-date').fill(addDays(today, 10).split('-').reverse().join('.'))

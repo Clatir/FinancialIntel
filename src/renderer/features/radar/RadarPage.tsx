@@ -19,9 +19,11 @@ import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/d
 import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
-import { navigate, toast } from '../../store/ui'
+import { focusRecord, navigate, toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
+import { IconPlus } from '../../components/icons'
+import { revealField } from '../../lib/reveal'
 import { Badge, CompactContext, Empty, Field, LimitHint, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
@@ -36,7 +38,7 @@ import { BuoysPanel, NewBuoyPanel } from './Buoys'
 import { PayoffPanel } from './Payoff'
 import { useFuture } from './future'
 import { RadarCalendar } from './Calendar'
-import { KIND_LABEL } from './labels'
+import { KIND_LABEL, TARGET_TITLE, radarTarget } from './labels'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
@@ -46,6 +48,8 @@ export function RadarPage() {
   const transactions = useData((s) => s.records.transactions)
   // Opened from the palette (F19): the loan marked (a closed one's list opened).
   useFocusRecord('loan')
+  // The buoy a radar row opened (UX-74): its panel is on this screen – a closed „Pozostałe boje” list opens.
+  useFocusRecord('buoy')
   // Whom a member's money comes through (D81).
   const via = (id: string) => {
     const v = members.find((m) => m.id === id)?.via
@@ -58,6 +62,9 @@ export function RadarPage() {
   const items = future.items
   // The list or the month's calendar (AP-42) – kept while another screen is looked at.
   const [view, setView] = useDraft<'list' | 'calendar'>('radar:view', () => 'list')
+  // The forms of a new buoy and a new loan sit behind „+ …” (UX-75); their drafts stay (`NewBuoyPanel`, `NewLoanPanel`).
+  const [buoyOpen, setBuoyOpen, closeBuoyForm] = useDraft<boolean>('radar:newBuoy:open', () => false)
+  const [loanOpen, setLoanOpen, closeLoanForm] = useDraft<boolean>('radar:newLoan:open', () => false)
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const loans = fleet.loans
   const r = fleet.receivables
@@ -99,12 +106,54 @@ export function RadarPage() {
                 <Timeline items={items} />
               )}
             </Panel>
-            <BuoysPanel days={future.days} today={fleet.today} readOnly={readOnly} />
-            {!readOnly && <NewBuoyPanel today={fleet.today} />}
+            <BuoysPanel
+              days={future.days}
+              today={fleet.today}
+              readOnly={readOnly}
+              actions={
+                !readOnly && (
+                  <button
+                    className="btn h-[22px]"
+                    aria-expanded={buoyOpen}
+                    onClick={() => {
+                      if (buoyOpen) return closeBuoyForm()
+                      setBuoyOpen(true)
+                      revealField('buoy-name')
+                    }}
+                    title="Nowa boja – zaplanowany wydatek, wpływ albo termin"
+                    data-testid="radar-new-buoy-open"
+                  >
+                    <IconPlus size={12} /> Boja
+                  </button>
+                )
+              }
+            />
+            {!readOnly && buoyOpen && <NewBuoyPanel today={fleet.today} onDone={closeBuoyForm} />}
           </div>
           <div className="flex min-w-0 flex-col">
             <AccountsPanel accounts={future.accounts} readOnly={readOnly} />
-            <Panel title={active.length ? `Pożyczki (${active.length})` : 'Pożyczki'} name="Pożyczki" testId="radar-loans">
+            <Panel
+              title={active.length ? `Pożyczki (${active.length})` : 'Pożyczki'}
+              name="Pożyczki"
+              testId="radar-loans"
+              actions={
+                !readOnly && (
+                  <button
+                    className="btn h-[22px]"
+                    aria-expanded={loanOpen}
+                    onClick={() => {
+                      if (loanOpen) return closeLoanForm()
+                      setLoanOpen(true)
+                      revealField('loan-name')
+                    }}
+                    title="Nowa pożyczka – udzielona albo wzięta"
+                    data-testid="radar-new-loan-open"
+                  >
+                    <IconPlus size={12} /> Pożyczka
+                  </button>
+                )
+              }
+            >
               <div className="flex flex-col text-[12px]">
                 {!active.length && <span className="text-muted">Brak otwartych pożyczek.</span>}
                 {active.map((s) => (
@@ -130,7 +179,7 @@ export function RadarPage() {
             </Panel>
             {/* The taken loans' payoff (AP-41): shown while one is open – a proposal, nothing stored. */}
             <PayoffPanel fleet={fleet} readOnly={readOnly} />
-            {!readOnly && <NewLoanPanel today={fleet.today} />}
+            {!readOnly && loanOpen && <NewLoanPanel today={fleet.today} onDone={closeLoanForm} />}
             <Panel title="Należności" testId="radar-receivables">
               <div className="flex flex-col gap-1 text-[12px]">
                 {/* The household (D80): each member's balance both ways – owed purchases, their advance held. */}
@@ -295,17 +344,47 @@ function AccountsPanel({ accounts, readOnly }: { accounts: readonly AccountAhead
   )
 }
 
+/** A radar row's record opened on its screen (UX-74): a container in Ładownia, a loan or a buoy here, a return's purchase. */
+function openTarget(t: NonNullable<ReturnType<typeof radarTarget>>): void {
+  if (t.focus === 'operation') {
+    const tx = useData.getState().records.transactions[t.id]?.record
+    if (tx) openOperation(tx)
+    return
+  }
+  focusRecord(t.focus, t.id, { page: t.focus === 'container' ? 'cargo' : 'radar' })
+}
+
 function Timeline({ items }: { items: RadarItem[] }) {
   // The phone (T311): two lines – the day, the name and the amount; the kind, the note and the shields after it under them.
   const compact = useContext(CompactContext)
   return (
     <div className="flex flex-col text-[12px]">
+      {/* The columns named (UX-35): the phone's two-line rows say it in the line itself. */}
+      {!compact && (
+        <div className="flex items-baseline gap-2 border-b border-line px-1 pb-1 text-[10.5px] text-dim" data-testid="radar-columns">
+          <span className="w-[44px] shrink-0">dzień</span>
+          <span className="w-[72px] shrink-0">rodzaj</span>
+          <span className="min-w-0 flex-1">pozycja</span>
+          <span className="w-[150px] text-right">uwagi</span>
+          <span className="w-[110px] text-right">kwota</span>
+          <span className="w-[96px] text-right" title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)">
+            osłony po
+          </span>
+        </div>
+      )}
       {items.map((i, n) => {
         const month = i.date.slice(0, 7)
         const newMonth = n === 0 || items[n - 1]!.date.slice(0, 7) !== month
         const day = <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(i.date).slice(0, 5)}</span>
         const kind = <span className={cx('shrink-0 text-[11px] text-dim', !compact && 'w-[72px]')}>{KIND_LABEL[i.kind]}</span>
-        const name = <span className="min-w-0 flex-1 truncate text-fg-strong">{i.name}</span>
+        const target = radarTarget(i)
+        const name = target ? (
+          <button type="button" className="min-w-0 flex-1 truncate text-left text-fg-strong hover:underline" onClick={() => openTarget(target)} title={TARGET_TITLE[target.focus]} data-testid="radar-item-open" data-target={target.focus}>
+            {i.name}
+          </button>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-fg-strong">{i.name}</span>
+        )
         const note = i.overdue ? i.note || 'po terminie' : i.note
         const amount = (
           <span className={cx('num text-right', compact ? 'shrink-0 whitespace-nowrap' : 'w-[110px]', i.direction === 'in' ? 'text-up' : 'text-fg')}>
@@ -468,7 +547,7 @@ function sameDayNextMonth(date: string): string {
   return `${month}-${String(Math.min(Number(date.slice(8, 10)), daysInMonth(month))).padStart(2, '0')}`
 }
 
-function NewLoanPanel({ today }: { today: string }) {
+function NewLoanPanel({ today, onDone }: { today: string; onDone: () => void }) {
   const accounts = useData((s) => s.fi?.settings.accounts)
   const blank = (): NewLoan => ({
     direction: 'given',
@@ -497,6 +576,7 @@ function NewLoanPanel({ today }: { today: string }) {
     if (!canWrite()) return
     addLoan({ ...o, total: taken && o.total > 0 ? o.total : o.amount })
     clearO()
+    onDone()
   }
   return (
     <Panel title="Nowa pożyczka" testId="radar-new-loan">

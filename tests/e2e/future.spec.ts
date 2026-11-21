@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
+import { openForm } from './forms'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -51,6 +52,7 @@ test('1.8.0 Radar: boje (dopasowana operacja z banku, „to nie ta”, odhacz, w
     await expect(page.locator('[data-testid="buoy-done"][data-name="Czynsz garażu"]')).toContainText('odhaczone')
 
     // A new buoy: 3 000 zł from mBank in 10 days – mBank has 2 000 zł.
+    await openForm(page, 'buoy')
     const form = page.getByTestId('radar-new-buoy')
     await form.getByTestId('buoy-name').fill('Wesele Kasi')
     await form.getByTestId('buoy-date').fill(wedding)
@@ -68,6 +70,7 @@ test('1.8.0 Radar: boje (dopasowana operacja z banku, „to nie ta”, odhacz, w
     await expect(mbank.getByTestId('radar-account-short')).toContainText('przelej z konta Portfel XTB')
 
     // A term without an amount, every year.
+    await openForm(page, 'buoy')
     await form.getByRole('radio', { name: 'Termin bez kwoty' }).click()
     await form.getByTestId('buoy-name').fill('Przegląd auta')
     await form.getByTestId('buoy-date').fill(addDays(today, 5))
@@ -164,6 +167,8 @@ test('1.8.0 Plan miesiąca: zapas koperty z łupów, „pokryj z koperty” z �
 
     // A goal with a deadline: the rate it needs, „rata z pensji” – next month's split shows it.
     await page.keyboard.press('Control+6')
+    // The deadline as a month's name, not „RRRR-MM” (Z10); a click turns it into the field.
+    await expect(page.getByTestId('starmap-deadline')).toHaveText(/^[a-ząćęłńóśźż]+ \d{4}$/)
     const need = page.getByTestId('starmap-need')
     await expect(need).toContainText('kurs przechwycenia: 1 000,00 zł/mies.')
     await need.getByTestId('starmap-rate').getByRole('switch').click()
