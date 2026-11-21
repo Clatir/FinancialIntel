@@ -33,6 +33,7 @@ import { countLabel } from '../../lib/format'
 import { plnText } from '../../components/fields'
 import { advanceRuleKey } from '@shared/import/audit'
 import { MEMBER_MONEY_TEXT } from './options'
+import { financeLabelInline } from '@shared/financeWords'
 
 const NO_ALIASES: BrandAliases = {}
 /** The names the user merged (1.2.2): an operation's brand is looked up and remembered through them. */
@@ -164,7 +165,7 @@ export function ruleDecisionText(
   if (r.kind === 'income' && r.loanId && r.loanAmount) return `${ruleDecisionText({ ...r, loanId: undefined, loanAmount: undefined }, catLabel, members)} · w tym spłata pożyczki: ${loanName} ${plnText(r.loanAmount)} zł`
   if (r.kind === 'expense') {
     const archived = !!r.categoryId && !!settings?.categories.find((c) => c.id === r.categoryId)?.archived
-    return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}${archived ? ' (zarchiwizowana)' : ''}`
+    return `${r.refundable ? `${financeLabelInline(!!r.gift, memberName(r.memberId, members))} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}${archived ? ' (zarchiwizowana)' : ''}`
   }
   if (r.kind === 'income') {
     if (!r.household) return 'wpływ (przychód)'

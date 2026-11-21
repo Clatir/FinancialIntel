@@ -37,6 +37,7 @@ import { showFilter } from '../operations/state'
 import { CashOffer } from './cash'
 import { CsvSetupPanel } from './CsvSetup'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
+import { financeLabelInline } from '../household/financeWords'
 import {
   acceptGroupHint,
   acceptHints,
@@ -570,11 +571,11 @@ function themeLabel(t: ImportTheme, catLabel: (id: string | null) => string, con
 }
 
 /** What a decision is, in a few words (a theme's name – `title` capitalized; a matched row's preview). */
-function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | null) => string, members: readonly Pick<HouseholdMember, 'id' | 'name'>[], loans: readonly LoanPick[], title = false): string {
+export function choiceText(c: Choice, direction: 'in' | 'out', catLabel: (id: string | null) => string, members: readonly Pick<HouseholdMember, 'id' | 'name'>[], loans: readonly LoanPick[], title = false): string {
   if (c.kind === 'expense') {
     const cat = catLabel(c.categoryId) || 'bez kategorii'
     // Who (D80, D83): a member, their gift, several people; a product return – for whom (B40).
-    const who = c.refundable ? `${direction === 'in' ? 'dla' : c.gift ? 'prezent od' : 'finansuje'}: ${memberName(c.memberId, members)}` : c.share ? `wspólnie: ${shareNames(c.share, members)}` : ''
+    const who = c.refundable ? (direction === 'in' ? `dla: ${memberName(c.memberId, members)}` : financeLabelInline(!!c.gift, memberName(c.memberId, members))) : c.share ? `wspólnie: ${shareNames(c.share, members)}` : ''
     if (direction === 'in') return `${title ? 'Zwroty' : 'zwrot towaru'}${who ? ` ${who}` : ''} · ${cat}`
     return who ? `${title ? who.charAt(0).toUpperCase() + who.slice(1) : who} · ${cat}` : cat
   }
