@@ -4010,3 +4010,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T555** (1.21.1, U6) Liczba Meldunków liczona raz (`useInboxCountHost` w menu bocznym, na telefonie
   `PhoneInboxWatcher`) i publikowana w `store/inboxCount`; Mostek i jego odpięte okna ją tylko czytają. Wiersze zakupów
   w Rozliczeniach – `memo` z prymitywów (flaga ukrytych kwot w propsach).
+- **T554** (1.21.1, U5) `DateField allowEmpty` (wartość `null` = otwarty koniec) zastępuje lokalny `RangeDay` Operacji;
+  `MonthField` w spoczynku słownie (`monthLabel`, „listopad 2026” – potwierdzone 21.11.2026), po fokusie RRRR-MM,
+  wpisywanie jak dotąd; „Podziel…” (`SplitMenu`) także w szybkim wpisie; menu PPM Operacji – własne pole szukania
+  kategorii (`search` w modelu, `categoryQuery`, `filterChoices`); ptaszki propozycji Ładowni – szkic
+  `useDraft('cargo:picked')`; `MenuBox` do ustawienia pozycji `opacity 0`, nie `visibility: hidden` (fokus w podmenu).
