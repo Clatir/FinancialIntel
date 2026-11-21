@@ -569,8 +569,6 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
         Odznacz
       </button>
     </div>
-    {/* The one preview of the screen: the bar's changes and the menu's open it. */}
-    <BulkPreviewHost />
     </>
   )
 }
@@ -830,6 +828,8 @@ export function OperationsPage() {
 
         <BulkBar visible={rows} />
         <OperationsMenu order={order} />
+        {/* The one preview of the screen: the bar's, the menu's and the editor's title rule (T535 – nothing ticked) open it. */}
+        <BulkPreviewHost />
         <div className="grid h-[24px] shrink-0 items-center gap-x-1.5 overflow-hidden border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: columns.template }} data-testid="operations-header">
           <TickAll rows={rows} />
           <SortHeader sort={filter.sort} by="date">

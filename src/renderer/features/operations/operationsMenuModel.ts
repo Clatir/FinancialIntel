@@ -96,6 +96,8 @@ export function skipReason(c: BulkChange): string {
       return 'nie korekta'
     case 'tag':
       return 'rodzaj bez tagów albo pełna lista'
+    case 'titleRule':
+      return 'zadokowane, przelew na własne konto albo podział'
     default:
       return 'zadokowane, przelew na własne konto'
   }
