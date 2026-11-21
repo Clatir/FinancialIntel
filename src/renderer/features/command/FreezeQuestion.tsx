@@ -8,6 +8,7 @@ import { dismissFreezeAsk, freezeWithoutImport, useFreezeAsk, type FreezeAsk } f
 import { navigate } from '../../store/ui'
 import { Modal } from '../../components/Modal'
 import { countLabel, plDate } from '../../lib/format'
+import { freezeEffectText } from './texts'
 
 /** The days waiting: „dzień 02.11.2026” or „dni od 20.10.2026 do 02.11.2026”. */
 export const freezeRange = (ask: Pick<FreezeAsk, 'first' | 'last'>): string => (ask.first === ask.last ? `dzień ${plDate(ask.first)}` : `dni od ${plDate(ask.first)} do ${plDate(ask.last)}`)
@@ -46,9 +47,11 @@ export function FreezeQuestion() {
     >
       <div className="flex flex-col gap-2 text-[12px]">
         <span className="text-fg-strong" data-testid="freeze-ask-text">
-          {late}. Gra zamrozi {freezeRange(ask)} bez operacji z banku.
+          {late}. Dni czekają na dane z banku.
         </span>
-        <span className="text-muted">Zamrożona ocena dnia zostaje: późniejszy import zmieni budżet, ale nie ocenę, serię ani stopień.</span>
+        <span className="text-fg" data-testid="freeze-ask-effect">
+          {freezeEffectText(freezeRange(ask))}
+        </span>
         <span className="text-[11.5px] text-dim">
           „Zaimportuj najpierw” – dni czekają na import, najwyżej do {plDate(ask.until)}; potem zamrożą się tak, jak są.
         </span>

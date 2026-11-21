@@ -22,8 +22,9 @@ import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { Modal } from '../../components/Modal'
-import { IconBack, IconNext } from '../../components/icons'
+import { IconBack, IconCheck, IconNext } from '../../components/icons'
 import { dayLabel, monthGenLabel, monthLabel, plDate } from '../../lib/format'
+import { openFirstDocking, useDeliveries } from '../dock/state'
 import { useCategories } from '../operations/pickers'
 import { coverEnvelope, decideLoot, lootSplitText, setEnvelope, setProposedEnvelopes, setSalary, usePlans } from './actions'
 import { YearPlanPanel } from './YearPlan'
@@ -32,6 +33,7 @@ import { IncomePanel } from './IncomePanel'
 import { playSound } from '../../lib/sounds'
 import { HistoryButton } from '../history/HistoryDialog'
 import { CushionLine } from '../intel/Cushion'
+import { startStrip, type StartStep } from './startStrip'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const KIND_TITLE: Record<EnvelopeKind, string> = { planned: 'Koperty planowe', daily: 'Koperty codzienne' }
@@ -107,6 +109,8 @@ export function MonthPage() {
       energy: energyFlows(shownBrief)
     }
   }, [fleet, categories, shownBrief, transactions, month, today])
+  // The deliveries to dock (the strip's last step): the same list as the bridge's panel.
+  const toDock = useDeliveries().filter((d) => d.state === 'pending' || d.state === 'waiting').length
   const ratesSkipped = month <= current && split != null && split.rates.items.length === 0 && goalRecords.some((g) => !g.archived && !g.achievedAt && !!g.deadline)
   if (!fleet || !categories) return <Empty>Wczytywanie…</Empty>
 
@@ -134,13 +138,33 @@ export function MonthPage() {
           Plan kampanii
         </button>
         <span className="text-[11.5px] text-muted" data-testid="month-source">
-          {own ? 'plan tego miesiąca' : plan ? `korzysta z planu: ${monthLabel(plan.month)} – zmiana utworzy własny` : 'brak planu – wpisz pensję'}
+          {own ? 'plan tego miesiąca' : plan ? 'plan odziedziczony' : 'brak planu – wpisz pensję'}
         </span>
         {/* The plan's earlier versions – also the one set aside when two computers changed it (N18). */}
         {own && <HistoryButton kind="months" id={own.id} current={own} small />}
       </div>
       <NewerNote show={planNewer} />
+      {/* A month without a plan of its own uses the latest earlier one (UX-48) – said, with what a change does. */}
+      {!own && plan && (
+        <div className="shrink-0 border-b border-line bg-hover px-4 py-1.5 text-[12px] text-muted" data-testid="month-inherited" data-from={plan.month}>
+          Ten miesiąc korzysta z planu {monthGenLabel(plan.month)} – zmiana pensji albo koperty utworzy własny plan tego miesiąca.
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-auto">
+        <StartStrip
+          steps={startStrip({
+            today,
+            month,
+            brief: brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? { month: brief.month, plus: brief.plus, loot: brief.loot } : null,
+            lootPending: brief && fleet.loot.month === brief.month && fleet.loot.amount > 0 && today <= lootDeadline(brief.month) ? { amount: fleet.loot.amount, deadline: lootDeadline(brief.month) } : null,
+            lootDecided: !!brief && !!plans.find((p) => p.month === brief.month)?.loot,
+            salary: plan?.salary ?? null,
+            envelopes: plan ? Object.values(plan.envelopes).filter((v) => v > 0).length : 0,
+            inherited: !own && plan ? plan.month : null,
+            toDock,
+            zl
+          })}
+        />
         {year && <YearPlanPanel year={month.slice(0, 4)} today={today} readOnly={folderLocked} onYear={(y) => setMonth(`${y}-${month.slice(5, 7)}`)} onMonth={(m) => setMonth(m)} />}
         <Columns id="month" tracks={['minmax(380px,1.1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
@@ -157,16 +181,16 @@ export function MonthPage() {
           <div className="flex min-w-0 flex-col">
             {month === current && <DailyPanel fleet={fleet} />}
             <EnvelopesPanel month={month} current={current} fleet={fleet} brief={shownBrief} readOnly={readOnly} />
-            {sankey && (
-              <Panel title={`Przepływ miesiąca – ${monthLabel(month)} (Sankey)`} testId="month-plan-sankey">
-                <MonthSankey month={month} money={sankey.money} energy={sankey.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={sankeyView} onView={setSankeyView} />
-              </Panel>
-            )}
             {brief && (!fleet.start || brief.month >= fleet.start.slice(0, 7)) ? (
               <DebriefPanel brief={brief} shown={month} fleet={fleet} today={today} plans={plans} readOnly={readOnly} />
             ) : (
               <Panel title="Debriefing" testId="month-debrief">
                 <Empty>Pierwszy debriefing po pierwszym miesiącu budżetu{fleet.start ? ` – od ${dayLabel(`${addMonths(fleet.start.slice(0, 7), 1)}-01`)}` : ''}.</Empty>
+              </Panel>
+            )}
+            {sankey && (
+              <Panel title={`Przepływ miesiąca – ${monthLabel(month)} (Sankey)`} testId="month-plan-sankey">
+                <MonthSankey month={month} money={sankey.money} energy={sankey.energy} empty="Brak przychodów i kosztów w tym miesiącu." view={sankeyView} onView={setSankeyView} />
               </Panel>
             )}
           </div>
@@ -186,6 +210,45 @@ export function MonthPage() {
     // „Cofnij” sets the limits from before back (UX-7) – hand-set ones are never lost by a click.
     setProposedEnvelopes(m, limits, `Koperty ze średnich z ${p.months.length} mies. (${p.months.map((x) => monthLabel(x)).join(', ')}).`)
   }
+}
+
+const STEP_TARGET: Partial<Record<StartStep['key'], string>> = { debrief: 'month-debrief', loot: 'loot', plan: 'month-salary-panel' }
+
+/**
+ * „Na początek miesiąca” (UX-48): up to the 7th – what the first days of a month ask for, in the order of the salary day,
+ * each step with its state; a step leads to its place (the panels below, the docking window).
+ */
+function StartStrip({ steps }: { steps: StartStep[] | null }) {
+  if (!steps) return null
+  const go = (step: StartStep) => {
+    if (step.key === 'dock') {
+      openFirstDocking()
+      return
+    }
+    document.querySelector(`[data-testid="${STEP_TARGET[step.key]}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
+  return (
+    <div className="border-b border-line px-4 py-2" data-testid="month-start-strip">
+      <div className="label pb-1">Na początek miesiąca</div>
+      <ol className="flex flex-wrap gap-x-5 gap-y-1 text-[12px]">
+        {steps.map((step, i) => (
+          <li key={step.key} data-testid="month-start-step" data-step={step.key} data-state={step.state}>
+            <button
+              className={cx('flex items-baseline gap-1.5 text-left', step.state === 'skip' ? 'text-dim' : 'hover:text-accent')}
+              onClick={() => go(step)}
+              disabled={step.state === 'skip'}
+            >
+              <span className={cx('num w-[14px] text-[11px]', step.state === 'todo' ? 'text-accent' : 'text-dim')}>
+                {step.state === 'done' ? <IconCheck size={12} /> : step.state === 'todo' ? '!' : i + 1}
+              </span>
+              <span className="text-fg-strong">{step.title}</span>
+              <span className={step.state === 'todo' ? 'text-accent' : 'text-muted'}>{step.text}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
 }
 
 function SalaryPanel({ month, plan, fleet, current, readOnly, transactions }: { month: string; plan: MonthPlan | null; fleet: FleetState; current: string; readOnly: boolean; transactions: ReturnType<typeof useRecordList<'transactions'>> }) {

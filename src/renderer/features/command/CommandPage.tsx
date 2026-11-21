@@ -36,9 +36,13 @@ import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { countLabel, plDate, plural } from '../../lib/format'
 import { useCategories } from '../operations/pickers'
 import { freezeRange } from './FreezeQuestion'
+import { commandSummary, weekLabel } from './texts'
 
 const zl = (g: number) => `${plnText(g)} zł`
-const dm = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
+
+/** What the week's mission stands at – the panel says „Na razie: …”, the line on top the same without the lead (UX-51). */
+const missionNow = (s: NonNullable<ReturnType<typeof missionStatus>>): string =>
+  `${s.need != null ? `${s.have} z ${s.need}${s.pending ? ` (+${s.pending}, jeśli dziś bez wydatków)` : ''}` : s.ok ? 'kurs utrzymany' : 'cel chybiony'}${s.amount != null ? ` (${zl(s.amount)})` : ''}`
 
 /** The ranges of the classes, from the engine's thresholds (T10). */
 const classRange = (c: ShipClass): string => {
@@ -101,6 +105,14 @@ export function CommandPage() {
           </button>
         </div>
       )}
+      {/* The three things the screen is opened for, above the tables (UX-51); the panels below keep their detail. */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-1.5 text-[12.5px] text-fg-strong" data-testid="command-summary" data-state={today ? (today.violations.length ? 'violation' : 'ok') : 'none'}>
+        {commandSummary({
+          today: today ? { violations: today.violations.length, serious: today.violations.some((v) => v.serious) } : null,
+          streak: view.streak,
+          mission: view.mission ? { title: missionTitle(view.mission.template), status: status ? `na razie: ${missionNow(status)}` : null } : null
+        })}
+      </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="command" tracks={['minmax(360px,1fr)', 'minmax(360px,1fr)', 'minmax(340px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
@@ -119,12 +131,7 @@ export function CommandPage() {
                     <span className="text-fg">{capitalize(missionText(view.mission, label, zl))}</span>
                     {status && (
                       <span className={cx('text-[11.5px]', status.ok ? 'text-accent' : 'text-muted')} data-testid="command-mission-status">
-                        {status.need != null
-                          ? `Na razie: ${status.have} z ${status.need}${status.pending ? ` (+${status.pending}, jeśli dziś bez wydatków)` : ''}`
-                          : status.ok
-                            ? 'Na razie: kurs utrzymany'
-                            : 'Na razie: cel chybiony'}
-                        {status.amount != null && ` (${zl(status.amount)})`}
+                        Na razie: {missionNow(status)}
                       </span>
                     )}
                     <span className="text-[11px] text-dim">Rozliczenie po zamrożeniu niedzieli; wykonana skraca drogę do awansu o {countLabel(settings.game.missionDays, 'dzień', 'dni', 'dni')}.</span>
@@ -144,7 +151,7 @@ export function CommandPage() {
                         <div key={m.id} className="flex items-baseline gap-2 py-0.5 text-[11.5px]" data-testid="command-mission-past">
                           <span className={cx('w-3 shrink-0', m.done ? 'text-accent' : 'text-dim')}>{m.done ? '✓' : '✗'}</span>
                           <span className="min-w-0 flex-1 truncate">{missionTitle(m.template)}</span>
-                          <span className="num text-dim">{m.week.slice(5)}</span>
+                          <span className="text-dim" data-testid="command-mission-past-week">{weekLabel(m.week)}</span>
                         </div>
                       ))}
                   </div>
@@ -234,7 +241,7 @@ function RankPanel({ view }: { view: GameView }) {
           <span className="text-muted">{view.rankNewer ? 'Stopień nadała nowsza wersja aplikacji – postęp policzy ona.' : next ? 'Postęp policzy się po pierwszym zamrożonym dniu.' : 'Najwyższy stopień floty.'}</span>
         )}
         <div className="flex items-baseline gap-2 border-t border-line pt-1.5" data-testid="command-serious">
-          <span className="text-muted">{sinceChange ? `Poważne naruszenia od ${dm(view.serious.from)} (do degradacji)` : 'Poważne naruszenia w tym miesiącu (do degradacji)'}</span>
+          <span className="text-muted">{sinceChange ? `Poważne naruszenia od ${plDate(view.serious.from)} (do degradacji)` : 'Poważne naruszenia w tym miesiącu (do degradacji)'}</span>
           <span className={cx('num ml-auto', view.serious.count >= view.serious.limit - 1 && view.serious.count > 0 ? 'text-accent' : 'text-fg-strong')}>
             {view.serious.count} / {view.serious.limit}
           </span>
@@ -387,7 +394,7 @@ function LogLine({ e, label, missionDays }: { e: WatchEntry; label: (id: string)
   }
   return (
     <div className="flex items-start gap-2 py-0.5" data-testid="command-log-entry" data-kind={e.kind}>
-      <span className="num w-[38px] shrink-0 text-[11px] text-dim">{dm(e.date)}</span>
+      <span className="num w-[76px] shrink-0 text-[11px] text-dim">{plDate(e.date)}</span>
       <span className={cx('mt-[5px] h-[6px] w-[6px] shrink-0', mark)} />
       <span className="min-w-0 flex-1">{text}</span>
     </div>

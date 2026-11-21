@@ -54,6 +54,10 @@ test('Dowództwo: dni zamrożone w tle, naruszenie poważne, awans z ekranem, mi
     await expect(page.getByTestId('command-mission-title')).not.toBeEmpty()
     await expect(page.locator('[data-testid="command-log-entry"][data-kind="rank"]')).toContainText('Awans: Chorąży')
     await expect(page.getByTestId('command-hidden')).toContainText('Ukrytych:')
+    // The line on top (UX-51): today's rating, the streak, the mission – and the log's dates with the year (UX-55).
+    await expect(page.getByTestId('command-summary')).toContainText('Dziś: poważne naruszenie · seria 31 dni · misja:')
+    await expect(page.getByTestId('command-summary')).toHaveAttribute('data-state', 'violation')
+    await expect(page.locator('[data-testid="command-log-entry"][data-kind="rank"]')).toContainText(String(Number(today.slice(0, 4))))
 
     // Tonight's purchase in the quiet hours: today so far is broken (a serious violation); the frozen days stay.
     await expect(page.getByTestId('command-today')).toContainText('naruszenie')
@@ -98,6 +102,8 @@ test('po przerwie (AP-14, D99 pkt 5): pytanie przed zamrożeniem dni bez importu
   try {
     await expect(page.getByTestId('freeze-ask')).toBeVisible({ timeout: 20_000 })
     await expect(page.getByTestId('freeze-ask-text')).toContainText('mBank: ostatni import 8 dni temu')
+    // What freezing does, in one sentence (UX-54).
+    await expect(page.getByTestId('freeze-ask-effect')).toContainText('późniejszy import zmieni budżet, ale nie ocenę')
     // The days before the gap froze; those of the gap wait.
     await expect.poll(() => frozenDays(dir)).toBe(4)
     await page.getByTestId('freeze-ask-import').click()
@@ -138,6 +144,10 @@ test('zaległość ponad 100 dni (AF-6): zamrażanie porcjami w osobnych zadania
     await expect.poll(() => frozenDays(dir), { timeout: 60_000 }).toBe(129)
     // React's limit of nested updates (#185) took the screen with it: the error boundary's text.
     await expect(page.getByText('Ten widok napotkał błąd')).toHaveCount(0)
+    // The promotion's screen is a dialog – Ctrl+8 waits until it is closed (the shell's guard over open dialogs).
+    await expect(page.getByTestId('celebration')).toBeVisible()
+    await page.getByTestId('celebration-close').click()
+    await expect(page.getByTestId('celebration')).toHaveCount(0)
     await page.keyboard.press('Control+8')
     await expect(page.getByTestId('page-command')).toBeVisible()
     expect(errors).toEqual([])
