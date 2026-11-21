@@ -14,6 +14,7 @@ import { Badge, Panel } from '../../components/ui'
 import { deleteManyWithUndo } from '../history/actions'
 import { selectOperation, showFilter } from '../operations/state'
 import { useAccounts, useCategories } from '../operations/pickers'
+import { closeImport, useImport } from './state'
 
 const NO_DISMISSED: Record<string, string> = {}
 
@@ -83,12 +84,17 @@ export function useKnownDuplicateCount(firstAfterMs = 10_000): number {
  */
 export function DuplicatesNote() {
   const n = useDuplicateCount()
+  const busy = useImport((s) => s.busy)
   if (!n) return null
   return (
     <Panel title="Duplikaty operacji">
       <p className="text-[11.5px] text-muted" data-testid="import-duplicates-note">
         Możliwe duplikaty: {n} – scalisz je po imporcie albo po zamknięciu pliku.
       </p>
+      {/* UX-23: the panel shows only without an open file – one click gets there (decisions not imported: „Cofnij” in the toast). */}
+      <button className="btn mt-1.5 h-[24px]" disabled={busy} onClick={closeImport} data-testid="import-duplicates-close">
+        Zamknij plik i scal
+      </button>
     </Panel>
   )
 }
