@@ -293,17 +293,28 @@ export function lateFees(cargo: readonly CargoStatus[]): LateFee[] {
 const shortMonth = (date: string, year: boolean) => `${SHORT_MONTHS[Number(date.slice(5, 7)) - 1]}${year ? ` ${date.slice(0, 4)}` : ''}`
 
 /**
+ * A container's dues overdue without its name and sum: „4 terminy bez płatności (sie–lis)” – the line of `lateFeeText`,
+ * the Radar's row of them (UX-30, T548 – its sum in the amount's column).
+ */
+export function lateFeeSpan(f: LateFee, today: string): string {
+  const first = f.dues[0]
+  const last = f.dues.at(-1)
+  if (!first || !last) return ''
+  const year = first.due.slice(0, 4) !== last.due.slice(0, 4) || last.due.slice(0, 4) !== today.slice(0, 4)
+  const n = f.dues.length
+  const months = n === 1 ? shortMonth(first.due, year) : `${shortMonth(first.due, year)}–${shortMonth(last.due, year)}`
+  return `${n} ${plural(n, 'termin', 'terminy', 'terminów')} bez płatności (${months})`
+}
+
+/**
  * A container's fees overdue in one line (UX-30): one due – as it has always been said; more – „Czynsz: 4 terminy bez
  * płatności (sie–lis), razem 8 000,00 zł.” (the briefing's line, the inbox's report).
  */
 export function lateFeeText(f: LateFee, zl: (grosze: number) => string, today: string): string {
   const first = f.dues[0]
-  const last = f.dues.at(-1)
-  if (!first || !last) return ''
+  if (!first) return ''
   if (f.dues.length === 1) return `${f.name} ${zl(first.amount)} – termin ${dm(first.due)} minął, brak płatności.`
-  const year = first.due.slice(0, 4) !== last.due.slice(0, 4) || last.due.slice(0, 4) !== today.slice(0, 4)
-  const n = f.dues.length
-  return `${f.name}: ${n} ${plural(n, 'termin', 'terminy', 'terminów')} bez płatności (${shortMonth(first.due, year)}–${shortMonth(last.due, year)}), razem ${zl(f.amount)}.`
+  return `${f.name}: ${lateFeeSpan(f, today)}, razem ${zl(f.amount)}.`
 }
 
 /** The line of a planned operation's day (F16) – null when it is not to be recalled today. */
