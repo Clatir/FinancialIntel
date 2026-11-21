@@ -20,11 +20,13 @@ const LINES: Array<{ key: keyof IncomeFigures; label: string; title: string }> =
 
 /**
  * „Przychody” (D81): what came in as mine on average – of the last 3, 6 and 12 full months and their median (a single
- * bonus does not move it) – work and trading apart, against the salary paid to myself.
+ * bonus does not move it) – work and trading apart, against the salary paid to myself. `zeroTrading` false (Mostek,
+ * D106 pkt 4): no row „Trading (XTB)” while all its figures are 0 – it comes back with a payout.
  */
-export function IncomePanel({ fleet, salary, testId = 'income-panel' }: { fleet: Pick<FleetState, 'incomeStats'>; salary: number | null; testId?: string }) {
+export function IncomePanel({ fleet, salary, testId = 'income-panel', zeroTrading = true }: { fleet: Pick<FleetState, 'incomeStats'>; salary: number | null; testId?: string; zeroTrading?: boolean }) {
   const s = fleet.incomeStats
   const cols: Record<(typeof COLUMNS)[number]['key'], IncomeWindow> = { '3': s.windows[3], '6': s.windows[6], '12': s.windows[12], median: s.median }
+  const lines = zeroTrading || COLUMNS.some((c) => (cols[c.key].trading ?? 0) !== 0) ? LINES : LINES.filter((l) => l.key !== 'trading')
   const avg6 = s.windows[6].total
   const diff = avg6 != null && salary != null && salary > 0 ? avg6 - salary : null
   const monthsAverage = monthsAverageOf(s)
@@ -41,7 +43,7 @@ export function IncomePanel({ fleet, salary, testId = 'income-panel' }: { fleet:
                 {c.label}
               </span>
             ))}
-            {LINES.map((l) => (
+            {lines.map((l) => (
               <IncomeRow key={l.key} label={l.label} title={l.title} values={COLUMNS.map((c) => cols[c.key][l.key])} strong={l.key === 'total'} testId={`income-${l.key}`} />
             ))}
           </div>

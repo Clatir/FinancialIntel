@@ -1,7 +1,8 @@
 /**
  * „Meldunki do rozpatrzenia” (F6, D86): one inbox of what waits for the captain's decision – the deliveries from XTB to
  * dock, the top-ups of XTB against the firewall to confirm, the data folder's conflicts and files with errors, the expenses without a category, the possible duplicates, the
- * bank's operations come back after their deletion (AF-1), the refunds still owed, the balances unconfirmed for over 30 days, the loot undecided. Pure; no notifications of its own –
+ * bank's operations come back after their deletion (AF-1), the refunds still owed, the balances unconfirmed for over 30 days, the loot undecided,
+ * the fees overdue (UX-31). Pure; no notifications of its own –
  * the side menu counts the reports, the inbox lists them.
  */
 import { formatPln, plDate, plural } from '../format'
@@ -10,7 +11,8 @@ import { isUncategorized, uncategorizedAmount } from '../operationsView'
 import { SCHEMA_VERSION } from '../schema/common'
 import { dockingSchema, type Container, type Docking, type Transaction } from '../schema/records'
 import { daysBetween, warsawNow } from './dates'
-import { againstFirewall, deliveryItem, dm, type AccountConfirmation } from './briefing'
+import { againstFirewall, deliveryItem, dm, lateFeeText, lateFees, type AccountConfirmation } from './briefing'
+import type { CargoStatus } from './cargoStatus'
 import type { Delivery } from './dock'
 import type { Alarm } from './fleet'
 import { isOpeningItem, openText, type MemberBalance } from './household'
@@ -19,15 +21,16 @@ import { deadText, priceText, type DeadContainer, type PriceChange } from './car
 import { anomalyText, type Anomaly } from './anomalies'
 import { lateReturnText, type AwaitedReturn } from './returns'
 
-export type InboxKind = 'dock' | 'firewall' | 'loot' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'advances' | 'refunds' | 'returns' | 'cargo' | 'balances'
+export type InboxKind = 'dock' | 'firewall' | 'loot' | 'fees' | 'folder' | 'uncategorized' | 'duplicates' | 'returned' | 'transfers' | 'corrections' | 'anomalies' | 'repayments' | 'advances' | 'refunds' | 'returns' | 'cargo' | 'balances'
 
 /** The inbox's sections in their order: a deadline first, the data's health, then what can wait a day. */
-export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'firewall', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'balances']
+export const INBOX_KINDS: readonly InboxKind[] = ['dock', 'firewall', 'loot', 'fees', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'balances']
 
 export const INBOX_TITLE: Record<InboxKind, string> = {
   dock: 'Dokowanie',
   firewall: 'Firewall',
   loot: 'Łupy',
+  fees: 'Zaległe opłaty',
   folder: 'Folder danych',
   uncategorized: 'Bez kategorii',
   duplicates: 'Możliwe duplikaty',
@@ -54,9 +57,15 @@ export interface InboxItem {
   /**
    * The delivery's key ('dock'), the member's id ('refunds', 'advances'), the account's id ('balances'), the operation's
    * ('corrections', the member's money waiting to be assigned – 'repayments', one come back after its deletion –
-   * 'returned'); a transfer's report – its key (`transferKey`, none for all the pairs together).
+   * 'returned'), the container's ('fees', 'cargo'); a transfer's report – its key (`transferKey`, none for all the pairs
+   * together).
    */
   ref?: string
+  /**
+   * A container's fees overdue ('fees'): its latest due of an earlier month – „Zapłacone poza budżetem” settles it and the
+   * ones before it (Ładownia's `settleDue`); none – this month's due only, paid in the budget (T375: never settled so).
+   */
+  due?: string
 }
 
 /** A balance not confirmed for longer is a report (D86). */
@@ -180,6 +189,11 @@ export interface InboxInput {
    * of 1.15.4 or older made while the data folder was away – its records are in no budget.
    */
   ghosts?: ReadonlyArray<{ dir: string; files: number }>
+  /**
+   * The fees' dues (`cargoStatuses` – this month's and the earlier ones still unpaid): a container's overdue ones are one
+   * report (UX-31, D106 pkt 5 – as the briefing says them, `lateFees`).
+   */
+  fees?: readonly CargoStatus[]
   /** The cargo hold's watch (F9): containers at a new price, containers gone quiet. */
   cargo?: { prices: readonly PriceChange[]; dead: readonly DeadContainer[]; containers: ReadonlyArray<Pick<Container, 'id' | 'cycleMonths' | 'schedule'>> }
 }
@@ -215,6 +229,12 @@ export function inboxItems(o: InboxInput): InboxItem[] {
       })
   if (o.started && o.loot.month && o.loot.amount > 0)
     out.push({ kind: 'loot', key: `loot:${o.loot.month}`, text: `Łupy z poprzedniego miesiąca: ${zl(o.loot.amount)} – podział do 7. dnia, potem trafią do osłon.`, action: 'Plan miesiąca' })
+  // The fees overdue (UX-31, D106 pkt 5): one report a container – its dues of the fees' state, never a rule of their own.
+  if (o.started)
+    for (const f of lateFees(o.fees ?? [])) {
+      const settle = f.dues.filter((s) => s.carried).at(-1)?.due
+      out.push({ kind: 'fees', key: `fees:${f.containerId}`, ref: f.containerId, text: lateFeeText(f, zl, o.today), action: 'Pokaż w Ładowni', ...(settle ? { due: settle } : {}) })
+    }
   if (o.conflicts || o.problems) {
     const parts = [
       o.conflicts ? `${o.conflicts} ${plural(o.conflicts, 'konflikt kopii', 'konflikty kopii', 'konfliktów kopii')}` : '',

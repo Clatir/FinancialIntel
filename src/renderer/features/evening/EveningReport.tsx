@@ -10,8 +10,9 @@ import { confirmNoSpend, eveningSnooze, reopenEvening, snoozeEvening } from './s
 const NO_DAYS: Record<string, string> = {}
 
 /**
- * The evening report in Operacje (F13): from the evening reminder's hour until the day is done – „Dopisz” (the quick
- * entry), „Dziś bez wydatków”, „Przypomnij za 30 min” (hidden here until then too), plus „Wznów raport wachty” (N-PC-20).
+ * The evening report in Operacje and over the briefing on Mostek (F13, UX-5): from the evening reminder's hour until the
+ * day is done – „Dopisz” (the quick entry), „Dziś bez wydatków”, „Przypomnij za 30 min” (hidden here until then too),
+ * plus „Wznów raport wachty” (N-PC-20).
  */
 export function EveningReport() {
   const minute = useMinute()
@@ -34,7 +35,7 @@ export function EveningReport() {
   if ((state.done || isSnoozed) && !forceOpen) {
     if (!isNoSpend && !isSnoozed) return null
     return (
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-bg-elevated/40 px-3 py-1 text-[11px] text-muted" data-testid="evening-closed">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-hover px-3 py-1 text-[11px] text-muted" data-testid="evening-closed">
         <span>
           {isNoSpend
             ? 'Raport wachty zamknięty („Dziś bez wydatków”)'

@@ -75,6 +75,11 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
           { accountId: XTB_WALLET_ACCOUNT_ID, name: 'Portfel XTB', last: null, opened: '2026-09-01' }
         ],
         loot: { month: '2026-09', amount: zl(340) },
+        // A fee overdue (UX-31, 1.21.0): the fees' state of Ładownia – one report a container.
+        fees: [
+          { containerId: 'K3', name: 'Czynsz', amount: zl(1500), cycleMonths: 1, day: 10, dayFrom: 'set', due: '2026-09-10', from: '2026-08-27', state: 'overdue', importPending: false, payments: [], paid: 0, carried: true, payToday: true, planned: null },
+          { containerId: 'K3', name: 'Czynsz', amount: zl(1500), cycleMonths: 1, day: 10, dayFrom: 'set', due: '2026-10-10', from: '2026-09-26', state: 'overdue', importPending: false, payments: [], paid: 0, carried: false, payToday: false, planned: null }
+        ],
         corrections: [{ later: { id: 'C2', date: '2026-10-12', amount: zl(50), accountId: MBANK_ACCOUNT_ID }, earlier: { date: '2026-10-11', updatedBy: 'LAPTOP' } }],
         // Transfers of before 1.7.0 (F10): the pairs together, a side twice and a missing side apart.
         transfers: [
@@ -109,13 +114,14 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
         }
       })
     )
-    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'firewall', 'loot', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
+    expect(items.map((i) => i.kind)).toEqual(['dock', 'dock', 'firewall', 'loot', 'fees', 'folder', 'uncategorized', 'duplicates', 'returned', 'transfers', 'transfers', 'transfers', 'corrections', 'anomalies', 'repayments', 'advances', 'refunds', 'returns', 'cargo', 'cargo', 'balances', 'balances'])
     // The kinds' order is the inbox's.
     expect([...new Set(items.map((i) => i.kind))]).toEqual(INBOX_KINDS)
     const text = (kind: string) => items.filter((i) => i.kind === kind).map((i) => i.text)
     expect(text('dock')).toEqual(['Wypłata z ICTTJ 1200.00 zł (pula Bieżące) do zadokowania.', 'Wypłata z ICTTJ 80.00 zł (pula Bieżące) do zadokowania.'])
     expect(items[0]!.ref).toBe(items[0]!.key.slice('dock:'.length))
     expect(text('loot')).toEqual(['Łupy z poprzedniego miesiąca: 340.00 zł – podział do 7. dnia, potem trafią do osłon.'])
+    expect(items.filter((i) => i.kind === 'fees').map((i) => [i.ref, i.text, i.action, i.due])).toEqual([['K3', 'Czynsz: 2 terminy bez płatności (wrz–paź), razem 3000.00 zł.', 'Pokaż w Ładowni', '2026-09-10']])
     expect(text('folder')).toEqual(['1 konflikt kopii, 2 pliki z błędem – do rozstrzygnięcia w Synchronizacji.'])
     expect(text('uncategorized')).toEqual(['3 wydatki bez kategorii od 01.09.2026 – razem 54.20 zł.'])
     expect(text('duplicates')).toEqual(['2 możliwe duplikaty – ta sama operacja dwa razy.'])

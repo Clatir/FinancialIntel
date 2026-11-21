@@ -13,11 +13,14 @@ import { keepReturned, readDeletedBank } from '../import/returned'
 import { useData } from '../../store/data'
 import { keepAdvances } from '../household/actions'
 import { TransferPairs } from './TransferPairs'
+import { settleDue } from '../cargo/actions'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
 /** Why a report matters, under its section. */
 const HINT: Partial<Record<InboxKind, string>> = {
+  fees:
+    'Opłata stała 3 dni po terminie bez płatności. Zaległa zostaje, aż przyjdzie płatność – płatność przed dniem następnego terminu zamyka najpierw zaległą. „Zapłacone poza budżetem” – gotówką albo z konta spoza budżetu, bez operacji tutaj (terminy wcześniejszych miesięcy, z „Cofnij”).',
   uncategorized: 'Wydatek bez kategorii liczy się do energii dnia jako codzienny i nie trafia do żadnej koperty.',
   duplicates: 'Ta sama operacja wpisana ręcznie i z banku albo z dwóch komputerów – scalanie z jednym „Cofnij”.',
   // AP-27 (SA sp. 3): the rule said where it is used – a repeat only from two computers.
@@ -123,6 +126,18 @@ function Report({ item, onOpen, onPreview }: { item: InboxItem; onOpen: () => vo
           zostaw
         </button>
       )}
+      {/* A container's fees overdue (UX-31): Ładownia's „Zapłacone poza budżetem” – the earlier months' dues, „Cofnij” in its toast. */}
+      {item.kind === 'fees' && item.ref && item.due && (
+        <button
+          type="button"
+          className="btn btn-ghost h-[22px] shrink-0"
+          onClick={() => settleFees(item.ref!, item.due!)}
+          title="Zapłacone gotówką albo z konta poza budżetem – bez operacji tutaj; zaległe terminy wcześniejszych miesięcy znikają (termin tego miesiąca zostaje do zapłaty)"
+          data-testid="inbox-fees-settle"
+        >
+          Zapłacone poza budżetem
+        </button>
+      )}
       {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}
       {item.kind === 'transfers' && item.ref && <TransferButtons item={item} onPreview={onPreview} />}
       <button type="button" className="btn h-[22px] shrink-0" onClick={onOpen} data-testid="inbox-open">
@@ -130,6 +145,12 @@ function Report({ item, onOpen, onPreview }: { item: InboxItem; onOpen: () => vo
       </button>
     </div>
   )
+}
+
+/** „Zapłacone poza budżetem” of a container's fees overdue (UX-31): Ładownia's own action on its latest earlier due. */
+function settleFees(containerId: string, due: string): void {
+  const c = useData.getState().records.containers[containerId]?.record
+  if (c) settleDue(c, due)
 }
 
 /** An operation of a report (come back after its deletion – AF-1, a top-up against the firewall) in Operacje. */

@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, daysBetween, warsawNow } from '../../src/shared/calc/dates'
 import { dm } from '../../src/shared/format'
+import { SHORT_MONTHS } from '../../src/shared/calc/cargoWatch'
 import { launch, openIntel } from './app'
 import { seedFolder, zl } from './seed'
 
@@ -52,7 +53,13 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
     await expect(page.getByTestId('state-range')).toHaveText('0,5 mies.')
     // The briefing: the partial salary and last month's rent – once.
     await expect(page.locator('[data-testid="briefing-item"][data-kind="alarm"]').filter({ hasText: 'Pensja częściowa: brakuje 4 000,00 zł' })).toHaveCount(1)
-    await expect(page.locator('[data-testid="briefing-item"][data-kind="cargo"]').filter({ hasText: `termin ${dm(lateDue)} minął` })).toHaveText(`Kontener niezaładowany: Czynsz 800,00 zł – termin ${dm(lateDue)} minął, brak płatności.`)
+    // From the 13th this month's due is overdue too (3 days of grace): the container's dues in one line (UX-30).
+    const both = today > `${month}-12`
+    const years = prev.slice(0, 4) !== month.slice(0, 4)
+    const mon = (m: string) => `${SHORT_MONTHS[Number(m.slice(5, 7)) - 1]}${years ? ` ${m.slice(0, 4)}` : ''}`
+    await expect(page.locator('[data-testid="briefing-item"][data-kind="cargo"]')).toHaveText(
+      both ? `Kontener niezaładowany – Czynsz: 2 terminy bez płatności (${mon(prev)}–${mon(month)}), razem 1 600,00 zł.` : `Kontener niezaładowany: Czynsz 800,00 zł – termin ${dm(lateDue)} minął, brak płatności.`
+    )
 
     // Plan miesiąca: the same energy today.
     await page.getByTestId('nav-month').click()

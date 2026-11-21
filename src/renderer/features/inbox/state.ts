@@ -14,7 +14,7 @@ import { useGhosts } from '../../store/ghosts'
 import { api, errorMessage } from '../../lib/api'
 import { useFleet } from '../../store/fleet'
 import { focusRecord, navigate, toast } from '../../store/ui'
-import { useCargoWatch } from '../cargo/status'
+import { useCargoStatuses, useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
 import { useAnomalies, useReturns } from '../sensors/state'
 import { openDocking, useDeliveries } from '../dock/state'
@@ -79,6 +79,8 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
   const watch = useCargoWatch()
   const containers = useData((s) => s.records.containers)
   const cargo = useMemo(() => ({ prices: watch.prices, dead: watch.dead, containers: listOf(containers) }), [watch, containers])
+  // The fees overdue (UX-31): the fees' state of Ładownia – the same the briefing says.
+  const fees = useCargoStatuses()
   // A „folder-widmo” of an older version (AP-1).
   const ghosts = useGhosts((g) => g.list)
   // The top-ups of XTB against the firewall found only in the bank, to confirm (DO sp. 12): not the ones with a docking.
@@ -110,6 +112,7 @@ export function useInbox(duplicates: number, money: (grosze: number) => string =
     accountName: (id) => accounts?.find((a) => a.id === id)?.name ?? 'Konto',
     money,
     cargo,
+    fees,
     ghosts,
     anomalies,
     returns,
@@ -172,7 +175,7 @@ export function openInboxItem(item: InboxItem, from: string | null): void {
     const issue = transferIssueOf(item)
     if (issue?.kind === 'lone') addOtherSide(issue.tx)
     else if (issue) void joinTransfers([issue])
-  } else if (item.kind === 'cargo' && item.ref) focusRecord('container', item.ref, { page: 'cargo' })
+  } else if ((item.kind === 'cargo' || item.kind === 'fees') && item.ref) focusRecord('container', item.ref, { page: 'cargo' })
   else if (item.kind === 'anomalies' && item.ref) openSensor(item.ref)
   else if (item.kind === 'returns' && item.ref) openSensor(`return:${item.ref}`)
   // An operation come back after its deletion (AF-1): deleted again, „Cofnij” in the toast.

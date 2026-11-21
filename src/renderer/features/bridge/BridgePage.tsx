@@ -23,9 +23,10 @@ import { Meter } from '../../components/meters'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, Panel, cx } from '../../components/ui'
 import { countLabel, dayLabel, plDate } from '../../lib/format'
+import { KEYS } from '../../components/shortcuts'
 import { useCategories } from '../operations/pickers'
 import { newOperation, openOperation, openRefundables, selectOperation, showFilter } from '../operations/state'
-import { EnvelopeBars, monthElapsed } from '../month/EnvelopeBars'
+import { EnvelopeBars, monthElapsed, showEnvelope } from '../month/EnvelopeBars'
 import { IncomePanel } from '../month/IncomePanel'
 import { topUpHull } from '../month/actions'
 import { startWizard } from '../wizard/state'
@@ -42,6 +43,10 @@ import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
 import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
 import { glossaryOf, ictOf } from '@shared/glossary'
+import { HOUSE_MEMBER_ID } from '@shared/schema'
+import { useInboxCount } from '../inbox/state'
+import { EveningReport } from '../evening/EveningReport'
+import { monthBarOf } from './monthBar'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 // Cut down (N56): never the threshold of a class the ship has not reached.
@@ -99,15 +104,24 @@ export const bridgeFleet = (f: FleetState, layers: { shieldSalaries: number; hul
 
 /** A detached panel of the bridge (`features/detach/DetachedApp.tsx`). */
 export type BridgeDetachProps =
-  | { panel: 'briefing'; fleet: BridgeFleet; items: BriefingItem[] }
+  | { panel: 'briefing'; fleet: BridgeFleet; items: BriefingItem[]; reports?: number }
   | { panel: 'state'; fleet: BridgeFleet }
-  | { panel: 'envelopes'; rows: BridgeFleet['envelopes']; labels: Record<string, string>; elapsed?: number }
+  | { panel: 'envelopes'; rows: BridgeFleet['envelopes']; labels: Record<string, string>; elapsed?: number; month?: string }
 
-/** Where a click on the bridge leads: a briefing line (by its kind; its key names a delivery) or the cargo's mass. */
-type BridgeTarget = BriefingItem['kind'] | 'cargo' | 'inbox'
+/**
+ * Where a click on the bridge leads: a briefing line (by its kind; its key names a delivery, a container), the cargo's
+ * mass, Meldunki, an envelope (`<month>:<category>` – its operations, UX-34).
+ */
+type BridgeTarget = BriefingItem['kind'] | 'cargo' | 'inbox' | 'envelope'
 
 function openTarget(t: BridgeTarget, key?: string): void {
-  if (t === 'asteroid' || t === 'cargo') navigate({ page: 'cargo' })
+  // A fee overdue (UX-30): its container in Ładownia – its late dues there (`cargo:<container>:<due>`).
+  if (t === 'cargo' && key?.startsWith('cargo:')) focusRecord('container', key.split(':')[1]!, { page: 'cargo' })
+  else if (t === 'asteroid' || t === 'cargo') navigate({ page: 'cargo' })
+  else if (t === 'envelope' && key) {
+    const at = key.indexOf(':')
+    showEnvelope(key.slice(0, at), key.slice(at + 1))
+  }
   // A new file of mBank (F14): opened in Import at once.
   else if (t === 'import' && key?.startsWith('bankfile:')) void openBankFile(key.split(':')[1]!)
   else if (t === 'import') navigate({ page: 'import' })
@@ -168,7 +182,7 @@ const DETACHED_PANELS: Record<string, BridgePanel> = { Odprawa: 'briefing', 'Sta
  * The detached panels' specs, one for the page and the host (B27): their data and clicks are served by
  * `BridgeDetachHost` – the panels on the bridge only open and close the windows.
  */
-function useBridgeSpecs(fleet: FleetState | null, items: BriefingItem[]): Record<BridgePanel, DetachSpec> | null {
+function useBridgeSpecs(fleet: FleetState | null, items: BriefingItem[], reports: number): Record<BridgePanel, DetachSpec> | null {
   const cats = useCategories()
   const layers = useData((s) => s.fi?.settings.layers)
   const firewall = useData((s) => s.fi?.settings.orders.firewall ?? true)
@@ -179,11 +193,11 @@ function useBridgeSpecs(fleet: FleetState | null, items: BriefingItem[]): Record
     if (!view) return null
     const spec = (title: string, props: BridgeDetachProps): DetachSpec => ({ kind: 'bridge', title, props, onEvent: onBridgeEvent, hosted: true })
     return {
-      briefing: spec(`Odprawa – ${dayLabel(view.today)}`, { panel: 'briefing', fleet: view, items }),
+      briefing: spec(`Odprawa – ${dayLabel(view.today)}`, { panel: 'briefing', fleet: view, items, reports }),
       state: spec('Stan okrętu', { panel: 'state', fleet: view }),
-      envelopes: spec('Koperty', { panel: 'envelopes', rows: view.envelopes, labels, elapsed: monthElapsed(view.today) })
+      envelopes: spec('Koperty', { panel: 'envelopes', rows: view.envelopes, labels, elapsed: monthElapsed(view.today), month: view.month })
     }
-  }, [view, items, labels])
+  }, [view, items, labels, reports])
 }
 
 /**
@@ -198,7 +212,8 @@ export function BridgeDetachHost() {
 function BridgeDetachSender({ keys }: { keys: string[] }) {
   const fleet = useFleet()
   const items = useBriefingItems(fleet)
-  const specs = useBridgeSpecs(fleet, items)
+  const reports = useInboxCount()
+  const specs = useBridgeSpecs(fleet, items, reports)
   return (
     <>
       {keys.map((k) => {
@@ -260,11 +275,15 @@ function speak(text: string): boolean {
 /** The weeks of the wealth curve on the bridge (N58): half a year – the whole history, the structure and the drawdown in Wywiad. */
 const BRIDGE_WEEKS = 26
 
-/** The wealth curve's last half-year (N58, spec „Ekrany”): the money on the budget's accounts at each week's end. */
+/**
+ * The wealth curve's last half-year (N58, spec „Ekrany”): the money on the budget's accounts at each week's end – said in
+ * its title (UX-66: Wywiad's curve has a choice of base); the layout's name stays „Krzywa majątku”.
+ */
 function BridgeWealth({ today }: { today: string }) {
   return (
     <Panel
-      title="Krzywa majątku"
+      title="Krzywa majątku (na kontach)"
+      name="Krzywa majątku"
       testId="bridge-wealth"
       actions={
         <button className="text-[11px] text-muted hover:text-fg-strong" onClick={() => navigate({ page: 'intel' })} title="Cała historia, struktura i drawdown – Wywiad (Ctrl+9)" data-testid="bridge-wealth-open">
@@ -328,6 +347,8 @@ export function BridgePage() {
           Szybki wpis{shortcut ? ` · ${shortcutLabel(shortcut)}` : ''}
         </button>
       </div>
+      {/* The evening report over the briefing too (UX-5): after its hour the app opens here, not in Operacje. */}
+      <EveningReport />
       <div className="min-h-0 flex-1 overflow-auto">
         <BridgePanels />
       </div>
@@ -350,8 +371,13 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   const firewall = useData((s) => s.fi?.settings.orders.firewall ?? true)
   const docked = useDocked()
   const view = useMemo(() => (fleet ? bridgeFleet(fleet, layers, firewall, docked) : null), [fleet, layers, firewall, docked])
-  const specs = useBridgeSpecs(fleet, items)
+  const reports = useInboxCount()
+  const specs = useBridgeSpecs(fleet, items, reports)
   const readOnly = useFolderLocked()
+  // Dokowanie without ICTTJ (D106 pkt 4): hidden until a folder is chosen or an inflow from XTB comes (its data).
+  const ictjOff = useIctj((s) => s.snap.status === 'off')
+  const deliveries = useDeliveries()
+  const docking = !ictjOff || deliveries.length > 0
   // The 10 newest in one pass (W29): the bridge renders every minute – never a sort of the whole history.
   const recent = useMemo(() => newestOperations(transactions, 10), [transactions])
   if (!fleet || !fi || !view || !specs) return <Empty>Wczytywanie…</Empty>
@@ -363,7 +389,8 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
     if (payer) return `od: ${memberName(payer, members)}`
     return t.categoryId ? cats.label(t.categoryId) : ''
   }
-  const briefingPanel = <BriefingPanel fleet={view} items={items} detach={specs.briefing} />
+  const briefingPanel = <BriefingPanel fleet={view} items={items} reports={reports} detach={specs.briefing} />
+  const monthBar = <MonthBar fleet={fleet} />
   const statePanel = fleet.started && (
     <Panel title="Stan okrętu" testId="bridge-state" detach={specs.state}>
       {/* „Dopełnij kadłub z osłon” (AP-17) only here – a detached window leads the main one, it writes nothing. */}
@@ -372,7 +399,7 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   )
   const envelopesPanel = (
     <Panel title="Koperty" hint={glossaryOf('Koperty')} testId="bridge-envelopes" detach={specs.envelopes}>
-      <Envelopes rows={fleet.envelopes} elapsed={monthElapsed(fleet.today)} />
+      <Envelopes rows={fleet.envelopes} elapsed={monthElapsed(fleet.today)} month={fleet.month} />
     </Panel>
   )
   const recentPanel = (
@@ -408,27 +435,29 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   if (single)
     return (
       <div className="flex min-w-0 flex-col" data-testid="bridge-panels">
+        {monthBar}
         {briefingPanel}
         {statePanel}
         {envelopesPanel}
         {recentPanel}
         <Receivables fleet={fleet} />
-        <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" />
+        <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" zeroTrading={false} />
         <BridgeWealth today={fleet.today} />
       </div>
     )
   return (
     <Columns id="bridge" tracks={['minmax(360px,1fr)', 'minmax(360px,1fr)']} className="grid min-h-full items-start">
       <div className="flex min-w-0 flex-col">
+        {monthBar}
         {briefingPanel}
         {statePanel}
-        {fleet.started && <DockPanel />}
+        {fleet.started && docking && <DockPanel />}
         <BridgeWealth today={fleet.today} />
       </div>
       <div className="flex min-w-0 flex-col">
         {envelopesPanel}
         <Receivables fleet={fleet} />
-        <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" />
+        <IncomePanel fleet={fleet} salary={fleet.plan?.salary ?? null} testId="bridge-income" zeroTrading={false} />
         {recentPanel}
       </div>
     </Columns>
@@ -446,16 +475,13 @@ function useSpeech(fleet: BridgeFleet, items: BriefingItem[]) {
   return { spoken, say }
 }
 
-/** „Odsłuchaj” only with a Polish voice of the system (T7) – without one, how to add it (no reading in a foreign voice). */
+/**
+ * „Odsłuchaj” only with a Polish voice of the system (T7) – without one nothing (D106 pkt 4: no empty word in the
+ * header; it comes with the voice – no reading in a foreign voice).
+ */
 function SpeakButton({ onClick }: { onClick: () => void }) {
   const voice = usePolishVoice()
-  if (voice == null) return null
-  if (!voice)
-    return (
-      <span className="text-[11px] text-dim" title="Ustawienia Windows → Czas i język → Mowa → Zarządzaj głosami → dodaj głos polski" data-testid="briefing-no-voice">
-        Odsłuch: brak polskiego głosu systemu
-      </span>
-    )
+  if (!voice) return null
   return (
     <button className="btn h-[22px]" onClick={onClick} title="Skrót odprawy głosem systemu: energia, Daily Bias i najważniejszy alarm" data-testid="briefing-speak">
       Odsłuchaj
@@ -463,10 +489,67 @@ function SpeakButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function BriefingPanel({ fleet, items, detach }: { fleet: BridgeFleet; items: BriefingItem[]; detach: DetachSpec }) {
+/**
+ * How this month goes (UX-32), over the briefing: the daily envelopes spent of their limit, the day of the month, today
+ * against today's allowance – the engine's numbers (`monthBarOf`); a click: the month's operations in Operacje.
+ */
+function MonthBar({ fleet }: { fleet: FleetState }) {
+  const bar = monthBarOf(fleet)
+  if (!bar) return null
+  const open = () => {
+    showFilter({ period: { kind: 'month', month: fleet.month }, ...noNarrowing() })
+    navigate({ page: 'operations' })
+  }
+  return (
+    <button
+      type="button"
+      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border border-line bg-panel px-2.5 py-1.5 text-left text-[12px] text-muted hover:bg-hover"
+      onClick={open}
+      title="Operacje tego miesiąca"
+      data-testid="bridge-month"
+    >
+      <span className="label">Ten miesiąc</span>
+      <span>
+        koperty codzienne: wydano <span className="num text-fg-strong" data-testid="bridge-month-spent">{zl(bar.spent)}</span> z <span className="num">{zl(bar.limit)}</span>
+      </span>
+      <span className="text-dim">·</span>
+      <span data-testid="bridge-month-day">
+        dzień {bar.day} z {bar.days}
+      </span>
+      <span className="text-dim">·</span>
+      <span>
+        dziś <span className={cx('num', bar.today > bar.allowance ? 'text-down' : 'text-fg-strong')} data-testid="bridge-month-today">{zl(bar.today)}</span> / przydział{' '}
+        <span className="num">{zl(bar.allowance)}</span>
+      </span>
+    </button>
+  )
+}
+
+/** „N meldunków ›” (UX-31, D106 pkt 5): the inbox's reports – one list of what waits – from the briefing; none, nothing. */
+function ReportsLink({ count, onOpen }: { count: number; onOpen: (t: BridgeTarget) => void }) {
+  if (!count) return null
+  return (
+    <button type="button" className="text-[11px] text-accent hover:underline" onClick={() => onOpen('inbox')} title={`Meldunki do rozpatrzenia (${KEYS.inbox})`} data-testid="briefing-reports" data-count={count}>
+      {countLabel(count, 'meldunek', 'meldunki', 'meldunków')} ›
+    </button>
+  )
+}
+
+function BriefingPanel({ fleet, items, reports, detach }: { fleet: BridgeFleet; items: BriefingItem[]; reports: number; detach: DetachSpec }) {
   const { spoken, say } = useSpeech(fleet, items)
   return (
-    <Panel title={`Odprawa – ${dayLabel(fleet.today)}`} name="Odprawa" testId="bridge-briefing" detach={detach} actions={<SpeakButton onClick={say} />}>
+    <Panel
+      title={`Odprawa – ${dayLabel(fleet.today)}`}
+      name="Odprawa"
+      testId="bridge-briefing"
+      detach={detach}
+      actions={
+        <>
+          <ReportsLink count={reports} onOpen={openTarget} />
+          <SpeakButton onClick={say} />
+        </>
+      }
+    >
       <BriefingBody fleet={fleet} items={items} spoken={spoken} onOpen={openTarget} />
     </Panel>
   )
@@ -642,26 +725,30 @@ function SilverBullet({ fleet, top }: { fleet: BridgeFleet; top: BriefingRow | n
   )
 }
 
-function Envelopes({ rows, labels, elapsed }: { rows: BridgeFleet['envelopes']; labels?: Record<string, string>; elapsed?: number }) {
-  return rows.length ? <EnvelopeBars rows={rows} labels={labels} elapsed={elapsed} /> : <Empty>Bez kopert w planie tego miesiąca.</Empty>
+/** The envelopes; `month` – theirs: a click opens the envelope's operations (UX-34; `onOpen` – a detached window's). */
+function Envelopes({ rows, labels, elapsed, month, onOpen }: { rows: BridgeFleet['envelopes']; labels?: Record<string, string>; elapsed?: number; month?: string; onOpen?: (categoryId: string) => void }) {
+  return rows.length ? <EnvelopeBars rows={rows} labels={labels} elapsed={elapsed} month={month} onOpen={onOpen} /> : <Empty>Bez kopert w planie tego miesiąca.</Empty>
 }
 
 /** A bridge panel in its own window (a second monitor, D45): clicks lead the main window. */
 export function BridgeDetached({ props }: { props: BridgeDetachProps }) {
   return (
     <div className="min-h-0 flex-1 overflow-auto" data-testid="detached-bridge" data-panel-kind={props.panel}>
-      {props.panel === 'briefing' && <DetachedBriefing fleet={props.fleet} items={props.items} />}
+      {props.panel === 'briefing' && <DetachedBriefing fleet={props.fleet} items={props.items} reports={props.reports ?? 0} />}
       {props.panel === 'state' && <ShipState fleet={props.fleet} onOpen={emitTarget} />}
-      {props.panel === 'envelopes' && <Envelopes rows={props.rows} labels={props.labels} elapsed={props.elapsed} />}
+      {props.panel === 'envelopes' && (
+        <Envelopes rows={props.rows} labels={props.labels} elapsed={props.elapsed} month={props.month} onOpen={props.month ? (id) => emitTarget('envelope', `${props.month}:${id}`) : undefined} />
+      )}
     </div>
   )
 }
 
-function DetachedBriefing({ fleet, items }: { fleet: BridgeFleet; items: BriefingItem[] }) {
+function DetachedBriefing({ fleet, items, reports }: { fleet: BridgeFleet; items: BriefingItem[]; reports: number }) {
   const { spoken, say } = useSpeech(fleet, items)
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex justify-end">
+      <div className="flex items-baseline justify-end gap-2">
+        <ReportsLink count={reports} onOpen={emitTarget} />
         <SpeakButton onClick={say} />
       </div>
       <BriefingBody fleet={fleet} items={items} spoken={spoken} onOpen={emitTarget} />
@@ -722,7 +809,14 @@ function ShipState({ fleet, onOpen, onTopUp }: { fleet: BridgeFleet; onOpen: (t:
           </span>
         )}
       </Line>
-      <Line metaphor="Energia" name="pensja miesiąca do wydania" hint={glossaryOf('Energia')} value={zl(fleet.energy)} testId="state-energy" />
+      {/* „Energia miesiąca” (UX-33): beside „Energia dziś” of the briefing – which energy each is, today's said here too. */}
+      <Line metaphor="Energia miesiąca" name="pensja do wydania" hint={glossaryOf('Energia')} value={zl(fleet.energy)} testId="state-energy">
+        {fleet.daily && (
+          <span className="text-[11px] text-muted" data-testid="state-energy-today">
+            energia dziś: {zl(fleet.daily.energy)}
+          </span>
+        )}
+      </Line>
       <Line metaphor="Kadłub" name="fundusz awaryjny" hint={glossaryOf('Kadłub')} value={<>{zl(hull.amount)}{hull.target != null && <span className="text-dim"> / {zl(hull.target)}</span>}</>} testId="state-hull">
         <Meter value={hull.amount} max={hull.target} />
         {/* Within 1 % of its target (T372): full for the firewall and „wolne do decyzji”. */}
@@ -822,6 +916,10 @@ function Receivables({ fleet }: { fleet: FleetState }) {
   const r = fleet.receivables
   const members = useMembers()
   const shown = r.members.filter((m) => m.owed > 0 || m.deposit > 0)
+  // No balances and nobody but the default „Dom” (D106 pkt 4): no panel – it comes back with a balance, a loan given or
+  // a member added.
+  const people = members.some((m) => !m.archived && m.id !== HOUSE_MEMBER_ID)
+  if (!people && !shown.length && r.total === 0) return null
   return (
     <Panel title="Rozliczenia z domownikami" testId="bridge-receivables">
       <div className="flex flex-col gap-1 text-[12px]">
