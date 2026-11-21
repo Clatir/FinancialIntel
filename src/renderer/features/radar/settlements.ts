@@ -7,7 +7,7 @@
  */
 import { CASH_REPAY_TITLE, isOpeningItem, memberName, purchaseOf, type HouseholdLedger, type MemberBalance, type Unassigned } from '@shared/calc/household'
 import { panelKey } from '@shared/panels'
-import { cashAccountOf, inflowOf, type Account, type HouseholdMember, type Transaction } from '@shared/schema'
+import { cashAccountOf, HOUSE_MEMBER_ID, inflowOf, type Account, type HouseholdMember, type Transaction } from '@shared/schema'
 import { noNarrowing } from '@shared/operationsView'
 import { canWrite, useData } from '../../store/data'
 import { setPanelLayout } from '../../store/panels'
@@ -38,13 +38,21 @@ export interface MemberSettlement extends MemberBalance {
   waitingSum: number
 }
 
+/** A member with something to settle – a debt, an advance, money waiting to be assigned (as Radar's „Należności” listed them). */
+const toSettle = (m: MemberBalance): boolean => m.owed > 0 || m.deposit > 0 || m.unassigned.length > 0
+
 /**
- * The members with something to settle – a debt, an advance, money waiting to be assigned (as Radar's „Należności” listed
- * them) – in the ledger's order, each with their open purchases.
+ * Radar's panel is shown (and so Mostek's „rozlicz na Radarze ›” – a link never to nothing): someone to settle, or people
+ * beside the default „Dom” (D106 pkt 4 – no empty panel; the loans given alone are not the household's).
  */
+export function settlementsShown(balances: readonly MemberBalance[], members: readonly HouseholdMember[]): boolean {
+  return balances.some(toSettle) || members.some((m) => !m.archived && m.id !== HOUSE_MEMBER_ID)
+}
+
+/** The members with something to settle, in the ledger's order, each with their open purchases. */
 export function settlementsOf(members: readonly MemberBalance[], ledger: Pick<HouseholdLedger, 'purchases'>): MemberSettlement[] {
   return members
-    .filter((m) => m.owed > 0 || m.deposit > 0 || m.unassigned.length > 0)
+    .filter(toSettle)
     .map((m) => ({
       ...m,
       purchases: m.open.map((o) => {

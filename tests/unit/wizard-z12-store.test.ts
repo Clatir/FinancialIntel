@@ -37,21 +37,32 @@ const FOOD = '01KDEFCAT00000000000000100'
 const zl = (g: number) => `${(g / 100).toFixed(2).replace('.', ',')} zł`
 const info = (wizardAuto?: boolean): AppInfo => ({ version: '1.21.0', machineName: 'PC', platform: 'win32', userDataDir: '', freeze: { afterOpenMs: 0, quietMs: 0 }, ...(wizardAuto === undefined ? {} : { wizardAuto }) })
 
-/** A folder shown in the window, as an open of it brings it (a new one: fi.json alone). */
-function show(dir: string, o: { start?: string; transactions?: number; readOnly?: boolean } = {}): void {
+type Shown = { start?: string; transactions?: number; readOnly?: boolean }
+
+/** A folder as an open of it brings it (a new one: fi.json alone). */
+function snapshotOf(dir: string, o: Shown = {}): Snapshot {
   const fi = createDefaultSettings('2026-01-01T00:00:00.000Z')
   if (o.start) fi.settings.budget.start = o.start
   const records = Object.fromEntries(COLLECTIONS.map((c) => [c, []])) as unknown as Snapshot['records']
   for (let i = 0; i < (o.transactions ?? 0); i++)
     (records.transactions as unknown[]).push(saved({ id: `01KTX0000000000000000000${String(i).padStart(2, '0')}`, date: '2026-10-01', accountId: MBANK_ACCOUNT_ID, amount: -1000 }))
-  data.applySnapshot({
+  return {
     fi,
     records,
     problems: [],
     conflicts: [],
     status: { dataDir: dir, available: true, readOnly: !!o.readOnly, readOnlyReason: o.readOnly ? 'Folder jest tylko do odczytu.' : null, folderSchemaVersion: 1, appSchemaVersion: 1, otherMachines: [], migratedFrom: null, backupPath: null },
     loadMs: 0
-  })
+  }
+}
+
+/** A folder shown in the window, as an open of it brings it. */
+const show = (dir: string, o: Shown = {}): void => data.applySnapshot(snapshotOf(dir, o))
+
+/** The folder's state as main says it changed (its watcher, the check of writes – `applyChange`): now writable. */
+function writable(): void {
+  const s = data.useData.getState()
+  data.applyChange({ upserts: [], removals: [], fi: null, problems: s.problems, conflicts: s.conflicts, status: { ...s.status!, readOnly: false, readOnlyReason: null }, origin: 'local' })
 }
 const page = () => useUi.getState().route.page
 let n = 0
@@ -130,6 +141,72 @@ describe('UX-79: kreator otwiera się sam w nowym pustym folderze – raz', () =
     show('C:\\Dane\\Stary', { transactions: 1 })
     show(dir)
     expect(page()).toBe('wizard')
+  })
+
+  it('nowy pusty folder z Ustawień (pokazany w trakcie przełączania): kreator sam, gdy przełączanie się skończy', async () => {
+    const dir = fresh()
+    // Before: shown while `switching` was on, then the flag went off with the same folder – never looked at again.
+    const res = await data.switchFolder(async () => ({ ok: true, snapshot: snapshotOf(dir) }))
+    expect(res).toMatchObject({ ok: true })
+    expect(data.useData.getState().switching).toBe(false)
+    expect(page()).toBe('wizard')
+    expect(wizard.useWizard.getState()).toMatchObject({ active: true, step: 0 })
+  })
+
+  it('w trakcie przełączania – jeszcze bez kreatora i bez zapamiętania', async () => {
+    const dir = fresh()
+    let during: { page: string; active: boolean } | null = null
+    await data.switchFolder(async () => {
+      // The snapshot taken in the window while the switch still holds it (as `switchFolder` does): nothing opens yet.
+      data.applySnapshot(snapshotOf(dir))
+      during = { page: page(), active: wizard.useWizard.getState().active }
+      return { ok: true, snapshot: snapshotOf(dir) }
+    })
+    expect(during).toEqual({ page: 'bridge', active: false })
+    expect(page()).toBe('wizard')
+  })
+
+  it('folder tylko do odczytu, który przyjmie zapis (readOnly true → false): kreator sam, raz', () => {
+    const dir = fresh()
+    show(dir, { readOnly: true })
+    expect(page()).toBe('bridge')
+    // Before: the folder taking writes later changed nothing – the wizard waited for the folder shown anew.
+    writable()
+    expect(page()).toBe('wizard')
+    wizard.cancelWizard()
+    // Once: the mark is kept – the state changing again opens nothing.
+    writable()
+    expect(page()).toBe('bridge')
+    expect(wizard.useWizard.getState().active).toBe(false)
+  })
+
+  it('folder czekający na zapis, a w tym czasie inny folder: czeka tylko pokazany', () => {
+    const dir = fresh()
+    show(dir, { readOnly: true })
+    show('C:\\Dane\\Stary', { transactions: 1 })
+    writable()
+    expect(page()).toBe('bridge')
+    // Never marked while it waited: shown again, writable – it opens.
+    show(dir)
+    expect(page()).toBe('wizard')
+  })
+
+  it('folder tylko do odczytu, który w tym czasie dostał dane: po przyjęciu zapisu – bez kreatora', () => {
+    const dir = fresh()
+    show(dir, { readOnly: true })
+    const s = data.useData.getState()
+    data.applyChange({
+      upserts: [{ collection: 'transactions', entry: saved({ id: '01KTX0000000000000000000ZZ', date: '2026-10-01', accountId: MBANK_ACCOUNT_ID, amount: -1000 }) as never }],
+      removals: [],
+      fi: null,
+      problems: [],
+      conflicts: [],
+      status: s.status!,
+      origin: 'external'
+    })
+    writable()
+    expect(page()).toBe('bridge')
+    expect(wizard.useWizard.getState().active).toBe(false)
   })
 })
 

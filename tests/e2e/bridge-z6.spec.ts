@@ -128,3 +128,35 @@ test('Mostek i Meldunki: zaległe opłaty jedną linią i jednym meldunkiem, pas
     await app.close()
   }
 })
+
+test('Mostek: same pożyczki udzielone (bez domowników) – panel rozliczeń bez „rozlicz na Radarze ›” (Radar go nie pokazuje)', async () => {
+  const { date: today, month } = warsawNow()
+  const start = `${addMonths(month, -1)}-01`
+  const LOAN = '01K9Z6000000000000000000A1'
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-bridge-z6-loan-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start } }),
+    records: {
+      balances: [{ date: start, accountId: ACC, kind: 'opening', amount: zl(20000) }],
+      months: [{ month: start.slice(0, 7), salary: zl(6000), envelopes: {} }],
+      loans: [{ id: LOAN, name: 'Pożyczka dla Jana', direction: 'given', counterparty: 'JAN KOWALSKI', amount: zl(1000), date: addDays(today, -5) }],
+      transactions: [{ date: addDays(today, -5), accountId: ACC, kind: 'loan', amount: -zl(1000), loanId: LOAN, counterparty: 'JAN KOWALSKI' }]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    // The loan given keeps Mostek's panel (D106 pkt 4)…
+    const panel = page.getByTestId('bridge-receivables')
+    await expect(panel).toBeVisible()
+    await expect(panel).toContainText('Pożyczki udzielone')
+    // …but nobody of the household: Radar's panel is hidden – before, the link led to nothing there.
+    await expect(panel.getByTestId('bridge-settlements')).toHaveCount(0)
+    await page.keyboard.press('Control+7')
+    await expect(page.getByTestId('page-radar')).toBeVisible()
+    await expect(page.getByTestId('radar-settlements')).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

@@ -204,20 +204,32 @@ function markAutoOpened(dir: string): boolean {
 let autoOpenInstalled = false
 
 /**
+ * The folder shown while it could not be written – only to read, or brought by a switch from Settings still holding the
+ * window (`switchFolder` shows it with `switching` on, then takes it off): looked at once it can (T546). Never marked
+ * while it waits; another folder shown – that one instead.
+ */
+let autoOpenWaiting: string | null = null
+
+/**
  * A new empty folder opens the start wizard by itself (UX-79, D106 pkt 11, T546) – once per folder on this computer: the
  * mark is kept the moment it opens, so a wizard left without „Uruchom budżet” (another screen, „Przerwij kreator”, the
  * window closed) never comes back by itself; the banner stays the way to it. Only a folder shown with no record and no
- * problem file, its budget not running, writable (one only to read waits – it opens once the folder takes writes), and
- * not in the test runs that switch it off (`AppInfo.wizardAuto`). The main window only – the phone never installs it.
- * After the wizard's own subscription above: a draft of the folder is in place before `startWizard` looks at it.
+ * problem file, its budget not running, writable (one only to read, or shown during a switch from Settings, waits – it is
+ * looked at once the folder takes writes and the switch is over), and not in the test runs that switch it off
+ * (`AppInfo.wizardAuto`). The main window only – the phone never installs it. After the wizard's own subscription above:
+ * a draft of the folder is in place before `startWizard` looks at it.
  */
 export function initWizardAutoOpen(): void {
   if (autoOpenInstalled) return
   autoOpenInstalled = true
   useData.subscribe((s, prev) => {
     const dir = s.status?.dataDir
-    const shown = s.phase === 'ready' && (prev.phase !== 'ready' || dir !== prev.status?.dataDir)
-    if (!shown || !dir || !s.fi || s.fi.settings.budget.start || s.status?.readOnly || s.switching || s.appInfo?.wizardAuto === false) return
+    if (s.phase !== 'ready' || !dir) return
+    if (prev.phase !== 'ready' || dir !== prev.status?.dataDir) autoOpenWaiting = dir
+    else if (autoOpenWaiting !== dir) return
+    if (s.status?.readOnly || s.switching) return
+    autoOpenWaiting = null
+    if (!s.fi || s.fi.settings.budget.start || s.appInfo?.wizardAuto === false) return
     if (!folderIsEmpty(s.records) || s.problems.length || s.conflicts.length) return
     if (markAutoOpened(dir)) startWizard()
   })

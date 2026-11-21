@@ -2,7 +2,7 @@
  * Z2 (1.21.0, D106, T536): „Cofnij” and summaries on the screens – „Koperty ze średnich” (UX-7), the loot split (UX-8),
  * „Pomiń wpis” in the docking window (UX-9) and the wizard's „ma oddać” / „zaliczka” – one of the two (UX-6).
  */
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -52,13 +52,16 @@ test('Plan miesiąca: „Koperty ze średnich” z „Cofnij” (UX-7); podział
     await page.getByTestId('month-envelopes-propose').click()
     await expect(food).toHaveValue('780,00')
     await expect(home).toHaveValue('1\u00a0500,00')
-    const own = async () => (await json(join(dataDir, 'months', `${month}.json`))).envelopes
+    // Not there until the autosave writes it: polled again, never a failure of the poll.
+    const own = async () => (await json(join(dataDir, 'months', `${month}.json`)).catch(() => null))?.envelopes
     await expect.poll(own).toMatchObject({ [FOOD]: zl(780), [FUN]: zl(150) })
     // Before: no „Cofnij” – the hand-set 500 zł were gone for good.
     await page.getByRole('status').filter({ hasText: 'Koperty ze średnich' }).getByTestId('toast-action').click()
     await expect(food).toHaveValue('500,00')
     await expect(home).toHaveValue('')
-    await expect.poll(own).toEqual({ [FOOD]: zl(500), [FUN]: zl(100) })
+    // The month's own plan the proposal made (a copy of last month's – T46) goes: the month lives on last month's plan again.
+    await expect.poll(() => existsSync(join(dataDir, 'months', `${month}.json`))).toBe(false)
+    expect((await json(join(dataDir, 'months', `${m1}.json`))).envelopes).toEqual({ [FOOD]: zl(500), [FUN]: zl(100) })
 
     // The loot of last month (nothing decided): before the confirmation one line says where it goes.
     const debrief = page.getByTestId('month-debrief')

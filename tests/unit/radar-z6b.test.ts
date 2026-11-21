@@ -96,6 +96,22 @@ describe('Radar: zaległe terminy po kontenerze (UX-30, D106 pkt 5)', () => {
     expect(rows.filter((r) => r.item.ref === insurance.id && r.item.overdue)).toHaveLength(1)
   })
 
+  it('„osłony po” wiersza zbiorczego – po ostatnim sklejonym terminie (kwota to suma wszystkich)', () => {
+    // The shields after each item as the list has them (the line of F27 – here set on the dues to see which one the row takes).
+    let shields = zl(10_000)
+    const withShields = items.map((i) => (i.amount == null ? i : { ...i, shieldsAfter: (shields -= i.direction === 'out' ? i.amount : 0) }))
+    const rentDues = withShields.filter((i) => i.ref === rent.id && i.overdue)
+    expect(rentDues.map((i) => i.date)).toEqual(['2026-08-10', '2026-09-10', '2026-10-10', '2026-11-10'])
+    const row = radarRows(withShields, cargo, TODAY).find((r) => r.late?.containerId === rent.id)!
+    expect(row.item.amount).toBe(zl(8000))
+    // Before: the oldest due's – the shields as if only its 2 000 zł went.
+    expect(row.item.shieldsAfter).toBe(rentDues.at(-1)!.shieldsAfter)
+    expect(row.item.shieldsAfter).not.toBe(rentDues[0]!.shieldsAfter)
+    // A last due without the shields after it: none on the row either.
+    const lastBare = withShields.map((i) => (i === rentDues.at(-1) ? { ...i, shieldsAfter: undefined } : i))
+    expect(radarRows(lastBare, cargo, TODAY).find((r) => r.late?.containerId === rent.id)!.item.shieldsAfter).toBeUndefined()
+  })
+
   it('pozycje Radaru nie są zmieniane (kalendarz i salda kont czytają je dalej)', () => {
     const before = structuredClone(items)
     radarRows(items, cargo, TODAY)

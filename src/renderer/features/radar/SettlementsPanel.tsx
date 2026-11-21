@@ -9,7 +9,7 @@ import { balanceText, memberName, openText } from '@shared/calc/household'
 import { daysBetween } from '@shared/calc/dates'
 import type { FleetState } from '@shared/calc/fleet'
 import { HOUSE_DAYS } from '@shared/calc/loans'
-import { HOUSE_MEMBER_ID, type Transaction } from '@shared/schema'
+import type { Transaction } from '@shared/schema'
 import { useFocusRecord } from '../../components/focus'
 import { plnText } from '../../components/fields'
 import { CompactContext, Panel, ShowMore, cx } from '../../components/ui'
@@ -17,7 +17,7 @@ import { countLabel, plDate } from '../../lib/format'
 import { useData } from '../../store/data'
 import { useMembers } from '../household/actions'
 import { openOperation } from '../operations/state'
-import { SETTLEMENTS_ALL, SETTLEMENTS_PANEL, openMemberOperations, repaysInCash, settlementsOf, startRepayment, type MemberSettlement } from './settlements'
+import { SETTLEMENTS_ALL, SETTLEMENTS_PANEL, openMemberOperations, repaysInCash, settlementsOf, settlementsShown, startRepayment, type MemberSettlement } from './settlements'
 
 const zl = (g: number) => `${plnText(g)} zł`
 /** Purchases shown at once per member (long lists by 100 – ui.md). */
@@ -28,9 +28,9 @@ export function SettlementsPanel({ fleet, readOnly }: { fleet: FleetState; readO
   const accounts = useData((s) => s.fi?.settings.accounts)
   // Opened from Mostek or Meldunki: the member's block (or the panel) scrolled to and marked.
   useFocusRecord('settlements')
+  // The same rule as Mostek's link to it (`settlementsShown`).
+  if (!settlementsShown(fleet.receivables.members, members)) return null
   const list = settlementsOf(fleet.receivables.members, fleet.household)
-  const people = members.some((m) => !m.archived && m.id !== HOUSE_MEMBER_ID)
-  if (!list.length && !people) return null
   const cash = !!accounts && repaysInCash(accounts)
   return (
     <Panel title={list.length ? `${SETTLEMENTS_PANEL} (${list.length})` : SETTLEMENTS_PANEL} name={SETTLEMENTS_PANEL} testId="radar-settlements">

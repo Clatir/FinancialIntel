@@ -75,25 +75,38 @@ export const setEnvelopes = (month: string, envelopes: Record<string, number>) =
 /**
  * „Koperty ze średnich” (UX-7): the proposed limits set in the month's plan – only those that differ (as `copyOnward`:
  * nothing to change, nothing written); the toast's `text` with „Cofnij” setting back each envelope's limit from before
- * (none – no envelope). A limit changed since stays, said (`undoKept`); a month that got its own plan keeps it, with the
- * limits from before. false = nothing written (said by the store).
+ * (none – no envelope). A limit changed since stays, said (`undoKept`). A plan of its own the proposal made (a copy of the
+ * plan in force – T46) goes while it is still just that, as `decideLoot`'s; changed since – it stays, with the limits from
+ * before; gone meanwhile – never made anew. false = nothing written (said by the store).
  */
 export function setProposedEnvelopes(month: string, limits: Record<string, number>, text: string): boolean {
   if (!canWrite()) return false
-  const before = planFor(allPlans(), month)?.envelopes ?? {}
+  const plans = allPlans()
+  const before = planFor(plans, month)?.envelopes ?? {}
   const changed = Object.keys(limits).filter((id) => before[id] !== limits[id])
   if (!changed.length) {
     toast(`${text.replace(/\.$/, '')} – limity bez zmian.`, 'info', 4000)
     return true
   }
+  const made = !plans.some((p) => p.month === month)
   if (!setEnvelopes(month, Object.fromEntries(changed.map((id) => [id, limits[id]!])))) return false
+  // The plan as the proposal made it (its own copy of the plan in force): the whole file goes back only while it is that.
+  const wrote = made ? allPlans().find((p) => p.month === month) : undefined
   toast(text, 'success', 8000, {
     label: 'Cofnij',
     run: () => {
       if (!canWrite()) return
+      const own = allPlans().find((p) => p.month === month)
+      // The plan it made gone meanwhile (another computer): nothing to take back – never a plan made anew (T46 would pin
+      // the month to a copy).
+      if (made && !own) return
       const now = planFor(allPlans(), month)?.envelopes ?? {}
       const back = changed.filter((id) => now[id] === limits[id])
-      if (back.length)
+      const entry = own && useData.getState().records.months[own.id]
+      // Gone, as it came – only when nothing changed it since, to the last field (as `decideLoot`, `topUpHull`).
+      const untouched = !!wrote && !!own && own.id === wrote.id && !!entry && !entry.readOnly && sameContentAs(own, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === own.id)
+      if (untouched) deleteOrSay('months', own.id)
+      else if (back.length)
         editPlan(month, (p) => {
           const envelopes = { ...p.envelopes }
           for (const id of back) {
