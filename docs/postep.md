@@ -22,14 +22,14 @@ filtra godzin Killzones w Operacjach **nie** ma (nowa funkcja); `MonthField` pok
 | U0 | Kontrakt, tabela, numery T | sesja główna | Opus 5.5 · high | 15 min | ✅ 21.11 |
 | U1 | „Cofnij” i `applyBulk` | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 40–60 min | |
 | U2 | Radar: „osłony po” wiersza zbiorczego zaległych | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 20–30 min | |
-| U3 | Słowa w toastach i imporcie, toast `settleDue` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 20–30 min | |
+| U3 | Słowa w toastach i imporcie, toast `settleDue` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 20–30 min | ✅ 21.11 (10 min) |
 | U4 | Nawigacja i menu | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | |
 | U5 | Edytor i pola | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 45–60 min | |
 | U6 | Wydajność Mostku i Rozliczeń | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–20 min | ✅ 21.11 (9 min) |
 | U7 | Stabilność testów, skrypty `tests/audyt/*` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 30–45 min | |
 | U8 | Pełne testy + E2E, `/code-review` (xhigh: U1, U2; high: reszta), CHANGELOG `## 1.21.1`, wersja, PR, CI, wydanie | sesja główna | Opus 5.5 · high | 45–60 min + CI | |
 
-**Stan 21.11 (limit użycia):** U6 scalone; U1–U4 w toku w drzewach `.claude/worktrees/agent-*` (bez commitów) – po wznowieniu przejrzeć ich diffy i scalić. T555: licznik Meldunków liczony raz (`useInboxCountHost`, telefon `PhoneInboxWatcher`), publikowany w `store/inboxCount`; wiersze zakupów Rozliczeń w `memo` z prymitywów.
+**Stan 21.11 (limit użycia):** U6, U3 scalone; U1, U2, U4 w toku w drzewach `.claude/worktrees/agent-*` (bez commitów) – po wznowieniu przejrzeć ich diffy i scalić. T555: licznik Meldunków liczony raz (`useInboxCountHost`, telefon `PhoneInboxWatcher`), publikowany w `store/inboxCount`; wiersze zakupów Rozliczeń w `memo` z prymitywów.
 
 Fale: U1, U2, U3, U4, U6 równolegle; U5, U7 po scaleniu fali 1; U8 na końcu. Numery T: U1 T550 … U7 T556, U8 T557.
 

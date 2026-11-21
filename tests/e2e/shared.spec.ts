@@ -168,7 +168,7 @@ test('Wspólne finansowanie (D83): kilka osób równo i procentami, prezent babc
     await joint.getByTestId('quick-joint-person').nth(1).selectOption({ label: 'Tata' })
     await joint.getByTestId('quick-joint-gift').check()
     await expect(joint.getByTestId('quick-joint-part')).toHaveText(['45,00 zł', '45,00 zł'])
-    await expect(quick.getByTestId('quick-preview-financed')).toHaveText('Prezent od Tata: 45,00 zł – nie zjada energii; z zaliczki 45,00 zł.')
+    await expect(quick.getByTestId('quick-preview-financed')).toHaveText('Prezent dla: Tata (45,00 zł) – nie zjada energii; z zaliczki 45,00 zł.')
     await quick.getByTestId('quick-save').click()
     await expect
       .poll(async () => {

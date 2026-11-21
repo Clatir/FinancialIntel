@@ -219,8 +219,8 @@ describe('kategoria, finansujący, rodzaj, usuń', () => {
     expect(leaf(sub(menu, 'category').items, `category-${FOOD}`).command).toEqual({ type: 'category', categoryId: FOOD, label: 'Jedzenie' })
     const fin = sub(menu, 'finance').items
     expect(leaf(fin, 'finance-me').command).toEqual({ type: 'finance', memberId: null, gift: false, label: 'Mój wydatek' })
-    expect(leaf(fin, 'finance-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: false, label: 'Finansuje Ola' })
-    expect(leaf(fin, 'finance-gift-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: true, label: 'Prezent od: Ola' })
+    expect(leaf(fin, 'finance-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: false, label: 'Kupione dla: Ola' })
+    expect(leaf(fin, 'finance-gift-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: true, label: 'Prezent dla: Ola' })
     // „wspólnie…” is the bar's alone – the share's editor does not fit a menu.
     expect(fin.some((n) => n.id.includes('share'))).toBe(false)
   })

@@ -135,7 +135,7 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     await quick.getByTestId('quick-time').fill('12:00')
     await quick.getByTestId('quick-time').press('Tab')
     await quick.getByTestId('quick-financer').selectOption({ label: 'Mama' })
-    await expect(quick.getByTestId('quick-preview-financed')).toHaveText('Finansuje Mama: 40,00 zł – nie zjada energii; pożyczają osłony 40,00 zł, ma oddać.')
+    await expect(quick.getByTestId('quick-preview-financed')).toHaveText('Kupione dla: Mama (40,00 zł) – nie zjada energii; pożyczają osłony 40,00 zł, ma oddać.')
     await expect(quick.getByTestId('quick-preview-energy')).toHaveCount(0)
     await quick.getByTestId('quick-save').click()
     await expect.poll(async () => (await operations(dir)).filter((t) => t.amount === -zl(40)).map((t) => [t.date, t.refundable, t.memberId])).toEqual([[today, true, MAMA]])

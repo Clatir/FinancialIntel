@@ -9,6 +9,7 @@ import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
+import { financeLabel } from '../household/financeWords'
 import { TagsField } from '../../components/TagsField'
 import { hashTags, tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
 import { quickPartLines, quickShareAs, quickSurplusInput, restToChoose, senderOwn } from '@shared/calc/quick'
@@ -512,7 +513,7 @@ export function QuickApp() {
       const fromDeposit = Math.min(v, m?.deposit ?? 0)
       out.push(
         <div key={`member:${id}`} data-testid="quick-preview-financed">
-          {gift ? 'Prezent od' : 'Finansuje'} {m?.name ?? 'domownik'}: {money(v)} – nie zjada energii
+          {financeLabel(!!gift, m?.name ?? 'domownik')} ({money(v)}) – nie zjada energii
           {fromDeposit ? `; z zaliczki ${money(fromDeposit)}` : ''}
           {v > fromDeposit ? (gift ? `; osłony ${money(v - fromDeposit)}, nikt nic nie jest winien` : `; pożyczają osłony ${money(v - fromDeposit)}, ma oddać`) : ''}.
         </div>

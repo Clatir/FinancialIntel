@@ -38,6 +38,7 @@ import { useRecordList } from '../../store/records'
 import { SHARE_MODES } from '@shared/schema'
 import { shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
+import { financeLabel } from '../household/financeWords'
 import { EveningReport } from '../evening/EveningReport'
 
 /** The details pane can be hidden like a panel: the list takes its width. */
@@ -555,7 +556,7 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
               const gift = financer.startsWith('gift:')
               const id = financer === '-' ? null : gift ? financer.slice('gift:'.length) : financer
               const name = members.find((m) => m.id === id)?.name ?? 'domownik'
-              financeTicked(shown.map((t) => t.id), { memberId: id, gift }, id ? (gift ? `Prezent od: ${name}` : `Finansuje ${name}`) : 'Mój wydatek')
+              financeTicked(shown.map((t) => t.id), { memberId: id, gift }, id ? financeLabel(gift, name) : 'Mój wydatek')
             }
             setFinancer('')
             setShare(null)

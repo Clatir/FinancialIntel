@@ -112,7 +112,7 @@ test('OP.29 finansujący dla zaznaczonych', async () => {
     say('OP.29 Marek', { toast: t1, pliki: f1, mostekPrzed: h0, mostekPo: h1 })
     reading('op', 'OP.29', 'rok, 3 wydatki 10.2026 (DROGERIA NATURA 23.10, FRYZJER STYL 19.10, P4 20.10) → Marek', { mostek_przed: JSON.stringify(h0), mostek_po: JSON.stringify(h1) })
     await goOps(page)
-    await undo('Finansuje')
+    await undo('Kupione dla')
     say('OP.29 Marek – Cofnij', { pliki: await file(), mostek: await bridgeHousehold(page) })
     await tickAll()
     await page.getByTestId('operations-bulk-financer').selectOption(`gift:${MAREK}`)
@@ -158,7 +158,7 @@ test('OP.29 finansujący dla zaznaczonych', async () => {
     await page.getByTestId('operations-bulk-finance').click()
     await page.waitForTimeout(700)
     say('OP.29 Anna, potem „ja”', { toast: await toasts(page), pliki: await file() })
-    await undo('ja|mój|Finansuje|wydatek')
+    await undo('ja|mój|Kupione dla|wydatek')
     say('OP.29 „ja” – Cofnij', { pliki: await file() })
     say('errors', errors)
   } finally {
