@@ -3,7 +3,7 @@
  * draft and applied on leaving the field or Enter – an intermediate value is never saved; a value that cannot be read
  * goes back to the saved one with a message.
  */
-import { forwardRef, useRef, useState } from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import { formatPln } from '@shared/format'
 import { monthLabel, parseAmountInput, parseClockInput, parseDateInput, parseMonthInput, plDate } from '../lib/format'
 import { toast } from '../store/ui'
@@ -193,6 +193,15 @@ export function readMonthDraft(draft: string | null, start: string, allowEmpty?:
 }
 
 /**
+ * The value changed under a focused field nothing was typed into: the new start of the draft (the plain new value), so that
+ * typing the old value back is an edit; `null` – nothing to move (no focus, something typed, the value the same).
+ */
+export function monthStartMoved(draft: string | null, start: string, value: string | null): string | null {
+  const now = value ?? ''
+  return draft != null && draft === start && now !== start ? now : null
+}
+
+/**
  * A month shown in words („listopad 2026”); typed as RRRR-MM, 03.2027 or 3/2027 – the focus brings the plain RRRR-MM to
  * edit. Empty = none when `allowEmpty`. Saved on leaving the field or Enter (B1): a month half typed never saves, one that
  * cannot be read goes back to the saved one with a message.
@@ -218,10 +227,25 @@ export function MonthField({
   const start = useRef('')
   // Escape: the blur it causes runs with this render's draft – it must not save it.
   const cancelled = useRef(false)
+  const input = useRef<HTMLInputElement>(null)
   const read = readMonthDraft(draft, start.current, allowEmpty)
   const invalid = read.edited && read.invalid
+  // The value changed under the field (a „Cofnij”, a reload) while nothing was typed: the draft follows it, selected anew
+  // (typing replaces it) – what is typed afterwards, the old value included, is an edit.
+  useEffect(() => {
+    const moved = monthStartMoved(draft, start.current, value)
+    if (moved == null) return
+    start.current = moved
+    setDraft(moved)
+    const el = input.current
+    requestAnimationFrame(() => {
+      if (el && document.activeElement === el) el.select()
+    })
+    // `draft` is read as of this render: only a change of the value matters here.
+  }, [value])
   return (
     <input
+      ref={input}
       className={cx('input num', className)}
       spellCheck={false}
       // Focused and untouched: the plain value as it is now (it may have changed under the field).
