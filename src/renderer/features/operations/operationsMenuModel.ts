@@ -140,8 +140,8 @@ export function buildMenu(input: MenuInput): MenuNode[] {
     'Finansujący',
     [
       { type: 'leaf', id: 'finance-me', label: 'ja (mój wydatek)', command: { type: 'finance', memberId: null, gift: false, label: 'Mój wydatek' } },
-      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-${m.id}`, label: m.name, command: { type: 'finance', memberId: m.id, gift: false, label: `Finansuje ${m.name}` } })),
-      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-gift-${m.id}`, label: `${m.name} – prezent`, command: { type: 'finance', memberId: m.id, gift: true, label: `Prezent od: ${m.name}` } }))
+      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-${m.id}`, label: `kupione dla: ${m.name} (odda)`, command: { type: 'finance', memberId: m.id, gift: false, label: `Finansuje ${m.name}` } })),
+      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-gift-${m.id}`, label: `prezent dla: ${m.name}`, command: { type: 'finance', memberId: m.id, gift: true, label: `Prezent od: ${m.name}` } }))
     ],
     null
   )

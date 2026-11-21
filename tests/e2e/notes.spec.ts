@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { launch } from './app'
 import { records } from './files'
+import { splitOperation } from './forms'
 
 /** Every operation file of the folder, parsed. */
 const operations = (dataDir: string) => records(dataDir, 'transactions')
@@ -36,7 +37,7 @@ test('Opis wydatku (1.11.0, D89): notatka na liście, opis części paragonu, wy
     await expect(row.getByTestId('operation-row-account')).toHaveText('mBank')
 
     // A split receipt: each line its own description; without the operation's note the list shows the lines'.
-    await page.getByTestId('operation-split').click()
+    await splitOperation(page, 'categories')
     await expect(page.getByTestId('split-line')).toHaveCount(2)
     await typeAmount(page, page.getByTestId('split-amount').nth(0), '100')
     await typeAmount(page, page.getByTestId('split-amount').nth(1), '20')

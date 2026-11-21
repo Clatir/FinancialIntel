@@ -6,6 +6,7 @@ import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
+import { pickCategory } from './forms'
 
 const MBANK = '01KDEFACC00000000000000001'
 const GROCERIES = '01KDEFCAT00000000000000101'
@@ -58,7 +59,7 @@ test('reguła dla tytułu: błąd przy polu, historia przez podgląd zmian zbior
     await expect(panel.getByTestId('title-rule-error')).toHaveCount(0)
 
     await panel.getByRole('radio', { name: 'Zwrot / kategoria' }).click()
-    await page.getByTestId('title-rule-category').selectOption(GROCERIES)
+    await pickCategory(page, 'title-rule-category', GROCERIES)
     await page.getByTestId('title-rule-update-history').check()
     await page.getByTestId('title-rule-apply-btn').click()
 

@@ -5,6 +5,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { importDone, launch, MASS } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
+import { pickCategory } from './forms'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 const ACC = '01KDEFACC00000000000000001'
@@ -223,7 +224,7 @@ test('Oficer zna sieć i historię marki w edytorze; audyt reguł: niespójna op
     await page.getByTestId('operation-counterparty').press('Enter')
     await expect(page.getByTestId('operation-officer')).toContainText('oficer: Jedzenie · zakupy spożywcze')
     await page.getByTestId('operation-officer').click()
-    await expect(page.getByTestId('operation-category')).toHaveValue('01KDEFCAT00000000000000101')
+    await expect(page.getByTestId('operation-category')).toHaveAttribute('data-value', '01KDEFCAT00000000000000101')
 
     // One Bolt changed by hand to another category: the audit shows it, „Zastosuj do historii” brings the rule's.
     const OUTINGS = '01KDEFCAT00000000000000601'
@@ -233,7 +234,7 @@ test('Oficer zna sieć i historię marki w edytorze; audyt reguł: niespójna op
     await page.getByTestId('operations-period-all').click()
     await page.getByTestId('operations-search').fill('bolt')
     await page.getByTestId('operation-row').first().click()
-    await page.getByTestId('operation-category').selectOption({ label: 'Auto · parking i opłaty' })
+    await pickCategory(page, 'operation-category', 'Auto · parking i opłaty')
     await expect.poll(async () => (await boltCats()).filter((c) => c !== OUTINGS).length).toBe(1)
     await page.keyboard.press('Control+,')
     await page.getByTestId('settings-tab-import').click()

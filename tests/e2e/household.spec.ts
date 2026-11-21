@@ -6,6 +6,7 @@ import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
+import { pickCategory } from './forms'
 
 const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
@@ -96,8 +97,8 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     await typeAmount(page, 'operation-amount', '300')
     await page.getByTestId('operation-counterparty').fill('Lidl')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
-    await page.getByTestId('operation-financer').selectOption({ label: 'finansuje: Tata' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
+    await page.getByTestId('operation-financer').selectOption({ label: 'kupione dla: Tata (odda)' })
     await expect(page.getByTestId('operation-financed')).toHaveText('Tata: pożyczone z osłon 300,00 zł (ma oddać)')
     await expect.poll(async () => (await operations(dir)).filter((t) => t.counterparty === 'Lidl').map((t) => [t.amount, t.refundable, t.memberId])).toEqual([[-zl(300), true, TATA]])
 
@@ -119,7 +120,7 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
 
     // Rossmann was mine: ticked and set as Tata's – his money pays it.
     await page.locator('[data-testid="operation-row"]', { hasText: 'Rossmann' }).getByTestId('operation-tick').check()
-    await page.getByTestId('operations-bulk-financer').selectOption({ label: 'Tata' })
+    await page.getByTestId('operations-bulk-financer').selectOption({ label: 'kupione dla: Tata (odda)' })
     await page.getByTestId('operations-bulk-finance').click()
     await expect.poll(async () => (await operations(dir)).filter((t) => t.counterparty === 'Rossmann').map((t) => [t.refundable, t.memberId])).toEqual([[true, TATA]])
     await expect(page.locator('[data-testid="operation-row"]', { hasText: 'Rossmann' })).toContainText('domownik')

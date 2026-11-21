@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { seedFolder, zl } from './seed'
+import { pickCategory } from './forms'
 
 const MBANK = '01KDEFACC00000000000000001'
 const GROCERIES = '01KDEFCAT00000000000000101'
@@ -137,14 +138,14 @@ test('„bez kategorii”: po nadaniu kategorii wybór idzie na następny wiersz
     const names = [await name(0), await name(1), await name(2)]
     await rows(page).nth(0).click()
     await expect(page.getByTestId('operation-counterparty')).toHaveValue(names[0]!)
-    await page.getByTestId('operation-category').selectOption({ value: GROCERIES })
+    await pickCategory(page, 'operation-category', GROCERIES)
     await expect(rows(page)).toHaveCount(2)
     await expect(page.getByTestId('operation-counterparty')).toHaveValue(names[1]!)
     await expect(page.getByRole('status').filter({ hasText: 'Zostało do skategoryzowania: 2' })).toBeVisible()
-    await page.getByTestId('operation-category').selectOption({ value: GROCERIES })
+    await pickCategory(page, 'operation-category', GROCERIES)
     await expect(rows(page)).toHaveCount(1)
     await expect(page.getByTestId('operation-counterparty')).toHaveValue(names[2]!)
-    await page.getByTestId('operation-category').selectOption({ value: GROCERIES })
+    await pickCategory(page, 'operation-category', GROCERIES)
     await expect(rows(page)).toHaveCount(0)
     await expect(page.getByTestId('operation-editor')).toHaveCount(0)
     expect(errors).toEqual([])

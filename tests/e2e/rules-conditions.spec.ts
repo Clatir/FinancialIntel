@@ -5,6 +5,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { importDone, launch, MASS } from './app'
 import { records } from './files'
 import { seedFolder, seedId } from './seed'
+import { pickCategory } from './forms'
 
 // AP-45 (1.16.0, T467–T470): a rule of conditions written in Ustawienia → Import z banku – its editor, the import deciding
 // by it, its audit, and its hint („także dla wpisów ręcznych”) in the operation's editor and the quick entry.
@@ -95,9 +96,9 @@ test('AP-45: reguła z warunkami (kontrahent i kwota) – edytor, import, audyt,
     await expect(page.getByTestId('operation-rule-hint')).toHaveText('z reguły „Bolt drobne”: Rozrywka i hobby · wyjścia · płacę ja')
     // One hint at a time – the rule's; never taken by itself.
     await expect(page.getByTestId('operation-officer')).toHaveCount(0)
-    await expect(page.getByTestId('operation-category')).not.toHaveValue(OUTINGS)
+    await expect(page.getByTestId('operation-category')).not.toHaveAttribute('data-value', OUTINGS)
     await page.getByTestId('operation-rule-hint').click()
-    await expect(page.getByTestId('operation-category')).toHaveValue(OUTINGS)
+    await expect(page.getByTestId('operation-category')).toHaveAttribute('data-value', OUTINGS)
     await expect(page.getByTestId('operation-rule-hint')).toHaveCount(0)
 
     // The quick entry: the same hint once the name is typed.
@@ -108,11 +109,11 @@ test('AP-45: reguła z warunkami (kontrahent i kwota) – edytor, import, audyt,
     await quick.getByTestId('quick-counterparty').fill('Bolt')
     await expect(quick.getByTestId('quick-rule-hint')).toHaveText('z reguły „Bolt drobne”: Rozrywka i hobby · wyjścia · płacę ja')
     // The officer fills in no guess of its own beside it.
-    await expect(quick.getByTestId('quick-category')).toHaveValue('')
+    await expect(quick.getByTestId('quick-category')).toHaveAttribute('data-value', '')
     await expect(quick.getByTestId('quick-officer')).toHaveCount(0)
     await quick.getByTestId('quick-rule-hint').click()
     await expect(quick.getByTestId('quick-rule-hint')).toHaveCount(0)
-    await expect(quick.getByTestId('quick-category')).toHaveValue(OUTINGS)
+    await expect(quick.getByTestId('quick-category')).toHaveAttribute('data-value', OUTINGS)
     expect(errors).toEqual([])
   } finally {
     await app.close()
@@ -154,12 +155,12 @@ test('AP-45: „także dla wpisów ręcznych” w edytorze reguły marki i na li
     await page.getByTestId('operation-counterparty').press('Enter')
     await expect(page.getByTestId('operation-rule-hint')).toContainText('z reguły „Netflix”: ')
     await page.getByTestId('operation-rule-hint').click()
-    await expect(page.getByTestId('operation-category')).toHaveValue(FUN)
+    await expect(page.getByTestId('operation-category')).toHaveAttribute('data-value', FUN)
     await page.getByTestId('operation-counterparty').fill('Kawiarnia Pod Lipą')
     await page.getByTestId('operation-counterparty').press('Enter')
     await expect(page.getByTestId('operation-rule-hint')).toContainText('z reguły „kawiarnia”: ')
     await page.getByTestId('operation-rule-hint').click()
-    await expect(page.getByTestId('operation-category')).toHaveValue(COFFEE)
+    await expect(page.getByTestId('operation-category')).toHaveAttribute('data-value', COFFEE)
     expect(errors).toEqual([])
   } finally {
     await app.close()

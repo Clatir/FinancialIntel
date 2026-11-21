@@ -2,6 +2,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { IconClose } from './icons'
+import { ownsEscape } from './AnchoredList'
 import { useFocusTrap } from './trap'
 
 /** The dialogs open now, the last on top: Esc closes only that one (a history opened from a dialog – N18). */
@@ -37,6 +38,8 @@ export function Modal({
     open.push(me)
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || open[open.length - 1] !== me || !close.current) return
+      // An open list of a field in the dialog (a combobox, a menu) takes this Esc: it closes the list, not the dialog.
+      if (ownsEscape(e.target)) return
       e.preventDefault()
       e.stopPropagation()
       close.current()

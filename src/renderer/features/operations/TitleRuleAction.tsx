@@ -5,7 +5,7 @@ import { TX_KIND_LABEL, type Transaction, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { Popover } from '../../components/Popover'
 import { Field, Segmented, TextField, cx } from '../../components/ui'
-import { CategorySelect, useAccounts } from './pickers'
+import { CategoryField, useAccounts } from './pickers'
 import { FinancerSelect } from '../household/MemberPickers'
 import { useMembers } from '../household/actions'
 import { NO_CATEGORY_REFUSAL } from '../import/rules'
@@ -267,7 +267,7 @@ function TitleRulePopover({
           {(selectedType === 'expense' || selectedType === 'refund') && (
             <Field label="Kategoria">
               <div className="flex flex-col gap-1.5">
-                <CategorySelect
+                <CategoryField
                   className="min-w-0 flex-1"
                   value={categoryId}
                   onChange={(c) => {

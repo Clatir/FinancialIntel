@@ -36,6 +36,12 @@ paths:
   pieniędzy – przez wspólny podgląd (`bulkPreview.ts`), przełącznik – `applyBulk(..., { keepTicked: true })`. Zmiana
   operacji spoza zaznaczenia (reguła tytułu, T535) – `bulkPlanOf` i `openBulkPreview(…, { apply })`; jeden
   `BulkPreviewHost` na ekranie (`OperationsPage`, telefon – `PhoneOperations`), nie w pasku zaznaczonych.
+- **Kategoria i kontrahent (Z7, T541):** pole kategorii w edytorze, szybkim wpisie, pasku zbiorczym i oknie reguły tytułu
+  to `CategoryField` / `CategoryCombobox` (`role="combobox"`, lista `listbox` w portalu `AnchoredList`, `data-value` =
+  id), nie `<select>` (import, Ładownia i boje zostają przy `CategorySelect` – setki pól, W17); dane i szukanie –
+  czyste `operations/pick.ts`. Lista otwarta ma własny Enter (wybór, nic nie zapisuje) i własny Esc (`ownsEscape`:
+  `Modal` i Esc szybkiego wpisu go pomijają). Kontrahent – `CounterpartyField` (podpowiedzi z historii, maks. 8, Enter
+  tylko po strzałce). „Podziel…” – jeden przycisk z menu (`SplitMenu`).
 - Zapis zablokowany przy folderze tylko do odczytu albo w trakcie przełączania (`canWrite`, `useFolderLocked`);
   zapisy zwracają boolean.
 - `data-testid` w kebab-case z prefiksem ekranu (`operation-…`, `import-…`, `quick-…`, `phone-…`); stan w `data-*`

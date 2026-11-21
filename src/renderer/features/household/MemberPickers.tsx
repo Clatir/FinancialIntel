@@ -69,12 +69,12 @@ export function FinancerSelect({
       <option value="">{compact ? 'ja' : back ? '— ja (mój zakup) —' : '— ja (mój wydatek) —'}</option>
       {offered.map((m) => (
         <option key={m.id} value={`pay:${m.id}`}>
-          {compact ? m.name : back ? `zakup: ${m.name}` : `finansuje: ${m.name}`}
+          {compact ? m.name : back ? `zakup: ${m.name}` : `kupione dla: ${m.name} (odda)`}
         </option>
       ))}
       {offered.map((m) => (
         <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
-          {compact ? `${m.name} – prezent` : back ? `prezent od: ${m.name} (zwrot do osłon)` : `prezent od: ${m.name}`}
+          {compact ? `${m.name} – prezent` : back ? `prezent od: ${m.name} (zwrot do osłon)` : `prezent dla: ${m.name}`}
         </option>
       ))}
     </select>
