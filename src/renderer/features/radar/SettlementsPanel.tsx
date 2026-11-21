@@ -4,14 +4,14 @@
  * repayment's editor), the open purchases (their part, what is left – each opens in Operacje) and „Oddał(a) gotówką…” /
  * „Pokaż w Operacjach”. Hidden with nobody to settle and no people but the default „Dom” (as Mostek's empty panels, D106 (4)).
  */
-import { useContext, useState } from 'react'
+import { memo, useContext, useState } from 'react'
 import { balanceText, memberName, openText } from '@shared/calc/household'
 import { daysBetween } from '@shared/calc/dates'
 import type { FleetState } from '@shared/calc/fleet'
 import { HOUSE_DAYS } from '@shared/calc/loans'
 import type { Transaction } from '@shared/schema'
 import { useFocusRecord } from '../../components/focus'
-import { plnText } from '../../components/fields'
+import { amountsHidden, plnText } from '../../components/fields'
 import { CompactContext, Panel, ShowMore, cx } from '../../components/ui'
 import { countLabel, plDate } from '../../lib/format'
 import { useData } from '../../store/data'
@@ -55,6 +55,45 @@ function viaOf(memberId: string, members: ReturnType<typeof useMembers>): string
   const v = members.find((m) => m.id === memberId)?.via
   return v ? memberName(v, members) : null
 }
+
+interface PurchaseRowProps {
+  txId: string
+  date: string
+  amount: number
+  left: number
+  opening: boolean
+  /** The purchase's operation is in the data (it opens in Operacje). */
+  found: boolean
+  label: string
+  compact: boolean
+  /** Hidden amounts (Ctrl+Shift+4): in the props, as the masking flag is read at render – the memo must see it change. */
+  hidden: boolean
+}
+
+/** One open purchase (U6, T555): primitives only, so a long list does not render again with every change of the fleet. */
+const PurchaseRow = memo(function PurchaseRow({ txId, date, amount, left, opening, found, label, compact }: PurchaseRowProps) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-baseline gap-2 py-0.5 text-left text-dim hover:text-fg-strong disabled:hover:text-dim"
+      disabled={!found}
+      // The operation is read at the click – the row holds no record.
+      onClick={() => {
+        const t = opening ? undefined : useData.getState().records.transactions[txId]?.record
+        if (t) openOperation(t)
+      }}
+      title={found ? 'Pokaż zakup w Operacjach' : undefined}
+      data-testid="radar-member-purchase"
+    >
+      <span className="num w-[72px] shrink-0">{plDate(date)}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className={cx('num text-right', compact ? 'shrink-0' : 'w-[90px]')}>{zl(amount)}</span>
+      <span className={cx('num text-right text-fg', compact ? 'shrink-0' : 'w-[90px]')} data-testid="radar-member-left">
+        {compact ? `zostało ${zl(left)}` : zl(left)}
+      </span>
+    </button>
+  )
+})
 
 function MemberBlock({ m, name, via, today, readOnly, cash }: { m: MemberSettlement; name: string; via: string | null; today: string; readOnly: boolean; cash: boolean }) {
   const compact = useContext(CompactContext)
@@ -105,24 +144,7 @@ function MemberBlock({ m, name, via, today, readOnly, cash }: { m: MemberSettlem
           )}
           {m.purchases.slice(0, shown).map((p) => {
             const t = p.opening ? undefined : transactions[p.txId]?.record
-            return (
-              <button
-                key={p.txId}
-                type="button"
-                className="flex w-full items-baseline gap-2 py-0.5 text-left text-dim hover:text-fg-strong disabled:hover:text-dim"
-                disabled={!t}
-                onClick={() => open(t)}
-                title={t ? 'Pokaż zakup w Operacjach' : undefined}
-                data-testid="radar-member-purchase"
-              >
-                <span className="num w-[72px] shrink-0">{plDate(p.date)}</span>
-                <span className="min-w-0 flex-1 truncate">{p.opening ? 'saldo na start rozliczeń' : t?.counterparty || t?.title || 'zakup'}</span>
-                <span className={cx('num text-right', compact ? 'shrink-0' : 'w-[90px]')}>{zl(p.amount)}</span>
-                <span className={cx('num text-right text-fg', compact ? 'shrink-0' : 'w-[90px]')} data-testid="radar-member-left">
-                  {compact ? `zostało ${zl(p.left)}` : zl(p.left)}
-                </span>
-              </button>
-            )
+            return <PurchaseRow key={p.txId} txId={p.txId} date={p.date} amount={p.amount} left={p.left} opening={p.opening} found={!!t} label={p.opening ? 'saldo na start rozliczeń' : t?.counterparty || t?.title || 'zakup'} compact={compact} hidden={amountsHidden()} />
           })}
           <ShowMore shown={shown} total={m.purchases.length} page={PAGE} onMore={() => setShown((n) => n + PAGE)} testId="radar-member-more" />
         </div>

@@ -29,7 +29,7 @@ import { CommandPage } from '../features/command/CommandPage'
 import { IntelPage } from '../features/intel/IntelPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
 import { InboxPage } from '../features/inbox/InboxPage'
-import { useInboxCount } from '../features/inbox/state'
+import { useInboxCountHost } from '../features/inbox/state'
 import { GameCelebrations } from '../features/command/Celebration'
 import { FreezeQuestion } from '../features/command/FreezeQuestion'
 import { useGameAdvance, useGameCelebrations } from '../store/game'
@@ -196,7 +196,7 @@ function NavItem({
 function SideMenu({ route }: { route: Route }) {
   const shipName = useData((s) => s.fi?.settings.shipName ?? '')
   const issues = useData((s) => s.conflicts.length + s.problems.filter((p) => p.kind !== 'unknown-file').length)
-  const reports = useInboxCount()
+  const reports = useInboxCountHost()
   return (
     <nav className="flex w-[208px] shrink-0 flex-col overflow-y-auto border-r border-line bg-panel [scrollbar-width:none]" data-testid="side-menu">
       <div className="flex h-[52px] shrink-0 flex-col justify-center border-b border-line px-3">
