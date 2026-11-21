@@ -6,6 +6,8 @@
 import { test, type Page } from '@playwright/test'
 import { reading, text } from './lab'
 import { CAT, added, bridge, brief, category, enterSave, kind, log, openFresh, openQuick, openRok, ops, qread, quickVisible, snap, typeAmount, typeIn, waitHidden } from './sw-pomoc'
+import { intelTab } from './wywiad'
+import { splitQuick } from '../e2e/forms'
 
 const body = (q: Page) => q.locator('body').innerText().then((x) => x.replace(/\s+/g, ' '))
 const linesText = (q: Page) => q.getByTestId('quick-lines').innerText().then((x) => x.replace(/\s+/g, ' ').replace(/— bez kategorii —.*?Gotówka/g, '[lista kategorii]'))
@@ -30,8 +32,8 @@ test('SW pola: 15, 17, 18, 19, 22, 23, 24, 31, 32', async () => {
     await typeAmount(q, '187,45')
     await typeIn(q, 'quick-counterparty', 'Biedronka')
     await category(q, CAT.food)
-    log(run, 'SW.15 dymek +', await q.getByTestId('quick-split').getAttribute('title'))
-    await q.getByTestId('quick-split').click()
+    log(run, 'SW.15 dymek +', await q.getByTestId('quick-split-menu').getAttribute('title'))
+    await splitQuick(q, 'categories')
     await q.waitForTimeout(200)
     log(run, 'SW.15 po podziale', await lineVals(q), await linesText(q))
     const parts = q.locator('[data-testid="quick-lines"] input[aria-label^="Część"]')
@@ -47,7 +49,7 @@ test('SW pola: 15, 17, 18, 19, 22, 23, 24, 31, 32', async () => {
     await q.getByText('bez podziału').click()
     await q.waitForTimeout(200)
     log(run, 'SW.15 bez podziału', await qread(q), 'części', await q.getByTestId('quick-lines').count())
-    await q.getByTestId('quick-split').click()
+    await splitQuick(q, 'categories')
     await parts.nth(0).click()
     await parts.nth(0).fill('150,00')
     await parts.nth(0).press('Tab')
@@ -81,7 +83,7 @@ test('SW pola: 15, 17, 18, 19, 22, 23, 24, 31, 32', async () => {
     before = await ops(dataDir)
     q = await openFresh(app, page)
     await typeAmount(q, '60,00')
-    await q.getByTestId('quick-split').click()
+    await splitQuick(q, 'categories')
     await parts.nth(0).click()
     await parts.nth(0).fill('30,00')
     await parts.nth(0).press('Tab')
@@ -127,6 +129,7 @@ test('SW pola: 15, 17, 18, 19, 22, 23, 24, 31, 32', async () => {
     await snap(page, 'SW.18-operacje')
     await page.keyboard.press('Escape')
     await page.keyboard.press('Control+9')
+    await intelTab(page, 'log')
     await page.waitForTimeout(2500)
     log(run, 'SW.18 Wywiad dziennik', (await page.getByTestId('intel-log').innerText().catch(() => '(brak intel-log)')).replace(/\s+/g, ' ').slice(0, 900))
     const wy = await text(page, 'main')

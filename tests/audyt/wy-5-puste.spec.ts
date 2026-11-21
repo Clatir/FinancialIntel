@@ -7,6 +7,7 @@ import { test } from '@playwright/test'
 import { LAB, recorded, shot, start, text, useState } from './lab'
 import { seedFolder, zl } from '../e2e/seed'
 import { go, out, panels, shotEl, stepper, textOf } from './wy-pomoc'
+import { wholeIntel, intelTab, openPanel, INTEL_TAB_IDS } from './wywiad'
 
 const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
@@ -88,13 +89,20 @@ test('WY/RY przebieg 5 – Wywiad bez historii', async () => {
       await step('wywiad', async () => {
         await go(page, '9', 'page-intel')
         await page.waitForTimeout(2500)
-        const t = await text(page, '[data-testid="page-intel"]')
+        const t = await wholeIntel(page)
         dump('wywiad', t)
         dump('podejrzane', t.split('\n').filter((l) => /NaN|Infinity|undefined|null/.test(l)))
-        dump('panele', (await panels(page.getByTestId('page-intel'))).map((p) => `#### ${p.id}\n${p.text}`).join('\n'))
+        const allPanels: Awaited<ReturnType<typeof panels>> = []
+        for (const tab of INTEL_TAB_IDS) {
+          await intelTab(page, tab)
+          allPanels.push(...(await panels(page.getByTestId('page-intel'))))
+        }
+        dump('panele', allPanels.map((p) => `#### ${p.id}\n${p.text}`).join('\n'))
+        await intelTab(page, 'structure')
         dump('krzywa', { punkty: await page.getByTestId('intel-wealth-chart').getAttribute('data-points').catch(() => null) })
         await shot(page, `WY.26-${v.id}`)
         for (const id of ['intel-wealth', 'intel-course', 'intel-maneuver', 'intel-range', 'intel-fuel', 'intel-inflation', 'intel-killzones-panel']) {
+          await openPanel(page, id)
           const l = page.getByTestId(id)
           if (await l.count()) await shotEl(l, `WY.26-${v.id}-${id}`)
         }

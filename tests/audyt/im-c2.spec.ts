@@ -6,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { reading, start, useState } from './lab'
 import { MBANK, Obs, PLIKI, cardL, counters, importAs, listaText, openFile, readable, short, statuses, step, txs } from './im-pomoc'
 import { cp1250 } from './persona'
+import { pickCategory } from '../e2e/forms'
 
 async function mbankBalance(page: Page): Promise<string> {
   await page.keyboard.press('Control+3')
@@ -48,7 +49,7 @@ test('im-c2: Cofnij import, lista + historia, kopie przed importem', async () =>
       await page.getByTestId('operations-search').fill('ślusarz')
       await page.waitForTimeout(700)
       await page.getByTestId('operation-row').first().click()
-      await page.getByTestId('operation-category').selectOption({ label: 'Dom · wyposażenie' })
+      await pickCategory(page, 'operation-category', 'Dom · wyposażenie')
       await page.waitForTimeout(800)
       await page.getByTestId('operations-search').fill('')
       await page.keyboard.press('Control+3')

@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { test, type ElectronApplication, type Page } from '@playwright/test'
 import { answerDialogs, start, useState } from './lab'
 import { EXP, flat, go, out, parseCsv, quickHead, quickWindow, rec, snap, stepper, textOf, waitFile, type Ctx } from './pr-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const RUN = 'pr-2'
 const FOOD = '01KDEFCAT00000000000000100'
@@ -43,7 +44,7 @@ async function quickFill(app: ElectronApplication, page: Page, o: { amount: stri
   await q.getByTestId('quick-amount').click()
   await q.getByTestId('quick-amount').fill(o.amount)
   await q.getByTestId('quick-counterparty').fill(o.who)
-  await q.getByTestId('quick-category').selectOption(o.category)
+  await pickCategory(q, 'quick-category', o.category)
   await q.getByTestId('quick-time').fill('')
   if (o.date === 'yesterday') await q.getByTestId('quick-yesterday').click()
   else if (o.date) {

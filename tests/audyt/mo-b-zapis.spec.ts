@@ -20,7 +20,7 @@ async function quick(app: ElectronApplication, page: Page, amount: string, who: 
   await q.getByTestId('quick-time').fill(time)
   await q.getByTestId('quick-time').press('Tab')
   await q.waitForTimeout(400)
-  const cat = await q.getByTestId('quick-category').inputValue().catch(() => '?')
+  const cat = await q.getByTestId('quick-category').getAttribute('data-value').catch(() => '?')
   await q.getByTestId('quick-save').click()
   await page.waitForTimeout(1500)
   return `${head} | kategoria ${cat}`

@@ -9,6 +9,8 @@ import { join } from 'node:path'
 import { test, type Page } from '@playwright/test'
 import { reading, text } from './lab'
 import { ACC, CAT, added, bridge, brief, category, editFi, enterSave, kind, log, openFresh, openRok, ops, qread, snap, typeAmount, typeIn, waitHidden } from './sw-pomoc'
+import { pickCategory } from '../e2e/forms'
+import { intelTab } from './wywiad'
 
 function prepare(dataDir: string): void {
   editFi(dataDir, (fi) => {
@@ -62,11 +64,11 @@ test('SW oficer, tagi, seria, szablony: 25, 26, 27, 29', async () => {
     log(run, 'SW.25 przygotowanie – nowe', (await added(dataDir, before)).map(brief))
     q = await openFresh(app, page)
     for (const name of ['Cityfit', 'Mokka', 'Mokka Dworzec', 'Orlen', 'Lidl', 'Kaufland', 'Netia', 'Sklepik u Zosi']) {
-      await q.getByTestId('quick-category').selectOption('')
+      await pickCategory(q, 'quick-category', '')
       await typeIn(q, 'quick-counterparty', name)
       const auto = await officerState(q)
       // The source: a manual category first, then the name again – the officer's button with its tooltip.
-      await q.getByTestId('quick-category').selectOption(CAT.gift)
+      await pickCategory(q, 'quick-category', CAT.gift)
       await typeIn(q, 'quick-counterparty', '')
       await typeIn(q, 'quick-counterparty', name)
       const manual = await officerState(q)
@@ -74,7 +76,7 @@ test('SW oficer, tagi, seria, szablony: 25, 26, 27, 29', async () => {
       if (name === 'Mokka Dworzec') await snap(q, 'SW.25-mokka-dworzec')
     }
     // Ręczny wybór zostaje, a „oficer: …” przyjmuje podpowiedź jednym kliknięciem
-    await q.getByTestId('quick-category').selectOption(CAT.gift)
+    await pickCategory(q, 'quick-category', CAT.gift)
     await typeIn(q, 'quick-counterparty', 'Cityfit')
     await snap(q, 'SW.25-reczna')
     if (await q.getByTestId('quick-officer').count()) await q.getByTestId('quick-officer').click()
@@ -87,6 +89,7 @@ test('SW oficer, tagi, seria, szablony: 25, 26, 27, 29', async () => {
     // ---- SW.26 – tagi
     before = await ops(dataDir)
     await page.keyboard.press('Control+9')
+    await intelTab(page, 'spending')
     await page.waitForTimeout(2500)
     const exp0 = (await page.getByTestId('intel-expeditions').innerText().catch(() => '(brak)')).replace(/\s+/g, ' ')
     log(run, 'SW.26 Wyprawy przed', exp0.slice(0, 700))
@@ -115,6 +118,7 @@ test('SW oficer, tagi, seria, szablony: 25, 26, 27, 29', async () => {
     log(run, 'SW.26 Operacje', (await page.getByTestId('operation-row').allInnerTexts()).slice(0, 3).map((x) => x.replace(/\s+/g, ' ')))
     await snap(page, 'SW.26-operacje')
     await page.keyboard.press('Control+9')
+    await intelTab(page, 'spending')
     await page.waitForTimeout(2500)
     const exp1 = (await page.getByTestId('intel-expeditions').innerText().catch(() => '(brak)')).replace(/\s+/g, ' ')
     log(run, 'SW.26 Wyprawy po', exp1.slice(0, 700))

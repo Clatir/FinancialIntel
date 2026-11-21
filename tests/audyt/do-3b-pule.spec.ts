@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { test, type Page } from '@playwright/test'
 import { shot, start, useState, type Run } from './lab'
 import { Boundary, Log, bankXtb, briefing, bridgeValues, dialogState, editJson, findRecords, go, mainLog, openDelivery, readAt, starmap, toasts, writePayout, writeTx } from './do-pomoc'
+import { intelTab } from './wywiad'
 
 const RUN = 'do-3b'
 const FORECAST = 'forecasts/01KAZ710000000000000000001.json'
@@ -15,6 +16,7 @@ const RF = '01KMXD0P000000000000000063'
 
 async function fuelOctober(page: Page): Promise<string> {
   await go(page, '9', 'page-intel')
+  await intelTab(page, 'structure')
   const row = page.locator('[data-testid="intel-fuel-row"][data-month="2026-10"]')
   return (await row.count()) ? (await row.innerText()).replace(/\s+/g, ' ') : '(brak wiersza 2026-10)'
 }
@@ -101,6 +103,7 @@ test('DO.3 (para w mBanku), DO.4 (przychód), DO.17 (okno, potwierdzenie) – ro
       log.line(`Bilans paliwa – październik (po dokowaniu 1 500 / 500): ${oct}`)
       await readAt('DO.4', 'rok; wpis Podatek 2 000 (21.10) zadokowany 1 500 podatek / 500 osłony – Wywiad, październik', folders, async () => ({ bilansPazdziernik: oct, ...(await bridgeValues(r.page)) }))
       await go(r.page, '9', 'page-intel')
+      await intelTab(r.page, 'structure')
       await shot(r.page, 'DO.4-wywiad-pazdziernik')
     })
     await close('faza B')

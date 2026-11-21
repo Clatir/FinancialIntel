@@ -6,6 +6,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading, shot, start, text, useState } from './lab'
 import { addRecords, briefing, cat, command, editSettings, energy, go, MBANK, out, quickWindow, textOf } from './dw-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const NETFLIX = '01KAZ400000000000000000004'
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -61,7 +62,7 @@ test('DW.13 / DW.34 / DW.35 – cisza nocna i rozkazy', async () => {
     await q.getByTestId('quick-amount').click()
     await q.getByTestId('quick-amount').fill('30')
     await q.getByTestId('quick-counterparty').fill('Nocny DW1')
-    await q.getByTestId('quick-category').selectOption(cat(103))
+    await pickCategory(q, 'quick-category', cat(103))
     await q.waitForTimeout(400)
     dump('1-formularz', { czas: await q.getByTestId('quick-time').inputValue(), log: await textOf(q.getByTestId('quick-log')) })
     await q.getByTestId('quick-amount').press('Enter')
@@ -81,7 +82,7 @@ test('DW.13 / DW.34 / DW.35 – cisza nocna i rozkazy', async () => {
     await q.getByTestId('quick-amount').click()
     await q.getByTestId('quick-amount').fill('250')
     await q.getByTestId('quick-counterparty').fill('Nocny plan DW2')
-    await q.getByTestId('quick-category').selectOption(cat(602))
+    await pickCategory(q, 'quick-category', cat(602))
     await q.waitForTimeout(400)
     await q.getByTestId('quick-log').getByRole('radio', { name: 'plan' }).click().catch(async () => q.getByTestId('quick-log').getByText('plan', { exact: true }).click())
     await q.getByTestId('quick-log-note').fill('bilety kupione zgodnie z planem')

@@ -1,6 +1,7 @@
 // SW.30 – the draft closed by Esc comes back within 30 minutes (real waiting: 1 minute, then 31 minutes).
 import { test } from '@playwright/test'
 import { CAT, added, log, openQuick, openRok, ops, qread, snap, typeAmount, typeIn, waitHidden } from './sw-pomoc'
+import { splitQuick } from '../e2e/forms'
 
 test('SW.30 szkic po Esc', async () => {
   test.setTimeout(50 * 60_000)
@@ -11,7 +12,7 @@ test('SW.30 szkic po Esc', async () => {
     let q = await openQuick(app, page)
     await typeAmount(q, '64,20')
     await typeIn(q, 'quick-counterparty', 'Rossmann')
-    await q.getByTestId('quick-split').click()
+    await splitQuick(q, 'categories')
     await q.waitForTimeout(200)
     const parts = q.locator('[data-testid="quick-lines"] input[aria-label^="Część"]')
     await parts.nth(0).click()

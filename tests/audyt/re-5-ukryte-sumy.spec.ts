@@ -4,6 +4,7 @@ import { writeFileSync } from 'node:fs'
 import { test, type Page } from '@playwright/test'
 import { reading, start, text, useState } from './lab'
 import { addRecords, answerSave, EXPORT, go, goReports, run, say, snap, special, waitFile } from './re-pomoc'
+import { intelTab } from './wywiad'
 
 const dateIn = async (page: Page, id: string, v: string) => {
   const f = page.getByTestId(id)
@@ -112,6 +113,7 @@ test('RE.14 sumy: wrzesień i październik 2026 na ekranach', async () => {
     say('RE.14 panel Przychody', out.przychody_panel)
     // Wywiad: spending table and fuel.
     await go(page, '9', 'page-intel')
+    await intelTab(page, 'spending')
     for (const label of ['3 mies.', '6 mies.', '12 mies.']) void label
     const seg = page.getByRole('radio')
     out.wywiad_okresy = await seg.allInnerTexts()
@@ -119,6 +121,7 @@ test('RE.14 sumy: wrzesień i październik 2026 na ekranach', async () => {
     await seg.filter({ hasText: /^3/ }).first().click().catch(() => undefined)
     await page.waitForTimeout(800)
     out.wydatki_w_czasie = flat(await text(page, '[data-testid="intel-spending"]'))
+    await intelTab(page, 'structure')
     out.bilans_paliwa = (await page.getByTestId('intel-fuel-row').allInnerTexts()).map((t) => t.replace(/\s+/g, ' '))
     say('RE.14 Wydatki w czasie (3 mies.)', (out.wydatki_w_czasie as string).slice(0, 200) + ' … ' + (out.wydatki_w_czasie as string).slice(-300))
     say('RE.14 Bilans paliwa wiersze', out.bilans_paliwa)

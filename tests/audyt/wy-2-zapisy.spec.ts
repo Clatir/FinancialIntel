@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { test, type ElectronApplication, type Page } from '@playwright/test'
 import { reading, recorded, shot, start, text, useState } from './lab'
 import { diffSums, folderSums, go, out, propsOf, shotEl, stepper, textOf } from './wy-pomoc'
+import { intelTab } from './wywiad'
 
 const RUN = 'wy-2'
 
@@ -43,6 +44,7 @@ test('WY przebieg 2 – symulator, pensja, CPI, próg dziennika', async () => {
     await page.waitForTimeout(12_000)
     const mostekZasieg = (await textOf(page.locator('section[data-panel="bridge:Stan okrętu"]'))).match(/ZASIĘG\n([^\n]+)/)?.[1]
     await go(page, '9', 'page-intel')
+    await intelTab(page, 'forecasts')
     await page.waitForTimeout(2500)
     const before = folderSums(st.dataDir)
     dump('WY.20-teraz-vs-mostek', { mostekZasieg, prognoza: await textOf(page.getByTestId('intel-range-text')), symulator: await textOf(page.getByTestId('maneuver-range')) })
@@ -143,6 +145,7 @@ test('WY przebieg 2 – symulator, pensja, CPI, próg dziennika', async () => {
 
     // WY.6 – linia netto: dane wykresu (bieżące drzewo React).
     await step('netto', async () => {
+      await intelTab(page, 'structure')
       await page.getByRole('radio', { name: 'siła floty netto' }).click()
       await page.waitForTimeout(1500)
       const d = await propsOf(page, '[data-testid="intel-wealth-chart"]', 'points')
@@ -155,6 +158,7 @@ test('WY przebieg 2 – symulator, pensja, CPI, próg dziennika', async () => {
     // WY.23 – CPI.
     const cpiOf = () => (JSON.parse(readFileSync(join(st.dataDir, 'fi.json'), 'utf8')) as { settings: { intel?: { cpi?: Record<string, number> } } }).settings.intel?.cpi
     await step('cpi', async () => {
+      await intelTab(page, 'spending')
       const r: Record<string, unknown> = { domyslnyMiesiac: await page.getByTestId('intel-cpi-month').inputValue(), plik0: cpiOf() }
       const put = async (v: string) => {
         await page.getByTestId('intel-cpi-value').click()
@@ -177,6 +181,7 @@ test('WY przebieg 2 – symulator, pensja, CPI, próg dziennika', async () => {
 
     // WY.24 – cel wyprawy.
     await step('wyprawa-cel', async () => {
+      await intelTab(page, 'spending')
       await page.getByTestId('intel-expedition-open').first().click()
       await page.waitForTimeout(500)
       await page.getByTestId('intel-expedition-goal-select').selectOption({ label: 'Wakacje 2027' })
@@ -278,6 +283,7 @@ test('WY przebieg 2 – symulator, pensja, CPI, próg dziennika', async () => {
       await page.getByTestId('page-bridge').waitFor({ timeout: 60_000 })
       await page.waitForTimeout(4000)
       await go(page, '9', 'page-intel')
+      await intelTab(page, 'spending')
       await page.waitForTimeout(1500)
       dump('WY.23-po-restarcie', { miesiac: await page.getByTestId('intel-cpi-month').inputValue(), pole: await page.getByTestId('intel-cpi-value').inputValue(), panel: (await textOf(page.getByTestId('intel-inflation'))).split('\n').slice(0, 6).join(' | ') })
       dump('siec-2', await netOf(app))

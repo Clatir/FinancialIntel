@@ -5,6 +5,7 @@
  */
 import { test } from '@playwright/test'
 import { CAT, DMM, ACC, addRecords, editorText, fill, financer, log, members, mostek, newOp, pay, plan, quick, quickVisible, radar, raport, rd, runRok, snap, dzisGra, line, txs, brief } from './dm-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const S = 'rok+dm-a'
 
@@ -45,7 +46,7 @@ test('DM.1 i DM.2', async () => {
     await q.getByTestId('quick-amount').click()
     await q.getByTestId('quick-amount').fill('60')
     await q.getByTestId('quick-amount').press('Tab')
-    await q.getByTestId('quick-category').selectOption(CAT.food)
+    await pickCategory(q, 'quick-category', CAT.food)
     await q.getByTestId('quick-financer').selectOption(DMM.anna)
     await q.waitForTimeout(400)
     log(run, 'DM.1 szybki podgląd', await q.getByTestId('quick-preview').innerText().catch(() => '(brak)'))
@@ -61,7 +62,7 @@ test('DM.1 i DM.2', async () => {
     await q.getByTestId('quick-amount').click()
     await q.getByTestId('quick-amount').fill('35')
     await q.getByTestId('quick-amount').press('Tab')
-    await q.getByTestId('quick-category').selectOption(CAT.food)
+    await pickCategory(q, 'quick-category', CAT.food)
     await q.getByTestId('quick-financer').selectOption('')
     await q.waitForTimeout(300)
     await q.getByTestId('quick-financer').press('Enter')

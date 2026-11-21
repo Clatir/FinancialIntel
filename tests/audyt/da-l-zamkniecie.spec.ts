@@ -5,6 +5,7 @@
  */
 import { test } from '@playwright/test'
 import { OP, Log, answerQuestions, byId, closeEditor, mainLog, openOp, openRok, readJson, recordFiles, reopen, sleep } from './da-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 test('DA.43 – potwierdzenie: zamknięcie zaraz po zmianie', async () => {
   test.setTimeout(20 * 60_000)
@@ -55,7 +56,7 @@ test('DA.43 – potwierdzenie: zamknięcie zaraz po zmianie', async () => {
     log.line(`zaznaczone: ${(await page.getByTestId('operations-bulk').innerText()).split('\n')[0]}`)
     const before = new Map(recordFiles(dataDir, 'transactions').map((f) => [f.rec.id, f.rec.categoryId]))
     log.line(`przed: z kategorią „Prezenty i inne · inne” ${[...before.values()].filter((c) => c === '01KDEFCAT00000000000000902').length}`)
-    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Prezenty i inne · inne' })
+    await pickCategory(page, 'operations-bulk-category', 'Prezenty i inne · inne')
     await answerQuestions(run, 1)
     await page.getByTestId('operations-bulk-apply').click()
     await sleep(50)

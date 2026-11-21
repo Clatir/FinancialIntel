@@ -30,6 +30,7 @@ import {
   where,
   writeIctjPayout
 } from './mg-pomoc'
+import { openForm, pickCategory } from '../e2e/forms'
 
 const RUN = 'mg-5'
 const STATE = 'rok + przez UI: Rower przywrócony i 2 500 zł z Nowego laptopa, nowy Telewizor 2 400 zł'
@@ -105,6 +106,7 @@ test('MG przebieg 5 – przeniesienie środków, archiwizacja z pieniędzmi, wyd
       await chooseGoal('Rower')
       await page.getByTestId('starmap-money-ok').click()
       await page.waitForTimeout(1200)
+      await openForm(page, 'goal')
       await page.getByTestId('starmap-new-name').fill('Telewizor')
       const amount = page.getByTestId('starmap-new-target')
       await amount.click()
@@ -308,7 +310,7 @@ test('MG przebieg 5 – przeniesienie środków, archiwizacja z pieniędzmi, wyd
       await amount.press('Enter')
       await page.getByTestId('operation-counterparty').fill('Sklep rowerowy')
       await page.getByTestId('operation-counterparty').press('Enter')
-      await page.getByTestId('operation-category').selectOption({ label: 'Rozrywka i hobby' })
+      await pickCategory(page, 'operation-category', 'Rozrywka i hobby')
       await page.waitForTimeout(400)
       const opts = await page.getByTestId('operation-goal').locator('option').allInnerTexts()
       const rowerOpt = opts.find((o) => o.startsWith('Rower'))

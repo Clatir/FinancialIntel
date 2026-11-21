@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { test, type ElectronApplication, type Page } from '@playwright/test'
 import { reading } from './lab'
 import { balanceOf, editorText, enrich, goOps, ID, openOp, ops, opt, periodAll, restart, rows, run, say, search, shown, snap, step, sums, text, toasts, typeIn, WALLET } from './op-pomoc'
+import { pickCategory, splitOperation } from '../e2e/forms'
 
 const guardText = async (page: Page) => (await opt(page.getByTestId('operation-guard'))).replace(/\n+/g, ' | ')
 const rowList = async (page: Page, n = 40) => (await rows(page).allInnerTexts()).slice(0, n).map((t) => t.replace(/\s+/g, ' '))
@@ -28,7 +29,7 @@ test('OP.17 oficer, koperta, „Zapamiętaj”', async () => {
   try {
     await goOps(page)
     await openOp(page, 'dino', 'Dino')
-    say('OP.17 Dino – oficer', { przycisk: await opt(page.getByTestId('operation-officer')), dymek: await opt(page.getByTestId('operation-officer'), 'title'), kategoria: await page.getByTestId('operation-category').inputValue() })
+    say('OP.17 Dino – oficer', { przycisk: await opt(page.getByTestId('operation-officer')), dymek: await opt(page.getByTestId('operation-officer'), 'title'), kategoria: await page.getByTestId('operation-category').getAttribute('data-value') })
     // The officer's category archived: what it offers then.
     await page.keyboard.press('Control+,')
     await page.getByTestId('settings-tab-categories').click()
@@ -46,17 +47,17 @@ test('OP.17 oficer, koperta, „Zapamiętaj”', async () => {
     await openOp(page, 'dino', 'Dino')
     await page.getByTestId('operation-officer').click().catch(() => undefined)
     await page.waitForTimeout(400)
-    say('OP.17 po kliknięciu oficera', { kategoria: await page.getByTestId('operation-category').evaluate((s) => (s as HTMLSelectElement).selectedOptions[0]?.textContent), plik: (await ops(dataDir)).find((t) => t.counterparty === 'Dino')?.categoryId })
+    say('OP.17 po kliknięciu oficera', { kategoria: await page.getByTestId('operation-category').innerText(), plik: (await ops(dataDir)).find((t) => t.counterparty === 'Dino')?.categoryId })
     await snap(page, 'OP.17-oficer')
     // A category without an envelope.
-    await page.getByTestId('operation-category').selectOption({ label: 'Darowizny' })
+    await pickCategory(page, 'operation-category', 'Darowizny')
     await page.waitForTimeout(400)
     say('OP.17 kategoria bez koperty – notka', await opt(page.getByTestId('operation-outside-envelope')))
     // „Zapamiętaj” on the bank's row.
     await openOp(page, 'dino testowo', /DINO TESTOWO 4/)
     await page.getByTestId('operation-counterparty').fill('Dino Market')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · kawa i przekąski' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · kawa i przekąski')
     await page.waitForTimeout(500)
     say('OP.17 „Zapamiętaj” – przycisk', await opt(page.getByTestId('operation-remember')))
     await snap(page, 'OP.17-zapamietaj')
@@ -100,7 +101,7 @@ test('OP.19 ostrzeżenie przy kwocie z banku', async () => {
     await page.getByTestId('operation-guard-confirm').click()
     await page.waitForTimeout(500)
     say('OP.19 po „Zmień mimo to”', { pole: await amount.inputValue(), plik: (await file())?.amount })
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · kawa i przekąski' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · kawa i przekąski')
     await page.waitForTimeout(400)
     say('OP.19 zmiana kategorii – okno?', await guardText(page))
     await page.getByTestId('operation-note').fill('chleb i bułki')
@@ -224,7 +225,7 @@ test('OP.23 części paragonu – opis, tag, ładownia, cel', async () => {
     // A container payment split into lines.
     await openOp(page, 'robert testowy', /28\.09/)
     say('OP.23 płatność kontenera przed', (await editorText(page)).split('\n').filter((l) => /adown|Rata|kontener/i.test(l)))
-    await page.getByTestId('operation-split').click()
+    await splitOperation(page, 'categories')
     await page.waitForTimeout(500)
     say('OP.23 płatność kontenera po podziale', { notka: await opt(page.getByTestId('operation-split-cargo')), ładownia: await shown(page.getByTestId('operation-container')), wybrany: await page.getByTestId('operation-container').evaluate((s) => (s as HTMLSelectElement).selectedOptions[0]?.textContent).catch(() => '(brak)') })
     await snap(page, 'OP.23-kontener-podzial')

@@ -19,7 +19,7 @@ async function quick(app: ElectronApplication, page: Page, amount: string, who: 
   await q.getByTestId('quick-time').fill('12:00')
   await q.getByTestId('quick-time').press('Tab')
   await q.waitForTimeout(500)
-  dump(`${name}-okno`, { kategoria: await q.getByTestId('quick-category').inputValue().catch(() => '?'), tekst: await textOf(q.getByTestId('quick-entry')) })
+  dump(`${name}-okno`, { kategoria: await q.getByTestId('quick-category').getAttribute('data-value').catch(() => '?'), tekst: await textOf(q.getByTestId('quick-entry')) })
   await q.getByTestId('quick-save').click()
   await page.waitForTimeout(2000)
 }

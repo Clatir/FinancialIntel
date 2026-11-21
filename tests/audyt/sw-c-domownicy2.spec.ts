@@ -5,6 +5,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading, text } from './lab'
 import { CAT, SWM, addMembers, added, bridge, brief, category, enterSave, kind, log, openQuick, openRok, ops, qread, radarMembers, snap, typeAmount, typeIn } from './sw-pomoc'
+import { splitQuick } from '../e2e/forms'
 
 const recv = (b: { receivables: string }) => b.receivables.replace('ROZLICZENIA Z DOMOWNIKAMI ', '').replace(/ Pożyczki udzielone.*/, '')
 const shields = (b: { state: string }) => /Osłony · bufor na pensje ([^/]+)\//.exec(b.state)?.[1]?.trim() ?? '?'
@@ -107,7 +108,7 @@ test('SW domownicy 2: 11, 12, 13, 14, 16, 28', async () => {
     q = await openQuick(app, page)
     await typeAmount(q, '90,00')
     await category(q, CAT.food)
-    await q.getByTestId('quick-joint-start').click()
+    await splitQuick(q, 'people')
     await q.waitForTimeout(200)
     log(run, 'SW.14 start wspólnie', (await q.getByTestId('quick-joint').innerText()).replace(/\s+/g, ' '))
     await q.getByTestId('quick-joint-person').nth(1).selectOption(SWM.ania)
@@ -172,7 +173,7 @@ test('SW domownicy 2: 11, 12, 13, 14, 16, 28', async () => {
     q = await openQuick(app, page)
     await typeAmount(q, '120,00')
     await category(q, CAT.food)
-    await q.getByTestId('quick-split').click()
+    await splitQuick(q, 'categories')
     await q.waitForTimeout(200)
     const parts = q.locator('[data-testid="quick-lines"] input[aria-label^="Część"]')
     const pcats = q.locator('[data-testid="quick-lines"] select[aria-label="Kategoria"]')

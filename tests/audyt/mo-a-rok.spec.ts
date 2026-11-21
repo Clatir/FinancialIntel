@@ -3,6 +3,7 @@
 import { test } from '@playwright/test'
 import { reading, shot, start, text, useState } from './lab'
 import { briefingItems, colorOf, go, out, textOf, where } from './mo-pomoc'
+import { wholeIntel } from './wywiad'
 
 const RUN = 'mo-a'
 
@@ -173,7 +174,7 @@ test('MO przebieg A – Mostek persony rok (odczyt)', async () => {
     await step('wywiad', async () => {
       await go(page, '9', 'page-intel')
       await page.waitForTimeout(1500)
-      dump('ekran-wywiad', await text(page, '[data-testid="page-intel"]'))
+      dump('ekran-wywiad', await wholeIntel(page))
       await shot(page, 'MO-a-wywiad')
     })
     await step('raporty', async () => {

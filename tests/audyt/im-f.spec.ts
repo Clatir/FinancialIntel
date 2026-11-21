@@ -4,6 +4,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { records } from '../e2e/files'
 import { reading, start, useState } from './lab'
 import { MBANK, Obs, PLIKI, expandAll, openFile, readFi, readable, short, statuses, step, tx, txs, writeFi, writeRecord } from './im-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 async function rulesTab(page: Page): Promise<void> {
   await page.keyboard.press('Control+,')
@@ -129,7 +130,7 @@ test('im-f1: audyt reguł, zastosuj do historii, próg kwoty', async () => {
       await page.getByTestId('operations-search').fill(String((-(second.amount as number) / 100).toFixed(2)).replace('.', ','))
       await page.waitForTimeout(800)
       await page.getByTestId('operation-row').filter({ hasText: /BOLT/i }).first().click()
-      await page.getByTestId('operation-category').selectOption({ label: 'Auto · parking i opłaty' })
+      await pickCategory(page, 'operation-category', 'Auto · parking i opłaty')
       await page.waitForTimeout(800)
       await page.getByTestId('operations-search').fill('')
       await rulesTab(page)

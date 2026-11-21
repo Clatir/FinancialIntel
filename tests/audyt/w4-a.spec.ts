@@ -9,6 +9,7 @@ import { importDone } from '../e2e/app'
 import { answerDialogs, shot, start, text, useState, reading } from './lab'
 import { editJson, go, out, textOf } from './dw-pomoc'
 import { addRecords, answerSave, EXPORT, goReports, WALLET, cat, waitFile } from './re-pomoc'
+import { intelTab } from './wywiad'
 
 const toasts = (page: Page): Promise<string[]> => page.getByRole('status').allInnerTexts().catch(() => [])
 const fiOf = (dataDir: string) => JSON.parse(readFileSync(join(dataDir, 'fi.json'), 'utf8'))
@@ -33,6 +34,7 @@ test('W4 – rok: WY.20, RY.24, US.6, US.32', async () => {
     const ship = await textOf(page.locator('section[data-panel="bridge:Stan okrętu"]'))
     dump('WY.20-mostek-stan-okretu', ship)
     await go(page, '9', 'page-intel')
+    await intelTab(page, 'forecasts')
     await page.waitForTimeout(2500)
     const m = page.getByTestId('intel-maneuver')
     const table = async () =>

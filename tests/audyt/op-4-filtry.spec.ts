@@ -2,6 +2,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading } from './lab'
 import { enrich, goInbox, goOps, ops, opt, periodAll, rows, run, say, search, shown, snap, step, sums, text, WALLET, MAREK, GOAL_LAPTOP } from './op-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const count = async (page: Page) => (await sums(page)).split('\n')[0]!
 const rowList = async (page: Page, n = 50) => (await rows(page).allInnerTexts()).slice(0, n).map((t) => t.replace(/\s+/g, ' '))
@@ -274,12 +275,12 @@ test('OP.5 filtry Konto, Rodzaj, Kategoria i archiwizacja; ME.4 bez kategorii', 
       if (!(await row.count())) break
       await row.click()
       await page.waitForTimeout(300)
-      if (await shown(page.getByTestId('operation-category'))) await page.getByTestId('operation-category').selectOption({ label: 'Prezenty i inne · inne' })
+      if (await shown(page.getByTestId('operation-category'))) await pickCategory(page, 'operation-category', 'Prezenty i inne · inne')
       else if (await shown(page.getByTestId('split-category'))) {
         const n = await page.getByTestId('split-category').count()
         for (let k = 0; k < n; k++) {
-          const v = await page.getByTestId('split-category').nth(k).inputValue()
-          if (!v) await page.getByTestId('split-category').nth(k).selectOption({ label: 'Prezenty i inne · inne' })
+          const v = await page.getByTestId('split-category').nth(k).getAttribute('data-value')
+          if (!v) await pickCategory(page, 'split-category', 'Prezenty i inne · inne', k)
         }
       }
       await page.waitForTimeout(500)

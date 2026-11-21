@@ -2,6 +2,7 @@
 import { test } from '@playwright/test'
 import { start, useState } from './lab'
 import { configOf, editFi, fiOf, goSettings, restart, run, say, snap, text, toasts, typed } from './us-pomoc'
+import { openForm } from '../e2e/forms'
 
 const mainWindow = `(BrowserWindow) => BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && !w.getURL().includes('quick=1') && !w.getURL().includes('detached'))`
 
@@ -85,6 +86,7 @@ test('IN.10 tylko do odczytu i kreator; IN.18 cel ujemny', async () => {
   try {
     await g.page.keyboard.press('Control+6')
     await g.page.waitForTimeout(1200)
+    await openForm(g.page, 'goal')
     await g.page.getByTestId('starmap-new-name').fill('Cel ujemny')
     await g.page.getByTestId('starmap-new-target').click()
     await g.page.getByTestId('starmap-new-target').fill('-500')

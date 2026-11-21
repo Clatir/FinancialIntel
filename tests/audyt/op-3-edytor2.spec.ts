@@ -2,6 +2,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading } from './lab'
 import { ANNA, balanceOf, bridgeNumbers, editorText, goOps, openOp, ops, rows, run, say, snap, step, sums, text, toasts, typeIn, WALLET } from './op-pomoc'
+import { pickCategory, splitOperation } from '../e2e/forms'
 
 const guardText = async (page: Page) => (await page.getByTestId('operation-guard').innerText().catch(() => '(brak okna)')).replace(/\n+/g, ' | ')
 const rowOf = (page: Page, name: string | RegExp) => page.getByTestId('operation-row').filter({ hasText: name })
@@ -14,7 +15,7 @@ async function newExpense(page: Page, amount: string, name: string, account = 'P
   await page.getByTestId('operation-account').selectOption({ label: account })
   await page.getByTestId('operation-counterparty').fill(name)
   await page.getByTestId('operation-counterparty').press('Enter')
-  if (category) await page.getByTestId('operation-category').selectOption({ label: category })
+  if (category) await pickCategory(page, 'operation-category', category)
   await page.waitForTimeout(500)
 }
 
@@ -28,7 +29,7 @@ test('OP.20 okres potwierdzony saldem', async () => {
     const badge = page.getByTestId('operation-confirmed')
     say('OP.20 znaczek', { tekst: await badge.innerText().catch(() => '(brak)'), dymek: await badge.getAttribute('title').catch(() => null) })
     // Category only: no question.
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · kawa i przekąski' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · kawa i przekąski')
     await page.waitForTimeout(500)
     say('OP.20 zmiana kategorii – okno?', await guardText(page))
     const amount = page.getByTestId('operation-amount')
@@ -111,7 +112,7 @@ test('OP.22 podział paragonu', async () => {
     await page.getByTestId('operation-financer').selectOption(`pay:${ANNA}`)
     await page.waitForTimeout(400)
     say('OP.22 przed podziałem – wiersz', await rowText(page, 'Paragon test'))
-    await page.getByTestId('operation-split').click()
+    await splitOperation(page, 'categories')
     await page.waitForTimeout(500)
     const lines = async () =>
       page.getByTestId('split-line').evaluateAll((els) =>
@@ -192,7 +193,7 @@ test('OP.24 domownik i stan oddania', async () => {
     await page.waitForTimeout(600)
     const k1 = (await sums(page)).split('\n').slice(0, 4)
     say('OP.24 → prezent od Marka', { wiersz: await rowText(page, 'EVENTIM'), sumy: k1 })
-    await page.getByTestId('operation-share-start').click()
+    await splitOperation(page, 'people')
     await page.waitForTimeout(600)
     say('OP.24 → Wspólnie', { wiersz: await rowText(page, 'EVENTIM'), edytor: (await editorText(page)).split('\n').filter((l) => /Wspólnie|równo|procent|kwot|ja|Marek|Anna/i.test(l)).slice(0, 16), sumy: (await sums(page)).split('\n').slice(0, 4) })
     await snap(page, 'OP.24-wspolnie')

@@ -9,6 +9,7 @@ import { test, type ElectronApplication, type Page } from '@playwright/test'
 import { seedFolder, zl } from '../e2e/seed'
 import { LAB, start, useState } from './lab'
 import { breakdowns, flat, go, out, pr1, readAll, recAt, screenValues, snap, snapshot, stepper, textOf, type Ctx } from './pr-pomoc'
+import { wholeIntel } from './wywiad'
 
 const MBANK = '01KDEFACC00000000000000001'
 
@@ -25,7 +26,7 @@ async function rangeEverywhere(page: Page): Promise<Record<string, string>> {
   r.raporty = flat(/Zasięg teraz[^\n]*\n?[^\n]*/.exec(await textOf(page.getByTestId('reports-year')))?.[0] ?? '?')
   await go(page, '9', 'page-intel')
   await page.waitForTimeout(1500)
-  const intel = await textOf(page.getByTestId('page-intel'))
+  const intel = await wholeIntel(page)
   r.wywiad = [...intel.matchAll(/[^\n]*(starczy|Zasięg i klasa)[^\n]*(\n[^\n]*){0,2}/g)].map((m) => flat(m[0])).join(' || ') || '(brak)'
   // Ładownia: the simulation of a new container (typed, never saved).
   await go(page, '5', 'page-cargo')

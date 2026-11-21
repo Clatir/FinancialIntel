@@ -29,6 +29,7 @@ import {
   where,
   writeIctjPayout
 } from './mg-pomoc'
+import { openForm, pickCategory } from '../e2e/forms'
 
 const RUN = 'mg-1'
 const STATE = 'rok + Rower aktywny 2 500 zł + wypłata ICTTJ Bieżące 10 000 zł (02.11) z parą w mBanku'
@@ -66,6 +67,7 @@ test('MG przebieg 1 – cele własne: dodanie, kolejność, przeniesienie, archi
       await shot(page, 'MG.1-0')
     })
     await step('MG.1-bez-nazwy', async () => {
+      await openForm(page, 'goal')
       await page.getByTestId('starmap-new-name').fill('')
       await page.getByTestId('starmap-new-add').click()
       await page.waitForTimeout(400)
@@ -312,6 +314,7 @@ test('MG przebieg 1 – cele własne: dodanie, kolejność, przeniesienie, archi
       await goal('Rower').dragTo(first)
       await page.waitForTimeout(800)
       // 3) a new goal: „Konsola” 1 500 zł.
+      await openForm(page, 'goal')
       await page.getByTestId('starmap-new-name').fill('Konsola')
       const amount = page.getByTestId('starmap-new-target')
       await amount.click()
@@ -441,7 +444,7 @@ test('MG przebieg 1 – cele własne: dodanie, kolejność, przeniesienie, archi
       await amount.press('Enter')
       await page.getByTestId('operation-counterparty').fill('Sklep rowerowy')
       await page.getByTestId('operation-counterparty').press('Enter')
-      await page.getByTestId('operation-category').selectOption({ label: 'Rozrywka i hobby' })
+      await pickCategory(page, 'operation-category', 'Rozrywka i hobby')
       await page.waitForTimeout(400)
       const goalOptions = await page.getByTestId('operation-goal').locator('option').allInnerTexts()
       const rowerOpt = goalOptions.find((o) => o.startsWith('Rower'))

@@ -5,6 +5,7 @@
  */
 import { test, type Page } from '@playwright/test'
 import { CAT, DMM, addRecords, pay, editorText, fill, financer, log, members, mostek, newOp, openOp, radar, rd, runRok, snap, txs, brief, typeIn, plan } from './dm-pomoc'
+import { splitOperation } from '../e2e/forms'
 
 const S = 'rok+dm-i'
 
@@ -29,7 +30,7 @@ test('DM.11 wspólnie', async () => {
     await rd(page, 'DM.11', S, { etap: 'przed (wspólnie)', energiaDzis: m0.energiaDzis, domownicy: m0.domownicy, depozyt: m0.depozyt, oslony: m0.oslony }, dataDir)
     await newOp(page, 'Wydatek')
     await fill(page, { amount: '100', counterparty: 'Sklep wspólny', categoryId: CAT.food })
-    await page.getByTestId('operation-share-start').click()
+    await splitOperation(page, 'people')
     await page.waitForTimeout(400)
     const share = page.getByTestId('operation-share')
     log(run, 'DM.11 start', await shareText(page))

@@ -8,6 +8,7 @@ import { quickWindow } from './dw-pomoc'
 import { qread } from './sw-pomoc'
 import { CAT, type Ctx, editJson, go, goMonth, out, pmId, read, readBridgeAll, readDaily, readEnvelopes, readSplit, shotEl, stepper, textOf, toasts, typeAmount, writeTx } from './pm-pomoc'
 import { join } from 'node:path'
+import { pickCategory } from '../e2e/forms'
 
 const RUN = 'pm-2'
 
@@ -151,7 +152,7 @@ test('PM przebieg 2 – koperty planowe, pokrycie, przekroczenie dnia', async ()
       await q.getByTestId('quick-amount').click()
       await q.getByTestId('quick-amount').fill('50')
       await q.getByTestId('quick-counterparty').fill('ORLEN PM16')
-      await q.getByTestId('quick-category').selectOption(CAT.fuel)
+      await pickCategory(q, 'quick-category', CAT.fuel)
       await q.waitForTimeout(500)
       const r = await qread(q)
       await shot(q, 'PM.16-szybki')
@@ -170,7 +171,7 @@ test('PM przebieg 2 – koperty planowe, pokrycie, przekroczenie dnia', async ()
       await q.getByTestId('quick-amount').click()
       await q.getByTestId('quick-amount').fill('100')
       await q.getByTestId('quick-counterparty').fill('LIDL PM13')
-      await q.getByTestId('quick-category').selectOption(CAT.groceries)
+      await pickCategory(q, 'quick-category', CAT.groceries)
       await q.waitForTimeout(500)
       const r = await qread(q)
       await shot(q, 'PM.13-szybki')

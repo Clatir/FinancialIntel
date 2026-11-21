@@ -29,6 +29,7 @@ import {
   trap,
   writeJson
 } from './da-pomoc'
+import { openForm } from '../e2e/forms'
 
 test('DA.7 – zmiana folderu z Ustawień i powrót', async () => {
   test.setTimeout(15 * 60_000)
@@ -144,10 +145,12 @@ async function draftsState(page: Page, log: Log, label: string): Promise<void> {
   const cargoText = (await cargo.locator('input').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value)).catch(() => [] as string[])).join('|')
   await page.keyboard.press('Control+6')
   await page.waitForTimeout(500)
+  await openForm(page, 'goal')
   const goal = await page.getByTestId('starmap-new-name').inputValue().catch(() => '?')
   await page.keyboard.press('Control+7')
   await page.waitForTimeout(500)
   const loan = await page.getByTestId('loan-name').inputValue().catch(() => '?')
+  await openForm(page, 'loan')
   const loanDate = (await page.getByTestId('radar-new-loan').locator('input[type="date"]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value)).catch(() => [] as string[])).join('|')
   log.line(`${label}: kontener [${cargoText}], cel „${goal}”, pożyczka „${loan}” (daty ${loanDate})`)
 }
@@ -194,10 +197,12 @@ test('DA.45 – szkic nowego wpisu i opuszczenie ekranu', async () => {
       if (await cargoInputs.count()) await cargoInputs.first().fill('Szkic kontenera')
       await page.keyboard.press('Control+6')
       await page.waitForTimeout(600)
+      await openForm(page, 'goal')
       log.line(`cel – pusty formularz: nazwa „${await page.getByTestId('starmap-new-name').inputValue().catch(() => '?')}”`)
       await page.getByTestId('starmap-new-name').fill('Szkic celu')
       await page.keyboard.press('Control+7')
       await page.waitForTimeout(600)
+      await openForm(page, 'loan')
       const loanDate = (await page.getByTestId('radar-new-loan').locator('input[type="date"]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value)).catch(() => [] as string[])).join('|')
       log.line(`pożyczka – pusty formularz: daty ${loanDate}`)
       await page.getByTestId('loan-name').fill('Szkic pożyczki')
@@ -237,6 +242,7 @@ test('DA.45 – szkic nowego wpisu i opuszczenie ekranu', async () => {
       await expect(page.getByTestId('settings-data-dir')).toHaveText(dataDir, { timeout: 120_000 })
       await page.waitForTimeout(1500)
       await draftsState(page, log, 'po powrocie do rok')
+      await openForm(page, 'goal')
       await page.getByTestId('starmap-new-name').fill('Szkic celu 2').catch(() => undefined)
     })
   } finally {

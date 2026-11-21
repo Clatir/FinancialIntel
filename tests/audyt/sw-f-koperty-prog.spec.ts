@@ -6,6 +6,7 @@
 import { test } from '@playwright/test'
 import { reading, text } from './lab'
 import { CAT, added, bridge, brief, category, editFi, enterSave, log, openFresh, openRok, ops, qread, snap, typeAmount } from './sw-pomoc'
+import { intelTab } from './wywiad'
 
 const monthEnergy = (s: string) => /Energia · pensja miesiąca do wydania ([^A-ZŁ]+zł)/.exec(s)?.[1]?.trim() ?? '?'
 const shields = (s: string) => /Osłony · bufor na pensje ([^/]+)\//.exec(s)?.[1]?.trim() ?? '?'
@@ -53,6 +54,7 @@ test('SW koperta „brak” i próg 0: 6, 18', async () => {
     await page.waitForTimeout(800)
     log(run, 'SW.18 nowe', (await added(dataDir, before)).map(brief))
     await page.keyboard.press('Control+9')
+    await intelTab(page, 'log')
     await page.waitForTimeout(2500)
     log(run, 'SW.18 próg 0 – Wywiad dziennik', (await page.getByTestId('intel-log').innerText().catch(() => '(brak intel-log)')).replace(/\s+/g, ' ').slice(0, 900))
     await page.getByTestId('intel-log').scrollIntoViewIfNeeded().catch(() => undefined)

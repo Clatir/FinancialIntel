@@ -4,6 +4,7 @@
 import { test } from '@playwright/test'
 import { recorded, shot, start, text, useState } from './lab'
 import { catchSpeech, go, out, panels, propsOf, shotEl, spoken, stepper, textOf } from './wy-pomoc'
+import { wholeIntel, intelTab, openPanel, INTEL_TAB_IDS } from './wywiad'
 
 const RUN = 'wy-0'
 
@@ -34,12 +35,20 @@ test('WY/RY przebieg 0 – rozpoznanie persony rok', async () => {
       await go(page, '9', 'page-intel')
       await page.waitForTimeout(3000)
       const root = page.getByTestId('page-intel')
-      dump('wywiad-caly', await text(page, '[data-testid="page-intel"]'))
-      dump('wywiad-panele', await panels(root))
+      dump('wywiad-caly', await wholeIntel(page))
+      const allPanels: Awaited<ReturnType<typeof panels>> = []
+      for (const tab of INTEL_TAB_IDS) {
+        await intelTab(page, tab)
+        allPanels.push(...(await panels(root)))
+      }
+      dump('wywiad-panele', allPanels)
       await shot(page, 'WY-0-wywiad')
+      await intelTab(page, 'structure')
       dump('wywiad-krzywa-dane', await propsOf(page, '[data-testid="intel-wealth-chart"]', 'points'))
+      await intelTab(page, 'spending')
       dump('wywiad-killzones-pola', await page.locator('[data-testid="intel-killzones"] rect').evaluateAll((els) => els.filter((e) => e.getAttribute('data-testid')).map((e) => `${e.querySelector('title')?.textContent} | stroke=${e.getAttribute('stroke')} fill=${e.getAttribute('fill')}`)))
       for (const id of ['intel-wealth', 'intel-fuel', 'intel-spending', 'intel-targets', 'intel-killzones-panel', 'intel-fvg', 'intel-comparison', 'intel-range', 'intel-course', 'intel-maneuver', 'intel-expeditions', 'intel-inflation', 'intel-log']) {
+        await openPanel(page, id)
         const l = page.getByTestId(id)
         if (await l.count()) await shotEl(l, `WY-0-${id}`)
         else dump(`brak-${id}`, '')

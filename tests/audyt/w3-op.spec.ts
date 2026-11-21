@@ -3,6 +3,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading, shot } from './lab'
 import { addRecords, ANNA, cat, editorText, goInbox, goOps, ops, opt, periodAll, rows, run, say, search, sums, text, toasts, typeIn, WALLET } from './op-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const rowOf = (page: Page, name: string | RegExp) => page.getByTestId('operation-row').filter({ hasText: name })
 const rowText = async (page: Page, name: string | RegExp) => (await rowOf(page, name).allInnerTexts()).map((t) => t.replace(/\s+/g, ' '))
@@ -23,7 +24,7 @@ async function newExpense(page: Page, amount: string, name: string) {
   await page.getByTestId('operation-account').selectOption({ label: 'Portfel XTB' })
   await page.getByTestId('operation-counterparty').fill(name)
   await page.getByTestId('operation-counterparty').press('Enter')
-  await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+  await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
   await page.waitForTimeout(500)
 }
 

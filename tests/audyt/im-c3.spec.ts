@@ -7,6 +7,7 @@ import { records } from '../e2e/files'
 import { reading, start, useState } from './lab'
 import { MBANK, Obs, PLIKI, cardH, historiaText, importAs, openFile, readFi, readable, short, statuses, step, tx, txs, writeFi, writeRecord } from './im-pomoc'
 import { cp1250 } from './persona'
+import { intelTab } from './wywiad'
 
 const LATE = '01KAZ900000000000000000002'
 
@@ -140,6 +141,7 @@ test('im-c3: saldo z pliku niezgodne, luka, późne saldo otwarcia; daty histori
       await o.shot(page, 'IM.54-sylwester')
       await page.getByTestId('operations-search').fill('')
       await page.keyboard.press('Control+9')
+      await intelTab(page, 'spending')
       await page.waitForTimeout(2500)
       const intel = await readable(page, 'main')
       o.log('IM.54 Wywiad – fragment Killzones', intel.split('\n').filter((l, i, a) => /killzone|00:00|0:00/i.test(l) || /killzone/i.test(a[i - 1] ?? '')).slice(0, 40).join('\n'))

@@ -6,6 +6,7 @@ import { test, type ElectronApplication, type Page } from '@playwright/test'
 import { records } from '../e2e/files'
 import { reading, start } from './lab'
 import { addRecords, ANNA, editorText, enrich, goInbox, goOps, ID, MAREK, MBANK, openOp, ops, opt, periodAll, rows, run, say, search, shown, snap, step, sums, text, toasts, TR, transfers, typeIn, WALLET } from './op-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const count = async (page: Page) => (await sums(page)).split('\n')[0]!
 const rowList = async (page: Page, n = 40) => (await rows(page).allInnerTexts()).slice(0, n).map((t) => t.replace(/\s+/g, ' '))
@@ -186,7 +187,7 @@ test('OP.26 zakup domownika nocą z wpisem w dzienniku', async () => {
     await page.getByTestId('operation-account').selectOption({ label: 'Portfel XTB' })
     await page.getByTestId('operation-counterparty').fill('Noc domownik')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await page.getByTestId('operation-financer').selectOption(`pay:${ANNA}`)
     const tf = page.getByTestId('operation-time')
     await tf.click()

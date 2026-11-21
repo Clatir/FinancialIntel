@@ -7,6 +7,7 @@ import { bridgeValues, dockPanel } from './do-pomoc'
 import { openDockRow, readDock, readRadar, readStarmap, itemLine } from './mg-pomoc'
 import { CAT, DMM, fill, newOp, openOp, txs, brief, typeIn } from './dm-pomoc'
 import { allBriefing, boundary, prepare } from './w5-pomoc'
+import { splitOperation } from '../e2e/forms'
 
 const flat = (s: string) => s.replace(/\s+/g, ' ').trim()
 
@@ -124,7 +125,7 @@ test('W5 – DM.11 (migawka DM.11-1, procenty ≠ 100 %)', async () => {
     await ready(page)
     await newOp(page, 'Wydatek')
     await fill(page, { amount: '100', counterparty: 'Sklep W5', categoryId: CAT.food })
-    await page.getByTestId('operation-share-start').click()
+    await splitOperation(page, 'people')
     await page.waitForTimeout(400)
     const share = page.getByTestId('operation-share')
     await share.getByTestId('operation-share-person').nth(1).selectOption(DMM.anna)

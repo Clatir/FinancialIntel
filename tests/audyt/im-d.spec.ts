@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { reading, start, useState } from './lab'
 import { MBANK, Obs, PLIKI, SAVINGS, WALLET, counters, expandAll, importAs, openFile, prepareImportState, readFi, readable, short, statuses, step, txs } from './im-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 async function accountsText(page: Page): Promise<string> {
   await page.keyboard.press('Control+3')
@@ -147,7 +148,7 @@ test('im-d2: plik zaimportowany najpierw na złe konto', async () => {
       await page.getByTestId('operations-search').fill('ślusarz')
       await page.waitForTimeout(700)
       await page.getByTestId('operation-row').first().click()
-      await page.getByTestId('operation-category').selectOption({ label: 'Dom · wyposażenie' })
+      await pickCategory(page, 'operation-category', 'Dom · wyposażenie')
       const note = page.getByTestId('operation-note')
       await note.fill('notatka na złym koncie')
       await note.press('Control+Enter')

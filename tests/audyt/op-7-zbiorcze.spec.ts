@@ -5,6 +5,7 @@ import { test, type Page } from '@playwright/test'
 import { records } from '../e2e/files'
 import { reading } from './lab'
 import { addRecords, ANNA, bridgeNumbers, CASH, goOps, MAREK, ops, opt, rows, run, say, shown, snap, step, sums, text, toasts, WALLET } from './op-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const APTEKA = /Apteka mBank/
 const count = async (page: Page) => (await sums(page)).split('\n')[0]!
@@ -45,7 +46,7 @@ test('OP.28 kategoria dla zaznaczonych', async () => {
     await page.waitForTimeout(300)
     say('OP.28 pasek zaznaczonych', { tekst: await bulk(page), ustawAktywne: await page.getByTestId('operations-bulk-apply').isEnabled() })
     say('OP.28 opcje „zapamiętaj”', await page.getByTestId('operations-bulk-remember').evaluate((s) => Array.from((s as HTMLSelectElement).options).map((o) => o.textContent)))
-    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Jedzenie · kawa i przekąski' })
+    await pickCategory(page, 'operations-bulk-category', 'Jedzenie · kawa i przekąski')
     await page.getByTestId('operations-bulk-remember').selectOption('keyword')
     const before = rules(dataDir)
     await page.getByTestId('operations-bulk-apply').click()
@@ -66,7 +67,7 @@ test('OP.28 kategoria dla zaznaczonych', async () => {
     say('OP.28 zaznaczenie po zmianie filtra', { przed: n0, po: await bulk(page), zaznaczone: await page.locator('[data-testid="operation-tick"]:checked').count() })
     // Brands.
     await page.getByTestId('operations-tick-all').check()
-    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Jedzenie · kawa i przekąski' })
+    await pickCategory(page, 'operations-bulk-category', 'Jedzenie · kawa i przekąski')
     await page.getByTestId('operations-bulk-remember').selectOption('brands')
     await page.getByTestId('operations-bulk-apply').click()
     await page.waitForTimeout(800)
@@ -177,13 +178,13 @@ test('OP.30 Cofnij zbiorczej po zmianie w międzyczasie', async () => {
     for (const n of pick) await tick(page, n)
     const file = async () => (await ops(dataDir)).filter((t) => pick.some((p) => String(t.counterparty).startsWith(p)) && String(t.date).startsWith('2026-10')).map((t) => `${t.counterparty}: ${String(t.categoryId).slice(-4)} „${t.note}”`)
     const f0 = await file()
-    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Prezenty i inne · inne' })
+    await pickCategory(page, 'operations-bulk-category', 'Prezenty i inne · inne')
     await page.getByTestId('operations-bulk-apply').click()
     const t0 = Date.now()
     await page.waitForTimeout(300)
     // Quickly: one category by hand, another one's note.
     await page.getByTestId('operation-row').filter({ hasText: 'FRYZJER STYL' }).first().click()
-    await page.getByTestId('operation-category').selectOption({ label: 'Osobiste · fryzjer' })
+    await pickCategory(page, 'operation-category', 'Osobiste · fryzjer')
     await page.getByTestId('operation-row').filter({ hasText: 'NETIA SA' }).first().click()
     await page.getByTestId('operation-note').fill('notatka w międzyczasie')
     await page.getByTestId('operation-counterparty').click()

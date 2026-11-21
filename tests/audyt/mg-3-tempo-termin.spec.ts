@@ -12,6 +12,7 @@ import { test } from '@playwright/test'
 import { seedFolder } from '../e2e/seed'
 import { LAB, shot, start, useState } from './lab'
 import { ACC, GOAL, go, goalLine, layerOf, out, readLayers, readNow, readStarmap, stepper, toasts } from './mg-pomoc'
+import { openForm } from '../e2e/forms'
 
 const mapValues = async (page: import('@playwright/test').Page) => {
   await go(page, '6', 'page-starmap')
@@ -41,6 +42,7 @@ test('MG.5 A – stan „start”: za mało historii', async () => {
       const { m } = await mapValues(page)
       dump('mapa', m)
       // An own goal added (no history: no pace).
+      await openForm(page, 'goal')
       await page.getByTestId('starmap-new-name').fill('Rower')
       const amount = page.getByTestId('starmap-new-target')
       await amount.click()
@@ -147,6 +149,7 @@ test('MG.6 C – rok: kurs przechwycenia Wakacji 2027, osiągnięty po terminie,
       await dl.press('Tab')
       await page.waitForTimeout(600)
       // A goal of a past deadline, not reached, with the pace of „rok”.
+      await openForm(page, 'goal')
       await page.getByTestId('starmap-new-name').fill('Kurs nurkowania')
       const amount = page.getByTestId('starmap-new-target')
       await amount.click()

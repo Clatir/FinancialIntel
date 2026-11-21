@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { test, type Page } from '@playwright/test'
 import { start, useState } from './lab'
 import { flat, go, out, quickWindow, rec, snap, stepper, textOf, type Ctx } from './pr-pomoc'
+import { pickCategory } from '../e2e/forms'
+import { wholeIntel, intelTab } from './wywiad'
 
 const RUN = 'pr-5'
 const GIFTS = '01KDEFCAT00000000000000901'
@@ -37,12 +39,14 @@ test('PR przebieg 5 – grosze i podział z resztą (PR.9)', async () => {
         await go(page, '1', 'page-bridge')
         const st = await textOf(page.locator('section[data-panel="bridge:Stan okrętu"]'))
         await go(page, '9', 'page-intel')
+        await intelTab(page, 'forecasts')
         await page.waitForTimeout(1500)
         const m = page.getByTestId('maneuver-range')
         if (await m.count()) await m.first().scrollIntoViewIfNeeded()
         await page.waitForTimeout(400)
         await snap(page, 'PR.3-rok-wywiad-kurs')
-        const intel = await textOf(page.getByTestId('page-intel'))
+        const intel = await wholeIntel(page)
+        await intelTab(page, 'forecasts')
         return {
           mostek_zasieg: /ZASIĘG\n([^\n]+)/.exec(st)?.[1] ?? '?',
           mostek_klasa: /KLASA\n([^\n]+)/.exec(st)?.[1] ?? '?',
@@ -107,7 +111,7 @@ test('PR przebieg 5 – grosze i podział z resztą (PR.9)', async () => {
       await snap(q, 'PR.9-szybki-12345')
       const b = await typeAmount(page, 'quick-amount', '1.200', q)
       await q.getByTestId('quick-counterparty').fill('Sklep PR9 kropka')
-      await q.getByTestId('quick-category').selectOption(GIFTS)
+      await pickCategory(q, 'quick-category', GIFTS)
       await q.getByTestId('quick-time').fill('')
       await q.getByTestId('quick-note').click()
       await q.waitForTimeout(500)

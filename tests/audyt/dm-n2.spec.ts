@@ -4,6 +4,7 @@
  */
 import { test, type Page } from '@playwright/test'
 import { log, mostek, rd, recs, runRok, snap, toastsAfter, typeIn } from './dm-pomoc'
+import { openForm } from '../e2e/forms'
 
 const S = 'rok+dm-n2'
 const row = (page: Page) => page.locator('[data-testid="loan-row"][data-name="Pożyczka od Ewy"]')
@@ -21,6 +22,7 @@ test('DM.19 – zamknij, Cofnij, usuń', async () => {
   try {
     await page.keyboard.press('Control+7')
     await page.waitForTimeout(800)
+    await openForm(page, 'loan')
     const p = page.getByTestId('radar-new-loan')
     await p.locator('[role="radiogroup"][aria-label="Kierunek pożyczki"]').getByRole('radio', { name: 'Biorę pożyczkę' }).click()
     await p.getByTestId('loan-name').fill('Pożyczka od Ewy')

@@ -10,6 +10,7 @@ import { cardL, listaText } from './im-pomoc'
 import { LAB, type Run } from './lab'
 import { cp1250 } from './persona'
 import { OP, byId, Log, answerQuestions, banners, closeEditor, mainLog, openOp, openRok, pick, readJson, recordFiles, reopen, sleep, tempFiles, toasts, trapped } from './da-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const runDir = (n: string) => join(LAB, 'przebiegi', n)
 
@@ -266,7 +267,7 @@ test('DA.43 – zamknięcie zaraz po zmianie', async () => {
       const bar = (await page.getByTestId('operations-bulk').innerText()).replace(/\s+/g, ' ')
       log.line(`zbiorcza: ${bar}`)
       const picked = recordFiles(dataDir, 'transactions').filter((f) => /^(BIEDRONKA|ZABKA|KEBAB)/i.test(f.rec.counterparty)).map((f) => f.rec.id)
-      await page.getByTestId('operations-bulk-category').selectOption({ label: 'Prezenty i inne · inne' })
+      await pickCategory(page, 'operations-bulk-category', 'Prezenty i inne · inne')
       await answerQuestions(run, 1)
       await page.getByTestId('operations-bulk-apply').click()
       const t0 = Date.now()
