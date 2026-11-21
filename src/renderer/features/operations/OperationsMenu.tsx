@@ -180,8 +180,8 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
   runRef.current = run
   const navRef = useRef(nav)
   navRef.current = nav
-  // Where the mouse last moved (the menu opens at it): what `realHover` compares an entry with.
-  const lastMouse = useRef<{ x: number; y: number } | null>({ x: at.x, y: at.y })
+  // Where and when the mouse last moved (the menu opens at it – not a move): what `realHover` compares an entry with.
+  const lastMouse = useRef<{ x: number; y: number; t: number } | null>({ x: at.x, y: at.y, t: -Infinity })
   const rootRef = useRef(root)
   rootRef.current = root
 
@@ -217,7 +217,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       if (r.run) void runRef.current(r.run)
     }
     const onMove = (e: MouseEvent) => {
-      lastMouse.current = { x: e.clientX, y: e.clientY }
+      lastMouse.current = { x: e.clientX, y: e.clientY, t: e.timeStamp }
     }
     window.addEventListener('mousemove', onMove, true)
     window.addEventListener('mousedown', onDown, true)
@@ -278,7 +278,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
           // Once on entering an item, and only when the mouse itself moved there (`realHover`): a list that changes under a
           // resting pointer enters its items too, and one must not take the focus (nor the Enter) from the field typed in.
           onMouseEnter={(e) => {
-            if (!realHover(lastMouse.current, e.clientX, e.clientY)) return
+            if (!realHover(lastMouse.current, e.clientX, e.clientY, e.timeStamp)) return
             setNav((n) => hoverItem(root, n, depth, node.id))
           }}
           onClick={() => {
