@@ -8,8 +8,8 @@ import { useContext, useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
 import type { AccountAhead } from '@shared/calc/ahead'
 import { dm } from '@shared/calc/briefing'
-import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates'
-import { HOUSE_DAYS, loanPayers, type LoanState } from '@shared/calc/loans'
+import { addDays, addMonths, daysInMonth } from '@shared/calc/dates'
+import { loanPayers, type LoanState } from '@shared/calc/loans'
 import { impliedLoanRate } from '@shared/calc/payoff'
 import { pit38Deadline, type RadarItem } from '@shared/calc/radar'
 import { percentText } from '@shared/format'
@@ -19,7 +19,7 @@ import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/d
 import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
-import { focusRecord, navigate, toast } from '../../store/ui'
+import { focusRecord, toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
 import { IconPlus } from '../../components/icons'
@@ -28,7 +28,6 @@ import { Badge, CompactContext, Empty, Field, LimitHint, NumberField, Panel, Seg
 import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
-import { isOpeningItem, memberName, openText } from '@shared/calc/household'
 import { openOperation, openRefundables } from '../operations/state'
 import { closeReturn, useReturns } from '../sensors/state'
 import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, typedLoanRate, type NewLoan } from './actions'
@@ -39,22 +38,16 @@ import { PayoffPanel } from './Payoff'
 import { useFuture } from './future'
 import { RadarCalendar } from './Calendar'
 import { KIND_LABEL, TARGET_TITLE, radarTarget } from './labels'
+import { SettlementsPanel } from './SettlementsPanel'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
 export function RadarPage() {
   const fleet = useFleet()
-  const members = useMembers()
-  const transactions = useData((s) => s.records.transactions)
   // Opened from the palette (F19): the loan marked (a closed one's list opened).
   useFocusRecord('loan')
   // The buoy a radar row opened (UX-74): its panel is on this screen – a closed „Pozostałe boje” list opens.
   useFocusRecord('buoy')
-  // Whom a member's money comes through (D81).
-  const via = (id: string) => {
-    const v = members.find((m) => m.id === id)?.via
-    return v ? memberName(v, members) : null
-  }
   const readOnly = useFolderLocked()
   // The items, the buoys' days and the accounts ahead (F16, F26, F27) – the notes carry amounts (B61): masked or shown at
   // once with Ctrl+$.
@@ -180,59 +173,10 @@ export function RadarPage() {
             {/* The taken loans' payoff (AP-41): shown while one is open – a proposal, nothing stored. */}
             <PayoffPanel fleet={fleet} readOnly={readOnly} />
             {!readOnly && loanOpen && <NewLoanPanel today={fleet.today} onDone={closeLoanForm} />}
+            {/* The household (D80, UX-82): each member's balance both ways, their purchases and the ways to settle them. */}
+            <SettlementsPanel fleet={fleet} readOnly={readOnly} />
             <Panel title="Należności" testId="radar-receivables">
               <div className="flex flex-col gap-1 text-[12px]">
-                {/* The household (D80): each member's balance both ways – owed purchases, their advance held. */}
-                {r.members
-                  .filter((m) => m.owed > 0 || m.deposit > 0 || m.unassigned.length > 0)
-                  .map((m) => {
-                    const days = m.since ? daysBetween(m.since, fleet.today) : null
-                    // Their money repaid but not assigned to a purchase (D91): what they owe is lower already.
-                    const waiting = m.unassigned.reduce((a, u) => a + u.amount, 0)
-                    return (
-                      <div key={m.memberId} className="flex flex-col" data-testid="radar-member">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-muted">{memberName(m.memberId, members)}</span>
-                          <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : m.deposit > 0 ? 'zaliczka (depozyt)' : 'rozliczony'}</span>
-                          {(m.owed > 0 || m.deposit > 0) && <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>}
-                        </div>
-                        {/* Both at once (AF-16): their advance beside the debt – in the deposit too. */}
-                        {m.owed > 0 && m.deposit > 0 && (
-                          <div className="flex items-baseline gap-2" data-testid="radar-member-deposit">
-                            <span className="text-[11px] text-dim">zaliczka (depozyt)</span>
-                            <span className="num ml-auto text-muted">{zl(m.deposit)}</span>
-                          </div>
-                        )}
-                        {m.since && m.owed > 0 && (
-                          <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
-                            {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({countLabel(days ?? 0, 'dzień', 'dni', 'dni')})
-                            {via(m.memberId) ? ` · przekazuje przez: ${via(m.memberId)}` : ''}
-                          </span>
-                        )}
-                        {waiting > 0 && (
-                          <button type="button" className="self-start text-left text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'inbox' })} title="Meldunki: wskaż, co spłaca ten zwrot" data-testid="radar-member-unassigned">
-                            zwrot do przypisania: {zl(waiting)} – wskaż w Meldunkach, co spłaca
-                          </button>
-                        )}
-                        {m.open.length > 0 && (
-                          <details className="text-[11.5px] text-dim" data-testid="radar-member-open">
-                            {/* The balance at the settlements' start apart (SW sp. 9); paid off – the items wait for the money's assignment. */}
-                            <summary className="cursor-pointer select-none hover:text-fg-strong">{m.owed > 0 ? `do oddania: ${openText(m.open)}` : `czeka na przypisanie zwrotu: ${openText(m.open)}`}</summary>
-                            {m.open.map((o) => {
-                              const t = transactions[o.txId]?.record
-                              return (
-                                <button key={o.txId} type="button" className="flex w-full items-baseline gap-2 text-left hover:text-fg-strong" disabled={!t} onClick={() => t && openOperation(t)} data-testid="radar-member-purchase">
-                                  <span className="num">{plDate(o.date)}</span>
-                                  <span className="min-w-0 flex-1 truncate">{isOpeningItem(o.txId) ? 'saldo na start rozliczeń' : t?.counterparty || 'zakup'}</span>
-                                  <span className="num">{zl(o.amount)}</span>
-                                </button>
-                              )
-                            })}
-                          </details>
-                        )}
-                      </div>
-                    )
-                  })}
                 <div className="flex items-baseline gap-2">
                   <span className="text-muted">Domownicy mają oddać razem</span>
                   <span className="num ml-auto text-fg-strong" data-testid="radar-house">

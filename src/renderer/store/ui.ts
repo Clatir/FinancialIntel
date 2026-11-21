@@ -16,8 +16,8 @@ export interface Toast {
   action?: { label: string; run: () => void }
 }
 
-/** Records the palette opens on their screens (F19). */
-export type FocusKind = 'container' | 'goal' | 'loan' | 'member' | 'buoy'
+/** Records the palette opens on their screens (F19); 'settlements' – a member's block in Radar (UX-82), 'all' – the panel. */
+export type FocusKind = 'container' | 'goal' | 'loan' | 'member' | 'buoy' | 'settlements'
 
 interface UiState {
   route: Route

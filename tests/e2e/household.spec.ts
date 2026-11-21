@@ -157,7 +157,8 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     await expect(page.getByTestId('page-radar')).toBeVisible()
     await expect(page.locator('[data-testid="radar-member"]', { hasText: 'Mama' })).toContainText('ma oddać')
     await expect(page.locator('[data-testid="radar-member"]', { hasText: 'Mama' })).toContainText(`najstarszy zakup z ${start.slice(8, 10)}.${start.slice(5, 7)}.${start.slice(0, 4)}`)
-    await expect(page.locator('[data-testid="radar-member"]', { hasText: 'Tata' })).toContainText('zaliczka (depozyt)')
+    // The balance in words (UX-82, `balanceText` – as Ustawienia → Domownicy say it).
+    await expect(page.locator('[data-testid="radar-member"]', { hasText: 'Tata' }).getByTestId('radar-member-balance')).toHaveText('zaliczka 150,00 zł')
     await expect(page.getByTestId('radar-house')).toHaveText('100,00 zł')
 
     // The debriefing of last month: what Mama financed apart from my costs.

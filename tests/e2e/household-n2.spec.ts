@@ -54,7 +54,8 @@ test('AP-4 (AF-16): zaliczka na przyszłość przy długu – przy osobie naraz 
     await page.keyboard.press('Control+7')
     await expect(page.getByTestId('page-radar')).toBeVisible()
     await expect(page.locator('[data-testid="radar-member"]', { hasText: 'Marek' })).toContainText('ma oddać')
-    await expect(page.locator('[data-testid="radar-member"]', { hasText: 'Marek' }).getByTestId('radar-member-deposit')).toHaveText('zaliczka (depozyt)100,00 zł')
+    // Both at once in one line (UX-82, `balanceText` – as Ustawienia → Domownicy say it).
+    await expect(page.locator('[data-testid="radar-member"]', { hasText: 'Marek' }).getByTestId('radar-member-balance')).toHaveText('ma oddać 360,00 zł · zaliczka 100,00 zł')
     await page.keyboard.press('Control+,')
     await page.getByTestId('settings-tab-household').click()
     await expect(page.locator('[data-testid="member-row"][data-name="Marek"]').getByTestId('member-balance')).toHaveText('ma oddać 360,00 zł · zaliczka 100,00 zł')
