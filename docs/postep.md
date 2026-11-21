@@ -51,13 +51,20 @@ Z12 po Z11). Numery T: Z1 T535 … Z13 T547 (kolejno), Z14 – T548.
   „Cofnij” „Koperty ze średnich” usuwa nietkniętą kopię planu, „osłony po” wiersza zbiorczego, link „rozlicz na
   Radarze” tylko według `settlementsShown` (dopisać do `ui.md` przy T547). Zdania do T546/T548/T549 – w commitach
   poprawek (raporty wykonawców).
-- **Zostało:** licznik „Zapisz i zaktualizuj (N)” w `TitleRuleAction.tsx` liczyć przez `bulkApplies` (kierunek);
-  `npm test`, build, pełne E2E (ostatnio: `ictj:174` znane, `system:195` i `z2-undo:32` niestabilne lokalnie); druga
-  runda `/code-review` tylko na poprawkach (9719d50, 6f3e54a, cz. 2); dopisać T549 (zdania z raportów); PR → CI → D71
-  → wydanie → archiwum; usunąć drzewa `.claude/worktrees/agent-*` (najpierw łącze `node_modules`).
+- 21.11 (po przerwie): licznik „Zapisz i zaktualizuj (N)” z planu podglądu (`titleRulePlan`, 5516e4d, 41de88f), T549
+  uzupełnione, `ui.md` – `settlementsShown`; druga runda `/code-review` high na poprawkach (`9719d50^..5516e4d`):
+  1 important (licznik ≠ podgląd – poprawione z testem), reszta nit → „Uwagi na później”. `npm test` 2231/2233 (2 znane
+  `bank-files`). Lokalny `.tools\node-v24.21.0-win-x64` w FI pusty (zerwane łącze) – Node z `RegulatedDay\.tools`.
+- **Zostało:** pełne E2E (w toku); PR → CI → D71 → wydanie → archiwum; usunąć drzewa `.claude/worktrees/agent-*`
+  (najpierw łącze `node_modules`); naprawić łącze `.tools` w FI.
 - Uwagi na później (przegląd): wstecz w Ustawieniach (`sameRoute` z zapamiętaną zakładką), „prezent od / dla” w
   toastach i imporcie, „Skategoryzuj pozostałe (N)” liczy tylko import, Tab w menu „Podziel…”, szkic manewru po zmianie
-  miesiąca, `useInboxCount` liczony 2–3 razy na Mostku, wiersze `SettlementsPanel` bez `memo`.
+  miesiąca, `useInboxCount` liczony 2–3 razy na Mostku, wiersze `SettlementsPanel` bez `memo`. Z drugiej rundy (nit):
+  `applyBulk` – operacje, które od podglądu stały się nowszej wersji, liczone jako „zmienione od podglądu”, nie
+  `newer`; „Cofnij” „Koperty ze średnich” w minionym miesiącu nie usuwa planu następnego miesiąca z tego samego
+  `editPlan` i nie sprawdza wyniku `deleteOrSay`; wiersz zbiorczy zaległych w Radarze – „osłony po” wierszy pomiędzy
+  nie odejmują późniejszych terminów grupy; „Cofnij” samej reguły tytułu nie cofa łatki szkicu i trwa 5000 ms (nie
+  `UNDO_MIN_MS`); `Popover` nie zamyka się na klik w dowolny `listbox` / `menu` na stronie (nie tylko swój).
 
 ### Kontrakt (wspólne)
 - Każdy krok: test, który bez zmiany pada (unit, gdzie się da; E2E dla przepływów klawiatury i ekranów), `npm run
