@@ -22,16 +22,16 @@ do gałęzi grupy. Słownik pojęć bez zmian (D106 pkt 1) – żaden krok nie z
 | # | Krok | Wykonawca · przegląd | Model · thinking | Czas | Stan |
 | --- | --- | --- | --- | --- | --- |
 | Z0 | D106, kontrakt, tabela | sesja główna | Opus 5.5 · high | 20 min | ✅ 21.11 |
-| Z1 | Reguła tytułu przez zmiany zbiorcze, „Zapamiętaj” z „Cofnij” (UX-1, 2, 24) | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | |
-| Z2 | „Cofnij” i podsumowania: koperty ze średnich, łupy, pomiń wpis, kreator „albo – albo” (UX-6, 7, 8, 9) | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | |
-| Z3 | Powłoka okna (UX-3, 10, 11, 12, 18, 20, 21, 22, 43, 53, 63, 78 paleta, 83) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | |
-| Z4 | Lista Operacji (UX-14, 15, 16, 71, 73, 77) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | |
-| Z5 | Wywiad w zakładkach (UX-13, 17, 40, 41, 42, 55 Wywiad, 74 Wywiad, 80) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | |
+| Z1 | Reguła tytułu przez zmiany zbiorcze, „Zapamiętaj” z „Cofnij” (UX-1, 2, 24) | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | ✅ 21.11 |
+| Z2 | „Cofnij” i podsumowania: koperty ze średnich, łupy, pomiń wpis, kreator „albo – albo” (UX-6, 7, 8, 9) | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 30–45 min | ✅ 21.11 |
+| Z3 | Powłoka okna (UX-3, 10, 11, 12, 18, 20, 21, 22, 43, 53, 63, 78 paleta, 83) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | ✅ 21.11 |
+| Z4 | Lista Operacji (UX-14, 15, 16, 71, 73, 77) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | ✅ 21.11 |
+| Z5 | Wywiad w zakładkach (UX-13, 17, 40, 41, 42, 55 Wywiad, 74 Wywiad, 80) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | ✅ 21.11 |
 | Z6 | Mostek i Meldunki (UX-4, 5, 30, 31, 32, 33, 34, 66, 74 koperty, 76) | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 45–75 min | |
 | Z7 | Edytor: kategoria z szukaniem, kontrahent z historii, etykiety finansowania, „Podziel…” (UX-36, 37, 70, 72) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 45–60 min | |
 | Z8 | Import i eksport (UX-23, 38, 39, 62, 85) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 30–45 min | |
 | Z9 | Ustawienia, Synchronizacja, pierwszy start (UX-19, 44, 45, 46, 47, 67, 68, 78 ustawienia) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 45–60 min | |
-| Z10 | Radar, Mapa, Ładownia (UX-35, 69 bez słownika – tylko nagłówki, 74 Radar, 75, 81) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | |
+| Z10 | Radar, Mapa, Ładownia (UX-35, 69 bez słownika – tylko nagłówki, 74 Radar, 75, 81) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | ✅ 21.11 |
 | Z11 | Plan miesiąca, Dowództwo, Dokowanie, kreator (UX-48, 49, 51, 52, 54, 55 Dowództwo) | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 40–60 min | |
 | Z12 | Szybki start kreatora (UX-79) | `wykonawca-opus` · xhigh | Opus 5.5 · xhigh | 45–75 min | |
 | Z13 | Ekran rozliczeń z domownikami (UX-82) | `wykonawca-opus` · xhigh (bez zmian w `calc/`; gdyby trzeba – stop i max) | Opus 5.5 · xhigh | 60–90 min | |
