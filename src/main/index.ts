@@ -962,7 +962,9 @@ function registerIpc(): void {
       machineName,
       platform: process.platform,
       userDataDir: app.getPath('userData'),
-      freeze: { afterOpenMs: envMs('FI_FREEZE_AFTER_OPEN_MS', 3 * 60_000), quietMs: envMs('FI_FREEZE_QUIET_MS', 60_000) }
+      freeze: { afterOpenMs: envMs('FI_FREEZE_AFTER_OPEN_MS', 3 * 60_000), quietMs: envMs('FI_FREEZE_QUIET_MS', 60_000) },
+      // The wizard by itself in a new empty folder (UX-79): off only in the test runs that do not test it.
+      wizardAuto: process.env.FI_WIZARD_AUTO !== '0'
     })
   )
   handle('reportActivity', () => noteActivity())

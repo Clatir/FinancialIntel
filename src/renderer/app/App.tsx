@@ -19,6 +19,7 @@ import { ImportPage } from '../features/import/ImportPage'
 import { MonthPage } from '../features/month/MonthPage'
 import { CargoPage } from '../features/cargo/CargoPage'
 import { WizardPage } from '../features/wizard/WizardPage'
+import { initWizardAutoOpen } from '../features/wizard/state'
 import { BridgeDetachHost, BridgePage } from '../features/bridge/BridgePage'
 import { StarMapPage } from '../features/starmap/StarMapPage'
 import { RadarPage } from '../features/radar/RadarPage'
@@ -308,6 +309,8 @@ export function App() {
   useGlobalHotkeys()
   useBackNavigation()
   useEffect(() => {
+    // Before the first folder is shown (UX-79): a new empty one opens the start wizard by itself.
+    initWizardAutoOpen()
     void boot()
     initIctj()
     initBankFiles()

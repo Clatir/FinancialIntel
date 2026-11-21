@@ -18,6 +18,18 @@ export function finishBlockers(o: FinishInput): string[] {
   ]
 }
 
+/**
+ * The same for „Szybki start” (UX-79): one screen, no step numbers – but the split of the money, not on it (an amount
+ * typed in step 6 before), points to the step where it is changed.
+ */
+export function quickBlockers(o: FinishInput): string[] {
+  return [
+    ...(o.missing.length ? [`saldo teraz: ${o.missing.join(', ')}`] : []),
+    ...(o.salary == null || o.salary <= 0 ? ['pensja'] : []),
+    ...(o.overSplit ? ['kadłub, cele i zbiorniki w granicach środków (wszystkie kroki – krok 6)'] : [])
+  ]
+}
+
 /** The steps (0-based) that still miss something, each with its reason – a tick of a step means „passed”, not „correct”. */
 export function blockedSteps(o: FinishInput): Map<number, string> {
   const blocked = new Map<number, string>()

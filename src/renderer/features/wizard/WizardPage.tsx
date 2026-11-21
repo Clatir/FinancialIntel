@@ -25,7 +25,8 @@ import { useAccounts, useCategories } from '../operations/pickers'
 import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
 import { ConfirmButton } from '../../components/ConfirmButton'
-import { blockedSteps, cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
+import { blockedSteps, cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, quickBlockers, useWizard, WIZARD_STEPS } from './state'
+import { quickEnvelopes, quickRestLines } from './quick'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const HULL_MONTHS = 12
@@ -161,10 +162,9 @@ export function WizardPage() {
   const missing = accounts.filter((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id)).map((a) => a.name)
   const blocked = blockedSteps({ missing, salary, overSplit })
 
-  const steps: ReactNode[] = [
-    // 0 – the balances now
-    <div key="0" className="flex flex-col gap-2">
-      <Note>Saldo każdego konta tak, jak widzisz je teraz w banku (z dzisiejszymi operacjami). Od dziś suma kont = warstwy okrętu.</Note>
+  // The balances now and the salary: the same fields in their steps and in „Szybki start” (UX-79) – one answer each.
+  const balanceFields = (
+    <>
       {!accounts.length && (
         <div className="flex flex-col items-start gap-1.5 border-l-2 border-accent pl-2" data-testid="wizard-no-accounts">
           <Note>Budżet nie ma jeszcze żadnego konta – bez kont nie ma czego policzyć. Dodaj konto (np. mBank, gotówkę), potem wróć tu po salda.</Note>
@@ -208,6 +208,48 @@ export function WizardPage() {
           </Field>
         )
       })}
+    </>
+  )
+  const salaryField = (
+    <Field label="Pensja miesięczna" labelWidth={170} hint={salaryProposal ? `Średnie koszty netto z ${salaryProposal.months.length} pełnych mies.: ${zl(salaryProposal.average)} → propozycja ${zl(salaryProposal.amount)}.` : 'Brak pełnego miesiąca historii – wpisz kwotę.'}>
+      <div className="flex items-center gap-2">
+        <AmountField className="w-[140px]" value={salary} allowEmpty onChange={(v) => patchWizard({ salary: v })} aria-label="Pensja" data-testid="wizard-salary" />
+        <span className="text-muted">zł · z osłon 1. dnia miesiąca</span>
+      </div>
+    </Field>
+  )
+  // „Szybki start” (UX-79): the daily envelopes only – the planned ones stay as proposed (the averages, else none).
+  const quickCats = quickEnvelopes(cats.mains)
+  const planned = Object.entries(envelopes).filter(([id, v]) => v > 0 && envelopeKind(cats.byId.get(id)) === 'planned')
+  // Shown in step 4 and in „Szybki start” – never both on the screen.
+  const noDailyNote = dailyTotal === 0 && (salary ?? 0) > 0 && (
+    <p className="text-[11.5px] text-accent" data-testid="wizard-no-daily">
+      Bez kopert codziennych „Energia dziś” będzie od startu 0,00 zł i każdy codzienny wydatek przekroczy przydział. Wpisz koperty codzienne (np. Jedzenie, Transport)
+      {unallocated > 0 ? ` – do rozdzielenia zostaje ${zl(unallocated)}` : ''}.
+    </p>
+  )
+  const unallocatedRow = (
+    <div className="flex justify-between" data-testid="wizard-unallocated">
+      <span className="text-muted">{unallocated < 0 ? 'Plan przekracza pensję o' : 'Niezaplanowane (łupy)'}</span>
+      <span className={cx('num', unallocated < 0 && 'text-down')}>{zl(Math.abs(unallocated))}</span>
+    </div>
+  )
+
+  const steps: ReactNode[] = [
+    // 0 – the balances now
+    <div key="0" className="flex flex-col gap-2">
+      {/* The way of three fields (UX-79): the rest of the start as the wizard proposes it. */}
+      <div className="flex items-center gap-3 border border-accent/40 bg-accent-soft px-3 py-2" data-testid="wizard-quick-offer">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-[12.5px] text-fg-strong">Szybki start – trzy rzeczy zamiast siedmiu kroków</span>
+          <Note>Salda kont, pensja i koperty codzienne; resztę kreator ustawi z wartości domyślnych – zmienisz ją później w Ustawieniach, Planie miesiąca i Ładowni.</Note>
+        </div>
+        <button className="btn btn-accent h-[26px] shrink-0" onClick={() => patchWizard({ quick: true })} data-testid="wizard-quick-start">
+          Szybki start
+        </button>
+      </div>
+      <Note>Saldo każdego konta tak, jak widzisz je teraz w banku (z dzisiejszymi operacjami). Od dziś suma kont = warstwy okrętu.</Note>
+      {balanceFields}
       <Note>Konto tradingowe XTB nie należy do budżetu – prowadzi je ICT Trade Journal. Konta zmienisz w Ustawienia → Konta.</Note>
       <WizardHouseholdSection readOnly={readOnly} />
     </div>,
@@ -234,12 +276,7 @@ export function WizardPage() {
     </div>,
     // 2 – the salary and the layers
     <div key="2" className="flex flex-col gap-2.5">
-      <Field label="Pensja miesięczna" labelWidth={170} hint={salaryProposal ? `Średnie koszty netto z ${salaryProposal.months.length} pełnych mies.: ${zl(salaryProposal.average)} → propozycja ${zl(salaryProposal.amount)}.` : 'Brak pełnego miesiąca historii – wpisz kwotę.'}>
-        <div className="flex items-center gap-2">
-          <AmountField className="w-[140px]" value={salary} allowEmpty onChange={(v) => patchWizard({ salary: v })} aria-label="Pensja" data-testid="wizard-salary" />
-          <span className="text-muted">zł · z osłon 1. dnia miesiąca</span>
-        </div>
-      </Field>
+      {salaryField}
       {spentThisMonth > 0 && salary != null && (
         <Note>
           W tym miesiącu wydano już {zl(spentThisMonth)}: pierwsza pensja na resztę miesiąca to {zl(Math.max(0, salary - spentThisMonth))} (pełna od 1.
@@ -337,12 +374,7 @@ export function WizardPage() {
             Średnie wydatki ({zl(fit.asked)}) są wyższe niż to, co pensja zostawia na koperty – propozycje zmniejszone proporcjonalnie, do 10 zł. Każdą możesz zmienić.
           </p>
         )}
-        {dailyTotal === 0 && (salary ?? 0) > 0 && (
-          <p className="text-[11.5px] text-accent" data-testid="wizard-no-daily">
-            Bez kopert codziennych „Energia dziś” będzie od startu 0,00 zł i każdy codzienny wydatek przekroczy przydział. Wpisz koperty codzienne (np. Jedzenie, Transport)
-            {unallocated > 0 ? ` – do rozdzielenia zostaje ${zl(unallocated)}` : ''}.
-          </p>
-        )}
+        {noDailyNote}
       </div>
       <div className="border-t border-line pt-1.5 text-[12px]">
         <div className="flex justify-between">
@@ -361,10 +393,7 @@ export function WizardPage() {
             {zl(tanksLater)} miesięcznie.
           </Note>
         )}
-        <div className="flex justify-between" data-testid="wizard-unallocated">
-          <span className="text-muted">{unallocated < 0 ? 'Plan przekracza pensję o' : 'Niezaplanowane (łupy)'}</span>
-          <span className={cx('num', unallocated < 0 && 'text-down')}>{zl(Math.abs(unallocated))}</span>
-        </div>
+        {unallocatedRow}
         <Note>Podstawowy przydział dzienny: {zl(Math.floor(dailyTotal / daysInMonth(month)))}.</Note>
       </div>
     </div>,
@@ -486,6 +515,60 @@ export function WizardPage() {
     </div>
   ]
 
+  // „Szybki start” (UX-79, T546): three answers on one screen – everything else the steps' own values (their proposals
+  // untouched), counted above as for the steps; „Uruchom budżet” the same.
+  const quickScreen = (
+    <div className="flex flex-col gap-3" data-testid="wizard-quick">
+      <Note>Trzy rzeczy na start budżetu. Resztę kreator weźmie z wartości domyślnych – każdą zmienisz później albo we wszystkich krokach kreatora.</Note>
+      <div className="flex flex-col gap-2">
+        <span className="label">Salda kont teraz – z dzisiejszymi operacjami</span>
+        {balanceFields}
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="label">Pensja</span>
+        {salaryField}
+      </div>
+      <div className="flex flex-col">
+        <span className="label">Koperty codzienne – z nich „Energia dziś”</span>
+        {quickCats.map((c) => (
+          <div key={c.id} className="flex items-center gap-2 py-0.5" data-testid="wizard-quick-envelope" data-name={c.name}>
+            <span className="min-w-0 flex-1 truncate">{c.name}</span>
+            <AmountField
+              className="h-[22px] w-[110px]"
+              value={envelopes[c.id] ?? null}
+              allowEmpty
+              placeholder="—"
+              onChange={(v) => patchWizard({ envelopes: { ...w.envelopes, [c.id]: v } })}
+              aria-label={`Koperta ${c.name}`}
+            />
+          </div>
+        ))}
+        <Note>Podstawowy przydział dzienny: {zl(Math.floor(dailyTotal / daysInMonth(month)))}.</Note>
+        {noDailyNote}
+      </div>
+      <div className="border-t border-line pt-1.5 text-[12px]">{unallocatedRow}</div>
+      <div className="flex flex-col gap-0.5" data-testid="wizard-quick-rest">
+        <span className="label">Pozostałe ustawienia startu</span>
+        {quickRestLines(
+          {
+            shieldSalaries: w.shieldSalaries,
+            hullMonths: w.hullMonths,
+            shields: total - hull - goalsTotal - tanksTotal,
+            hull,
+            others: goalsTotal + tanksTotal,
+            planned: { count: planned.length, total: sum(planned.map(([, v]) => v)) },
+            containers: chosen.length,
+            autostart: w.autostart
+          },
+          zl
+        ).map((line) => (
+          <Note key={line}>{line}</Note>
+        ))}
+      </div>
+      <StartEffectRows effect={effect} />
+    </div>
+  )
+
   return (
     <div className="flex h-full min-h-0" data-testid="page-wizard">
       <aside className="flex w-[230px] shrink-0 flex-col border-r border-line bg-panel">
@@ -493,11 +576,18 @@ export function WizardPage() {
           <div className="text-[14px] font-medium text-fg-strong">Kreator startu</div>
           <div className="text-[11.5px] text-muted">od pustego folderu do działającego budżetu</div>
         </div>
+        {w.quick && (
+          <div className="flex h-[36px] items-center gap-2 border-l-2 border-accent bg-accent-soft px-3 text-[12.5px] text-accent" aria-current="step" data-testid="wizard-step-quick">
+            <span className="w-[16px]" />
+            Szybki start
+          </div>
+        )}
+        {/* A step chosen leaves „Szybki start” – its answers stay. */}
         {WIZARD_STEPS.map((title, i) => (
           <button
             key={title}
-            onClick={() => patchWizard({ step: i })}
-            className={cx('flex h-[36px] items-center gap-2 border-l-2 px-3 text-left text-[12.5px]', i === w.step ? 'border-accent bg-accent-soft text-accent' : 'border-transparent text-fg hover:bg-hover')}
+            onClick={() => patchWizard({ step: i, quick: false })}
+            className={cx('flex h-[36px] items-center gap-2 border-l-2 px-3 text-left text-[12.5px]', i === w.step && !w.quick ? 'border-accent bg-accent-soft text-accent' : 'border-transparent text-fg hover:bg-hover')}
             title={blocked.get(i)}
             data-testid={`wizard-step-${i}`}
             data-state={blocked.has(i) ? 'blocked' : i < w.step ? 'passed' : undefined}
@@ -519,25 +609,29 @@ export function WizardPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-auto">
           <div className="mx-auto flex max-w-[640px] flex-col gap-3 p-5">
-            <h1 className="text-[15px] font-medium text-fg-strong">
-              {w.step + 1}. {WIZARD_STEPS[w.step]}
-            </h1>
-            {steps[w.step]}
+            <h1 className="text-[15px] font-medium text-fg-strong">{w.quick ? 'Szybki start' : `${w.step + 1}. ${WIZARD_STEPS[w.step]}`}</h1>
+            {w.quick ? quickScreen : steps[w.step]}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 border-t border-line px-5 py-2.5">
-          <button className="btn" disabled={w.step === 0} onClick={() => patchWizard({ step: w.step - 1 })} data-testid="wizard-back">
-            Wstecz
-          </button>
+          {w.quick ? (
+            <button className="btn" onClick={() => patchWizard({ quick: false, step: 0 })} title="Pełny kreator – siedem kroków, odpowiedzi zostają" data-testid="wizard-quick-full">
+              Wszystkie kroki
+            </button>
+          ) : (
+            <button className="btn" disabled={w.step === 0} onClick={() => patchWizard({ step: w.step - 1 })} data-testid="wizard-back">
+              Wstecz
+            </button>
+          )}
           <span className="flex-1" />
-          {!last ? (
+          {!last && !w.quick ? (
             <button className="btn btn-accent" onClick={() => patchWizard({ step: w.step + 1 })} data-testid="wizard-next">
               Dalej
             </button>
           ) : (
             <FinishButton
               locked={readOnly ? lockedReason : null}
-              needs={finishBlockers({
+              needs={(w.quick ? quickBlockers : finishBlockers)({
                 missing,
                 salary,
                 overSplit
