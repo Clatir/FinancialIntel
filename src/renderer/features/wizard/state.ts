@@ -203,14 +203,7 @@ export function cancelWizard(): void {
   navigate({ page: 'bridge' })
 }
 
-/** What „Uruchom budżet” still needs (AF-14): only what is missing – never the whole list when the steps are filled in. */
-export function finishBlockers(o: { missing: readonly string[]; salary: number | null; overSplit: boolean }): string[] {
-  return [
-    ...(o.missing.length ? [`saldo teraz (krok 1): ${o.missing.join(', ')}`] : []),
-    ...(o.salary == null || o.salary <= 0 ? ['pensja (krok 3)'] : []),
-    ...(o.overSplit ? ['kadłub, cele i zbiorniki w granicach środków (krok 6)'] : [])
-  ]
-}
+export { blockedSteps, finishBlockers } from './blockers'
 
 /** How long the start waits for fi.json on the disk before it says the folder is slow (and waits on – T446). */
 const START_WRITE_MS = 15_000

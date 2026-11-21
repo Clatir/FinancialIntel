@@ -15,7 +15,7 @@ import { useFleet } from '../../store/fleet'
 import { setIctjDir, useIctj } from '../../store/ictj'
 import { useRecordList } from '../../store/records'
 import { navigate } from '../../store/ui'
-import { AmountField, plnText } from '../../components/fields'
+import { AmountField, TimeField, plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
 import { ShortcutField } from '../../components/ShortcutField'
 import { Badge, Empty, Field, NumberField, TextField, Toggle, cx } from '../../components/ui'
@@ -25,7 +25,7 @@ import { useAccounts, useCategories } from '../operations/pickers'
 import { addMember, patchMember, useMembers } from '../household/actions'
 import { addGoal } from '../starmap/actions'
 import { ConfirmButton } from '../../components/ConfirmButton'
-import { cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
+import { blockedSteps, cancelWizard, cancelWizardText, finishBlockers, finishWizard, ICTJ_TRACE, noteTrace, patchWizard, useWizard, WIZARD_STEPS } from './state'
 
 const zl = (grosze: number) => `${plnText(grosze)} zł`
 const HULL_MONTHS = 12
@@ -154,12 +154,25 @@ export function WizardPage() {
   const setOrders = (p: Partial<Orders>) => patchWizard({ orders: { ...orders, ...p } })
   // The averages' first month as the engine reads it (B25).
   const first = history?.[0] ?? firstFullMonth(transactions)
+  const chosenCount = proposals.filter((p) => !!w.cargo[p.key]).length
+  const allChosen = proposals.length > 0 && chosenCount === proposals.length
   const last = w.step === WIZARD_STEPS.length - 1
+  // What „Uruchom budżet” still lacks – and the step each missing thing belongs to (UX-49): its tick says „passed”, the „!” „incomplete”.
+  const missing = accounts.filter((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id)).map((a) => a.name)
+  const blocked = blockedSteps({ missing, salary, overSplit })
 
   const steps: ReactNode[] = [
     // 0 – the balances now
     <div key="0" className="flex flex-col gap-2">
       <Note>Saldo każdego konta tak, jak widzisz je teraz w banku (z dzisiejszymi operacjami). Od dziś suma kont = warstwy okrętu.</Note>
+      {!accounts.length && (
+        <div className="flex flex-col items-start gap-1.5 border-l-2 border-accent pl-2" data-testid="wizard-no-accounts">
+          <Note>Budżet nie ma jeszcze żadnego konta – bez kont nie ma czego policzyć. Dodaj konto (np. mBank, gotówkę), potem wróć tu po salda.</Note>
+          <button className="btn h-[24px]" onClick={() => navigate({ page: 'settings', tab: 'accounts' })} data-testid="wizard-no-accounts-add">
+            Dodaj konto w Ustawieniach
+          </button>
+        </div>
+      )}
       {accounts.map((a) => {
         const opened = openings.has(a.id)
         const ahead = aheadBy.get(a.id) ?? 0
@@ -253,10 +266,28 @@ export function WizardPage() {
     // 3 – the cargo and the envelopes
     <div key="3" className="flex flex-col gap-2.5">
       <div className="flex flex-col">
-        <span className="label">Ładownia (stałe koszty) – powtarzające się płatności z historii</span>
+        <div className="flex items-baseline gap-2">
+          <span className="label flex-1">Ładownia (stałe koszty) – powtarzające się płatności z historii</span>
+          {proposals.length > 0 && (
+            <button
+              className="text-[11.5px] text-accent hover:underline"
+              onClick={() => patchWizard({ cargo: allChosen ? Object.fromEntries(Object.entries(w.cargo).filter(([key]) => !proposals.some((p) => p.key === key))) : { ...w.cargo, ...Object.fromEntries(proposals.map((p) => [p.key, p])) } })}
+              data-testid="wizard-cargo-all"
+            >
+              {allChosen ? 'Odznacz wszystkie' : 'Zaznacz stałe płatności'}
+            </button>
+          )}
+        </div>
         {!proposals.length ? (
           <Note>Brak propozycji. Stałe opłaty dodasz w Ładowni.</Note>
         ) : (
+          <Note>
+            {chosenCount
+              ? `Wybrano ${chosenCount} z ${proposals.length} – tylko wybrane staną się kontenerami ładowni.`
+              : 'Żadna propozycja nie jest jeszcze wybrana – zaznacz te, które mają stać się kontenerami ładowni (resztę dodasz później w Ładowni).'}
+          </Note>
+        )}
+        {proposals.length > 0 &&
           proposals.map((p) => (
             <label key={p.key} className="flex items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="wizard-cargo" data-name={p.label}>
               <input
@@ -276,8 +307,7 @@ export function WizardPage() {
               </span>
               <span className="num w-[90px] text-right">{zl(p.amount)}</span>
             </label>
-          ))
-        )}
+          ))}
       </div>
       <div className="flex flex-col">
         <span className="label" data-testid="wizard-envelopes-title">
@@ -437,10 +467,12 @@ export function WizardPage() {
       <Field label="Linia zanurzenia (% pensji)" labelWidth={170}>
         <NumberField className="w-[70px]" value={orders.cargoLimitPct} decimals={0} step={5} range={[1, 100]} isValid={(v) => v != null && v >= 1 && v <= 100} onChange={(v) => v != null && setOrders({ cargoLimitPct: v })} />
       </Field>
-      <Field label="Cisza nocna" labelWidth={170}>
-        <span className="num text-fg">
-          {orders.quietHours.from}–{orders.quietHours.to}
-        </span>
+      <Field label="Cisza nocna" labelWidth={170} hint="Zakup z godziną w tym oknie wymaga potwierdzenia i krótkiego wpisu. Ta sama godzina „od” i „do” wyłącza ciszę.">
+        <div className="flex items-center gap-2">
+          <TimeField className="w-[70px]" value={orders.quietHours.from} onChange={(from) => from && setOrders({ quietHours: { ...orders.quietHours, from } })} aria-label="Cisza od" data-testid="wizard-quiet-from" />
+          –
+          <TimeField className="w-[70px]" value={orders.quietHours.to} onChange={(to) => to && setOrders({ quietHours: { ...orders.quietHours, to } })} aria-label="Cisza do" data-testid="wizard-quiet-to" />
+        </div>
       </Field>
       <Field label="Dziennik od kwoty" labelWidth={170} hint="0 albo puste – dziennik nie pyta.">
         <AmountField className="w-[110px]" value={orders.impulseThreshold} onChange={(v) => setOrders({ impulseThreshold: v ?? 0 })} aria-label="Próg dziennika" />
@@ -466,9 +498,14 @@ export function WizardPage() {
             key={title}
             onClick={() => patchWizard({ step: i })}
             className={cx('flex h-[36px] items-center gap-2 border-l-2 px-3 text-left text-[12.5px]', i === w.step ? 'border-accent bg-accent-soft text-accent' : 'border-transparent text-fg hover:bg-hover')}
+            title={blocked.get(i)}
             data-testid={`wizard-step-${i}`}
+            data-state={blocked.has(i) ? 'blocked' : i < w.step ? 'passed' : undefined}
           >
-            <span className={cx('num w-[16px] text-[11px]', i < w.step ? 'text-accent' : 'text-dim')}>{i < w.step ? <IconCheck size={12} /> : i + 1}</span>
+            {/* A step passed with something missing is marked „!”, not ticked (UX-49). */}
+            <span className={cx('num w-[16px] text-[11px]', blocked.has(i) ? 'text-accent' : i < w.step ? 'text-accent' : 'text-dim')}>
+              {blocked.has(i) && i < w.step ? '!' : i < w.step ? <IconCheck size={12} /> : i + 1}
+            </span>
             {title}
           </button>
         ))}
@@ -501,7 +538,7 @@ export function WizardPage() {
             <FinishButton
               locked={readOnly ? lockedReason : null}
               needs={finishBlockers({
-                missing: accounts.filter((a) => a.kind !== 'cash' && w.balances[a.id] == null && !openings.has(a.id)).map((a) => a.name),
+                missing,
                 salary,
                 overSplit
               })}
