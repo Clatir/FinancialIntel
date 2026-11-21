@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 // The fields import the stores, which talk to the main process through window.fi.
 vi.stubGlobal('window', { fi: {} })
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined })
-const { readDateDraft, monthFieldText, readMonthDraft, monthStartMoved } = await import('../../src/renderer/components/fields')
+const { readDateDraft, monthFieldText, readMonthDraft, monthFollow } = await import('../../src/renderer/components/fields')
 
 // U5 (c), (b): the date field with an empty value (the period's open ends) and the month field's wording.
 
@@ -54,19 +54,23 @@ describe('readMonthDraft: tylko prawdziwa zmiana jest edycją', () => {
   })
 })
 
-describe('monthStartMoved: wartość zmieniona pod nietkniętym polem', () => {
-  it('nietknięty draft przesuwa start na nową wartość – wpisanie starej z powrotem jest już edycją', () => {
-    const start = monthStartMoved('2026-11', '2026-11', '2027-01')
-    expect(start).toBe('2027-01')
-    expect(readMonthDraft('2026-11', start!)).toEqual({ edited: true, month: '2026-11', invalid: false })
+describe('monthFollow: wartość zmieniona pod polem z fokusem', () => {
+  it('nietknięty draft idzie za wartością, a start zawsze – wpisanie starej z powrotem jest edycją', () => {
+    const f = monthFollow('2026-11', '2026-11', '2027-01')!
+    expect(f).toEqual({ start: '2027-01', draft: '2027-01', reset: true })
+    expect(readMonthDraft('2026-11', f.start)).toEqual({ edited: true, month: '2026-11', invalid: false })
     // Without the move the typed-back value would be taken for „nothing typed” and lost.
     expect(readMonthDraft('2026-11', '2026-11')).toEqual({ edited: false })
   })
 
-  it('wartość usunięta pod polem – start pusty; bez przesunięcia, gdy coś wpisano, brak fokusu albo wartość ta sama', () => {
-    expect(monthStartMoved('2026-11', '2026-11', null)).toBe('')
-    expect(monthStartMoved('2027-02', '2026-11', '2027-01')).toBeNull()
-    expect(monthStartMoved(null, '2026-11', '2027-01')).toBeNull()
-    expect(monthStartMoved('2026-11', '2026-11', '2026-11')).toBeNull()
+  it('wpisane „2026-1”, wartość się zmienia, dopisanie do „2026-11” (dawny start) to edycja; draft zostaje', () => {
+    const f = monthFollow('2026-1', '2026-11', '2027-01')!
+    expect(f).toEqual({ start: '2027-01', draft: '2026-1', reset: false })
+    expect(readMonthDraft('2026-11', f.start)).toEqual({ edited: true, month: '2026-11', invalid: false })
+  })
+
+  it('wartość usunięta pod polem – start pusty; bez fokusu (draft null) – nic', () => {
+    expect(monthFollow('2026-11', '2026-11', null)).toEqual({ start: '', draft: '', reset: true })
+    expect(monthFollow(null, '2026-11', '2027-01')).toBeNull()
   })
 })

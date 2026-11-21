@@ -193,12 +193,14 @@ export function readMonthDraft(draft: string | null, start: string, allowEmpty?:
 }
 
 /**
- * The value changed under a focused field nothing was typed into: the new start of the draft (the plain new value), so that
- * typing the old value back is an edit; `null` – nothing to move (no focus, something typed, the value the same).
+ * The value changed under a focused field: the start of the draft is the new value at once (what is typed afterwards, the
+ * old value included, is an edit); the draft itself follows only while nothing was typed (`reset`). `null` – no focus.
  */
-export function monthStartMoved(draft: string | null, start: string, value: string | null): string | null {
+export function monthFollow(draft: string | null, start: string, value: string | null): { start: string; draft: string; reset: boolean } | null {
+  if (draft == null) return null
   const now = value ?? ''
-  return draft != null && draft === start && now !== start ? now : null
+  const reset = draft === start
+  return { start: now, draft: reset ? now : draft, reset }
 }
 
 /**
@@ -230,14 +232,18 @@ export function MonthField({
   const input = useRef<HTMLInputElement>(null)
   const read = readMonthDraft(draft, start.current, allowEmpty)
   const invalid = read.edited && read.invalid
-  // The value changed under the field (a „Cofnij”, a reload) while nothing was typed: the draft follows it, selected anew
-  // (typing replaces it) – what is typed afterwards, the old value included, is an edit.
+  // Whether the whole text was selected (the focus selects it): then a value changed under the field is selected anew.
+  const whole = useRef(false)
+  // The value changed under the field (a „Cofnij”, a reload): the start follows it always, the draft and the selection
+  // only while nothing was typed.
   useEffect(() => {
-    const moved = monthStartMoved(draft, start.current, value)
-    if (moved == null) return
-    start.current = moved
-    setDraft(moved)
+    const follow = monthFollow(draft, start.current, value)
+    if (!follow) return
+    start.current = follow.start
+    if (!follow.reset) return
+    setDraft(follow.draft)
     const el = input.current
+    if (!whole.current) return
     requestAnimationFrame(() => {
       if (el && document.activeElement === el) el.select()
     })
@@ -259,10 +265,15 @@ export function MonthField({
         // still has the focus, `select()` would pull it back otherwise.
         start.current = value ?? ''
         setDraft(start.current)
+        whole.current = true
         const el = e.currentTarget
         requestAnimationFrame(() => {
           if (document.activeElement === el) el.select()
         })
+      }}
+      onSelect={(e) => {
+        const el = e.currentTarget
+        whole.current = el.selectionStart === 0 && el.selectionEnd === el.value.length
       }}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {

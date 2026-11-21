@@ -370,6 +370,15 @@ export function navigate(root: MenuNode[], nav: MenuNav, key: MenuKey): { nav: M
   }
 }
 
+/**
+ * Whether the mouse entering an item is the mouse's own move: Chromium sends mouseover / mouseenter before the mousemove
+ * of a real move (the last position seen is then the previous one), while a list that shifts under a resting pointer gives
+ * the same position again – such an entry is no hover (an item coming under the pointer while one types in the field).
+ */
+export function realHover(last: { x: number; y: number } | null, x: number, y: number): boolean {
+  return !last || last.x !== x || last.y !== y
+}
+
 // ------------------------------------------------------------------ place on the screen
 
 export interface Rect {

@@ -41,15 +41,14 @@ test('menu pod prawym przyciskiem: szukanie kategorii – pole na górze, filtr,
     await search.fill('PALIW')
     await expect(page.getByTestId(`operations-menu-category-${FUEL}`)).toHaveText('Auto · paliwo')
     await expect(page.getByTestId(`operations-menu-category-${GROCERIES}`)).toHaveCount(0)
-    // The mouse resting over the first item while the list changes under it: the item that comes under it does not take
-    // the focus from the field – typing goes on (a mouseover without a move).
+    // The mouse moved onto the first item and resting there while the list changes under it: the item that comes under
+    // the pointer does not take the focus from the field – typing goes on.
     await search.fill('')
-    await page.getByTestId(`operations-menu-category-${FOOD}`).hover()
+    const first = await page.getByTestId(`operations-menu-category-${FOOD}`).boundingBox()
+    await page.mouse.move(first!.x + 20, first!.y + first!.height / 2)
     await search.focus()
     await search.fill('PALIW')
     await expect(page.getByTestId(`operations-menu-category-${FUEL}`)).toBeVisible()
-    // What the browser sends when the layout moves an item under a resting pointer: a mouseover, no mousemove.
-    await page.getByTestId(`operations-menu-category-${FUEL}`).dispatchEvent('mouseover')
     await page.waitForTimeout(250)
     await expect(search).toBeFocused()
     await page.keyboard.type('o')
@@ -119,7 +118,8 @@ test('menu pod prawym przyciskiem: najechana kategoria + Enter zapisuje najechan
     await page.getByTestId('operation-row').filter({ hasText: 'Sklep Alfa' }).click({ button: 'right' })
     await page.getByTestId('operations-menu-category').click()
     await expect(page.getByTestId('operations-menu-category-search')).toBeFocused()
-    await page.getByTestId(`operations-menu-category-${MEDS}`).hover()
+    const leaf = await page.getByTestId(`operations-menu-category-${MEDS}`).boundingBox()
+    await page.mouse.move(leaf!.x + 20, leaf!.y + leaf!.height / 2)
     await page.keyboard.press('Enter')
     await expect(page.getByTestId('operations-menu')).toHaveCount(0)
     await expect.poll(async () => (await records(dir, 'transactions'))[0]?.categoryId).toBe(MEDS)

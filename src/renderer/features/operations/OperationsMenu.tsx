@@ -31,6 +31,7 @@ import {
   navigate,
   placeAt,
   placeSub,
+  realHover,
   whatOf,
   type MenuCommand,
   type MenuInput,
@@ -179,6 +180,8 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
   runRef.current = run
   const navRef = useRef(nav)
   navRef.current = nav
+  // Where the mouse last moved (the menu opens at it): what `realHover` compares an entry with.
+  const lastMouse = useRef<{ x: number; y: number } | null>({ x: at.x, y: at.y })
   const rootRef = useRef(root)
   rootRef.current = root
 
@@ -213,6 +216,10 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       setNav(r.nav)
       if (r.run) void runRef.current(r.run)
     }
+    const onMove = (e: MouseEvent) => {
+      lastMouse.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('mousemove', onMove, true)
     window.addEventListener('mousedown', onDown, true)
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('resize', closeOperationsMenu)
@@ -220,6 +227,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('wheel', onScroll, true)
     return () => {
+      window.removeEventListener('mousemove', onMove, true)
       window.removeEventListener('mousedown', onDown, true)
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('resize', closeOperationsMenu)
@@ -267,13 +275,11 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
             (open || nav.focus === node.id) && !node.disabled && 'bg-hover',
             node.type === 'leaf' && node.danger && 'text-down'
           )}
-          // The mouse MOVING over an item (not an item coming under a resting mouse – a list that changes while typing in its
-          // field gives a mouseover, never a move): the item is the one in focus, as the mouse points at it.
-          onMouseMove={() => {
-            const cur = navRef.current
-            const next = hoverItem(root, cur, depth, node.id)
-            if (next.focus === cur.focus && next.path.length === cur.path.length && next.path.every((id, i) => id === cur.path[i])) return
-            setNav(next)
+          // Once on entering an item, and only when the mouse itself moved there (`realHover`): a list that changes under a
+          // resting pointer enters its items too, and one must not take the focus (nor the Enter) from the field typed in.
+          onMouseEnter={(e) => {
+            if (!realHover(lastMouse.current, e.clientX, e.clientY)) return
+            setNav((n) => hoverItem(root, n, depth, node.id))
           }}
           onClick={() => {
             if (node.type === 'sub') setNav((n) => hoverItem(root, n, depth, node.id))

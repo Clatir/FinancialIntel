@@ -9,6 +9,7 @@ import {
   navigate,
   placeAt,
   placeSub,
+  realHover,
   skipReason,
   whatOf,
   type MenuInput,
@@ -452,5 +453,17 @@ describe('miejsce na ekranie', () => {
     const p = placeSub({ left: 20, top: 100, width: 230, height: 26 }, { w: 220, h: 200 }, narrow)
     expect(p.left).toBeGreaterThanOrEqual(8)
     expect(p.left + 220).toBeLessThanOrEqual(300 - 8)
+  })
+})
+
+describe('realHover: wejście myszy w pozycję', () => {
+  it('prawdziwy ruch (inna pozycja niż ostatnio zapisana) albo brak zapisu – najechanie', () => {
+    expect(realHover({ x: 100, y: 50 }, 120, 50)).toBe(true)
+    expect(realHover({ x: 100, y: 50 }, 100, 51)).toBe(true)
+    expect(realHover(null, 100, 50)).toBe(true)
+  })
+
+  it('ta sama pozycja – lista przesunęła się pod nieruchomym kursorem, to nie najechanie', () => {
+    expect(realHover({ x: 100, y: 50 }, 100, 50)).toBe(false)
   })
 })
