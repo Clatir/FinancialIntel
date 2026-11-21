@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { intelTab, launch, openIntel } from './app'
 import { seedFolder, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
@@ -40,15 +40,41 @@ test('Wywiad i Raporty: krzywa majątku, Killzones, FVG, zasięg, dziennik; rapo
   const { app, page, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
-    await expect(page.getByTestId('page-intel')).toBeVisible()
+    await openIntel(page, 'structure')
     await expect.poll(async () => Number(await page.getByTestId('intel-wealth-chart').getAttribute('data-points'))).toBeGreaterThan(10)
+    await expect(page.getByTestId('intel-wealth-legend')).toContainText('przerywana')
+    await intelTab(page, 'spending')
     await expect(page.getByTestId('killzone-cell').first()).toBeVisible()
+    await expect(page.getByTestId('intel-killzones-legend')).toBeVisible()
     await expect(page.getByTestId('intel-order-block')).toContainText('Order Block')
     await page.getByTestId('intel-fvg-month').selectOption(last)
     await expect(page.locator('[data-testid="intel-fvg-row"]', { hasText: 'Auto' })).toContainText('−300,00 zł')
+    await intelTab(page, 'forecasts')
     await expect(page.getByTestId('intel-range-text')).toContainText('Bez żadnej wypłaty')
+    await intelTab(page, 'log')
     await expect(page.getByTestId('intel-log-row').first()).toBeVisible()
+
+    // D106 pt 6: the 3 / 6 / 12 months switch only on the tabs that read it – with what it reads said beside it.
+    await expect(page.getByTestId('intel-log-row')).toHaveCount(6)
+    await expect(page.getByTestId('intel-period-note')).toContainText('dziennika')
+    await page.getByRole('radio', { name: '3 mies.' }).click()
+    await expect(page.getByTestId('intel-log-row')).toHaveCount(3)
+    for (const tab of ['structure', 'forecasts'] as const) {
+      await intelTab(page, tab)
+      await expect(page.getByTestId('intel-period')).toHaveCount(0)
+    }
+    // UX-74: a killzone cell lists its purchases, each opening its operation.
+    await intelTab(page, 'spending')
+    await expect(page.getByTestId('intel-period')).toBeVisible()
+    await page.getByTestId('killzone-cell').first().click()
+    await expect(page.getByTestId('intel-killzone-ops')).toBeVisible()
+    await expect(page.getByTestId('intel-killzone-op').first()).toContainText('Sklep')
+    // The last tab is remembered: away and back, Wywiad opens on it.
+    await intelTab(page, 'log')
+    await page.keyboard.press('Control+1')
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+9')
+    await expect(page.getByTestId('intel-tabpanel')).toHaveAttribute('data-tab', 'log')
 
     await page.keyboard.press('Control+0')
     await expect(page.getByTestId('page-reports')).toBeVisible()

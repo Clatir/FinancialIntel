@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, daysBetween, warsawNow } from '../../src/shared/calc/dates'
 import { dm } from '../../src/shared/format'
-import { launch } from './app'
+import { launch, openIntel } from './app'
 import { seedFolder, zl } from './seed'
 
 const ACC = '01KDEFACC00000000000000001'
@@ -79,7 +79,7 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
 
     // Wywiad: „teraz” = Mostek; the month's rest – the envelopes 3 500 zł and the two rents 1 600 zł over the month's
     // energy (0 zł): 2 000 zł from the shields, 3 100 zł lacking; the course starts from it.
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     await expect(page.getByTestId('intel-course-rest')).toHaveText('Resztka miesiąca: koperty i opłaty 5 100,00 zł ponad energię miesiąca (pensja częściowa) – z osłon, brakuje 3 100,00 zł.')
     const sim = page.getByTestId('intel-maneuver')
     await expect(sim.getByTestId('maneuver-range').locator('td').nth(1)).toHaveText('0,5 mies. · Zwiadowca')
@@ -111,7 +111,7 @@ test('N3: kadłub 99,4 % celu – „liczy się jako pełny” na Mostku i „Ka
   const { app, page, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('state-hull-tolerance')).toHaveText('brakuje 100,00 zł – do 1% celu liczy się jako pełny (firewall, wolne do decyzji)')
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     // Before: „Kadłub pełny —” – no income in the course fills the last 100 zł.
     const hull = page.getByTestId('intel-course-hull-full').locator('td')
     for (const i of [1, 2, 3]) await expect(hull.nth(i)).toHaveText('teraz')

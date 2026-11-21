@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, monthRange, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, openIntel } from './app'
 import { seedFolder, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
@@ -34,7 +34,7 @@ test('N3 AP-31: osłony + kadłub i zasięg na koniec 12 miesięcy – Wywiad, d
   const { app, page, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'structure')
     const panel = page.getByTestId('intel-cushion')
     const rows = panel.getByTestId('intel-cushion-row')
     // The 12 months that ended, newest first – the running one left out.

@@ -131,6 +131,21 @@ export async function importDone(page: Page, userData: string): Promise<void> {
   })
 }
 
+export type IntelTabId = 'structure' | 'spending' | 'forecasts' | 'log'
+
+/** Wywiad is in tabs (D106, T539): a panel is on the screen only on its tab – Struktura, Wydatki, Prognozy, Dziennik. */
+export async function intelTab(page: Page, tab: IntelTabId): Promise<void> {
+  await page.getByTestId(`intel-tab-${tab}`).click()
+  await expect(page.getByTestId('intel-tabpanel')).toHaveAttribute('data-tab', tab)
+}
+
+/** Ctrl+9 (Wywiad) and the tab. */
+export async function openIntel(page: Page, tab: IntelTabId): Promise<void> {
+  await page.keyboard.press('Control+9')
+  await expect(page.getByTestId('page-intel')).toBeVisible()
+  await intelTab(page, tab)
+}
+
 /**
  * Clicks a button that closes its own window and waits for the window to close. The window can go while the click is
  * still in flight ("Target page … has been closed" on a slow machine), so the closing is the check, not the click.

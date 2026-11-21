@@ -31,6 +31,12 @@ export function showSpending(month: string, id: string, containerIds: readonly s
   navigate({ page: 'operations' })
 }
 
+/** Every operation of a month, of any kind (a view – the stored filter stays): from a month of the fuel balance (UX-74). */
+export function showMonth(month: string): void {
+  showFilter({ period: { kind: 'month', month }, ...noNarrowing() })
+  navigate({ page: 'operations' })
+}
+
 /** Every purchase at a brand, the whole history (a view). */
 export function showBrandKey(key: string): void {
   showFilter({ period: { kind: 'all' }, ...noNarrowing(), brands: [key] })
@@ -295,6 +301,8 @@ export function ComparisonPanel({ month, start, covered }: { month: string; star
   const categories = useData((s) => s.fi?.settings.categories)
   const cats = useCategories()
   const months = monthRange(start ? start.slice(0, 7) : month, month).reverse().slice(0, 24)
+  const containers = useRecordList('containers')
+  const containerIds = useMemo(() => containers.map((c) => c.id), [containers])
   const [picked, setPicked] = useState<string | null>(null)
   // The month ended last by default: the running one is still being spent.
   const of = picked ?? (months.includes(addMonths(month, -1)) ? addMonths(month, -1) : month)
@@ -334,7 +342,12 @@ export function ComparisonPanel({ month, start, covered }: { month: string; star
                 return (
                   <tr key={r.id} className="border-t border-line/50" data-testid="intel-comparison-row" data-id={r.id} data-over={over ? 'true' : 'false'}>
                     <td className="max-w-[150px] truncate py-0.5">{r.id === 'cargo' ? 'Ładownia (kontenery)' : r.id === '-' ? 'bez kategorii' : cats.label(r.id)}</td>
-                    <td className={cx('num px-1 text-right', over ? 'text-accent' : 'text-fg-strong')}>{plnText(r.value)}</td>
+                    <td className={cx('num px-1 text-right', over ? 'text-accent' : 'text-fg-strong')}>
+                      {/* UX-74: „skąd te 340 zł w Jedzeniu?” – the category's operations of the month. */}
+                      <button type="button" className="num hover:underline" onClick={() => showSpending(of, r.id, containerIds)} title="Pokaż operacje tej kategorii w miesiącu" data-testid="intel-comparison-open">
+                        {plnText(r.value)}
+                      </button>
+                    </td>
                     {cell(r.value, r.avg3, 'intel-comparison-avg3')}
                     {cell(r.value, r.avg12, 'intel-comparison-avg12')}
                     {cell(r.value, r.yearAgo, 'intel-comparison-year')}

@@ -12,6 +12,7 @@ import { amountsHidden, plnText, signedPln } from '../../components/fields'
 import { Empty, Panel, cx } from '../../components/ui'
 import { monthLabel } from '../../lib/format'
 import { useRecordList } from '../../store/records'
+import { showMonth } from './Drill'
 
 export function FuelPanel({ fleet }: { fleet: FleetState }) {
   const transactions = useRecordList('transactions')
@@ -51,7 +52,12 @@ export function FuelPanel({ fleet }: { fleet: FleetState }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.month} className="border-t border-line/50" data-testid="intel-fuel-row" data-month={r.month}>
-                  <td className="py-0.5">{monthLabel(r.month)}</td>
+                  <td className="py-0.5">
+                    {/* UX-74: the month's operations in Operacje. */}
+                    <button type="button" className="hover:text-fg-strong hover:underline" onClick={() => showMonth(r.month)} title="Pokaż operacje tego miesiąca" data-testid="intel-fuel-open">
+                      {monthLabel(r.month)}
+                    </button>
+                  </td>
                   <td className="num px-1 text-right">{plnText(r.income)}</td>
                   <td className="num px-1 text-right">{plnText(r.costs)}</td>
                   <td className={cx('num px-1 text-right', amountsHidden() ? 'text-muted' : r.balance > 0 ? 'text-up' : r.balance < 0 ? 'text-down' : 'text-muted')} data-testid="intel-fuel-balance">
