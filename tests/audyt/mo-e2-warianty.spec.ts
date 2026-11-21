@@ -7,6 +7,7 @@ import { test } from '@playwright/test'
 import { LAB, reading, shot, start, text, useState } from './lab'
 import { editJson, go, out, readBridge, textOf } from './mo-pomoc'
 import { seedFolder, zl } from '../e2e/seed'
+import { wholeIntel } from './wywiad'
 
 const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
@@ -59,7 +60,7 @@ test('MO G2 – krótka historia od 29.10, pensja 2 000 zł', async () => {
     await page.locator('section[data-panel="bridge:Stan okrętu"]').first().screenshot({ path: join(LAB, 'zrzuty', 'MO.22-c.png') }).catch(() => undefined)
     await go(page, '9', 'page-intel')
     await page.waitForTimeout(1500)
-    dump('wywiad', (await text(page, '[data-testid="page-intel"]')).slice(0, 800))
+    dump('wywiad', (await wholeIntel(page)).slice(0, 800))
   } finally {
     await app.close()
   }

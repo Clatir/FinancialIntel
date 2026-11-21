@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { LAB, recorded } from './lab'
 import { OP, byId, Log, mainLog, answerQuestions, banners, checksums, diff, logDiff, openOp, openRok, pick, readJson, recordFiles, sleep, toasts, trapped, typeAmount, writeJson } from './da-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const newer = (path: string, extra: Record<string, unknown> = {}) => {
   const r = readJson(path)!
@@ -76,10 +77,12 @@ test('DA.38 / DA.23 (wpis) – wpisy z nowszej wersji tylko do odczytu', async (
       await page.getByTestId('operations-tick-all').check()
       await page.waitForTimeout(300)
       log.line(`pasek: ${(await page.getByTestId('operations-bulk').innerText()).replace(/\s+/g, ' ')}`)
-      await page.getByTestId('operations-bulk-category').selectOption({ label: 'Rozrywka i hobby · kino i koncerty' }).catch(async () => {
-        const opts = await page.getByTestId('operations-bulk-category').locator('option').allInnerTexts()
+      await pickCategory(page, 'operations-bulk-category', 'Rozrywka i hobby · kino i koncerty').catch(async () => {
+        // The field is a combobox: its options are in the list in a portal, the first real one is taken.
+        await page.getByTestId('operations-bulk-category').click()
+        const opts = await page.getByTestId('operations-bulk-category-list').locator('[role="option"]').allInnerTexts()
         log.line(`kategorie: ${opts.slice(0, 40).join(' | ')}`)
-        await page.getByTestId('operations-bulk-category').selectOption({ index: 5 })
+        await page.getByTestId('operations-bulk-category-list').locator('[role="option"]').nth(5).click()
       })
       log.line(`przed zastosowaniem: ${(await page.getByTestId('operations-bulk').innerText()).replace(/\s+/g, ' ')}`)
       await page.getByTestId('operations-bulk-apply').click()

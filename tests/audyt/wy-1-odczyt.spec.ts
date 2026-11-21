@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test, type Page } from '@playwright/test'
 import { reading, shot, start, text, useState } from './lab'
 import { ACC, colorOf, editJson, go, out, panels, propsOf, shotEl, stepper, textOf } from './wy-pomoc'
+import { INTEL_TAB_IDS, intelTab, openPanel, wholeIntel } from './wywiad'
 
 const RUN = 'wy-1'
 
@@ -48,6 +49,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
 
     await go(page, '9', 'page-intel')
     await page.waitForTimeout(2500)
+    await intelTab(page, 'structure')
 
     // WY.3 / 4 / 5 – krzywa na kontach: fakty, dane wykresu, dymki (krzyż na wykresie).
     await step('krzywa', async () => {
@@ -94,11 +96,13 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
       await go(page, '1', 'page-bridge')
       dump('WY.6-mostek-przy-netto', await textOf(page.getByTestId('bridge-wealth')))
       await go(page, '9', 'page-intel')
+      await intelTab(page, 'structure')
       dump('WY.6-po-powrocie', { aktywna: await page.getByRole('radio', { name: 'siła floty netto' }).getAttribute('aria-checked') })
     })
 
     // WY.7 – Mostek a Wywiad (linia „na kontach”).
     await step('mostek-wywiad', async () => {
+      await intelTab(page, 'structure')
       await page.getByRole('radio', { name: 'na kontach' }).click()
       await page.waitForTimeout(800)
       const intel = (await propsOf(page, '[data-testid="intel-wealth-chart"]', 'points')) as { points: Array<{ date: string; value: number }>; marks: Array<{ date: string; kind: string }> }
@@ -116,9 +120,15 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
     // WY.8 / 9 / 16 / 13 – okres 3 / 6 / 12.
     for (const per of ['3 mies.', '12 mies.', '6 mies.']) {
       await step(`okres-${per}`, async () => {
+        await intelTab(page, 'spending')
         await page.getByRole('radio', { name: per, exact: true }).click()
         await page.waitForTimeout(1500)
-        const all = await panels(page.getByTestId('page-intel'))
+        const all: Awaited<ReturnType<typeof panels>> = []
+        for (const tab of INTEL_TAB_IDS) {
+          await intelTab(page, tab)
+          all.push(...(await panels(page.getByTestId('page-intel'))))
+        }
+        await intelTab(page, 'spending')
         const keep = all.filter((p) => ['intel-spending', 'intel-targets', 'intel-killzones-panel', 'intel-log', 'intel-wealth', 'intel-fvg', 'intel-course', 'intel-fuel', 'intel-comparison', 'intel-range', 'intel-inflation', 'intel-expeditions'].includes(p.id ?? ''))
         dump(`WY.8-okres-${per}`, keep.map((p) => `#### ${p.id}\n${p.text}`).join('\n'))
         dump(`WY.9-killzones-${per}`, await page.locator('[data-testid="intel-killzones"] rect[data-testid]').evaluateAll((els) => els.map((e) => `${e.querySelector('title')?.textContent} | ${e.getAttribute('stroke')}`)))
@@ -131,6 +141,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
 
     // WY.10 – FVG kopert: miesiące.
     await step('fvg', async () => {
+      await intelTab(page, 'spending')
       const sel = page.getByTestId('intel-fvg-month')
       dump('WY.10-opcje', await sel.evaluate((s) => Array.from((s as HTMLSelectElement).options).map((o) => o.value)))
       for (const m of ['2026-10', '2026-09', '2026-11', '2025-12']) {
@@ -147,6 +158,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
 
     // WY.11 / 12 – Wydatki w czasie, drążenie.
     await step('wydatki', async () => {
+      await intelTab(page, 'spending')
       const sp = page.getByTestId('intel-spending')
       dump('WY.11-tabela', await sp.innerText())
       dump('WY.11-dymki', await sp.locator('[title]').evaluateAll((els) => els.map((t) => `${((t as HTMLElement).innerText || '').trim().slice(0, 40).replace(/\n/g, ' ')} => ${t.getAttribute('title')}`)))
@@ -162,6 +174,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
 
     const drill = async (name: string, locate: () => ReturnType<Page['locator']>) => {
       await step(`drill-${name}`, async () => {
+      await intelTab(page, 'spending')
         const cell = locate()
         const val = await cell.innerText()
         await cell.click()
@@ -174,6 +187,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
         reading('wy', 'WY.12', `rok, ${name}`, { komorka: val.replace(/\s+/g, ' '), sumaListy: sums.replace(/\s+/g, ' ') })
         await shot(page, `WY.12-${name}`)
         await go(page, '9', 'page-intel')
+        await intelTab(page, 'spending')
         await page.waitForTimeout(1500)
       })
     }
@@ -181,6 +195,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
     await drill('jedzenie-paz', () => page.locator('[data-testid="intel-spend-row"][data-label="Jedzenie"] [data-testid="intel-spend-cell"]').nth(4))
     await drill('order-block-paz', () => page.locator('[data-testid="intel-order-block"] [data-testid="intel-spend-cell"]').nth(4))
     await step('bez-podkategorii', async () => {
+      await intelTab(page, 'spending')
       const sp = page.getByTestId('intel-spending')
       const t = sp.locator('[data-testid="intel-spend-row"][data-label="Jedzenie"] [data-testid="intel-spend-toggle"]')
       if ((await t.getAttribute('aria-expanded')) !== 'true') await t.click()
@@ -192,6 +207,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
 
     // WY.13 – Namierzone cele.
     await step('cele', async () => {
+      await intelTab(page, 'spending')
       const tg = page.getByTestId('intel-targets')
       dump('WY.13-dymki', await tg.locator('[title]').evaluateAll((els) => els.map((t) => `${((t as HTMLElement).innerText || '').trim().slice(0, 60).replace(/\n/g, ' ')} => ${t.getAttribute('title')}`)))
       await page.getByTestId('intel-targets-more').click().catch(() => undefined)
@@ -206,10 +222,12 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
       dump('WY.13-klik', { sumy: await textOf(page.getByTestId('operations-sums')), ekran: (await text(page, '[data-testid="page-operations"]')).slice(0, 1500), rok: await textOf(page.getByTestId('operation-brand-year')) })
       await shot(page, 'WY.13-operacje')
       await go(page, '9', 'page-intel')
+      await intelTab(page, 'spending')
     })
 
     // WY.14 – Porównanie.
     await step('porownanie', async () => {
+      await intelTab(page, 'spending')
       const sel = page.getByTestId('intel-comparison-month')
       dump('WY.14-domyslny', { wartosc: await sel.inputValue(), panel: await textOf(page.getByTestId('intel-comparison')) })
       for (const m of ['2025-09', '2025-10', '2025-11', '2026-11']) {
@@ -229,6 +247,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
 
     // WY.15 – Prognoza zasięgu; WY.17 – Bilans paliwa; WY.18 – Kurs; WY.20 – stan „teraz” symulatora; WY.22 – inflacja; WY.24 – wyprawy.
     await step('prognoza', async () => {
+      await intelTab(page, 'forecasts')
       const r = page.getByTestId('intel-range')
       const bars = await r.locator('[title]').evaluateAll((els) => els.map((e) => e.getAttribute('title')))
       dump('WY.15', { panel: await r.innerText(), druga: bars })
@@ -236,6 +255,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
       await shotEl(r, 'WY.15')
     })
     await step('bilans', async () => {
+      await intelTab(page, 'structure')
       const f = page.getByTestId('intel-fuel')
       dump('WY.17', { panel: await f.innerText(), dymki: await f.locator('[title]').evaluateAll((els) => els.map((t) => `${((t as HTMLElement).innerText || '').trim().slice(0, 40)} => ${t.getAttribute('title')}`)) })
       const rows = await page.getByTestId('intel-fuel-row').evaluateAll((els) => els.map((e) => (e as HTMLElement).innerText.replace(/\s+/g, ' ')))
@@ -245,6 +265,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
       await shotEl(f, 'WY.17')
     })
     await step('kurs', async () => {
+      await intelTab(page, 'forecasts')
       const c = page.getByTestId('intel-course')
       const tips = await c.locator('[title]').evaluateAll((els) => els.map((t) => `${((t as HTMLElement).innerText || '').trim().slice(0, 40).replace(/\n/g, ' ')} => ${t.getAttribute('title')}`))
       const accent = await c.locator('td').evaluateAll((els) => els.filter((e) => getComputedStyle(e).color === 'rgb(232, 163, 61)').map((e) => (e as HTMLElement).innerText))
@@ -255,12 +276,14 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
       dump('WY.20-teraz', await m.innerText())
     })
     await step('inflacja', async () => {
+      await intelTab(page, 'spending')
       const i = page.getByTestId('intel-inflation')
       dump('WY.22', { panel: await i.innerText(), dymki: await i.locator('[title]').evaluateAll((els) => els.map((t) => `${((t as HTMLElement).innerText || '').trim().slice(0, 40).replace(/\n/g, ' ')} => ${t.getAttribute('title')}`)) })
       reading('wy', 'WY.22', 'rok', { panel: (await i.innerText()).replace(/\n/g, ' | ').slice(0, 1500) })
       await shotEl(i, 'WY.22')
     })
     await step('wyprawy', async () => {
+      await intelTab(page, 'spending')
       const e = page.getByTestId('intel-expeditions')
       await page.getByTestId('intel-expedition-open').first().click()
       await page.waitForTimeout(600)
@@ -273,12 +296,20 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
       dump('WY.24-operacje', { sumy: await textOf(page.getByTestId('operations-sums')), ekran: (await text(page, '[data-testid="page-operations"]')).slice(0, 2500) })
       await shot(page, 'WY.24-operacje')
       await go(page, '9', 'page-intel')
+      await intelTab(page, 'spending')
     })
 
     // WY.25 – terminy ICT: dymki na Mostku, w Wywiadzie i Raportach, słowniczek F1.
     await step('terminy', async () => {
       const allTips = async () => page.locator('[title]').evaluateAll((els) => els.map((t) => `${((t as HTMLElement).innerText || '').trim().slice(0, 40).replace(/\n/g, ' ')} => ${t.getAttribute('title')}`).filter((s) => !/Dwuklik|Powiększ|Zwiń panel|Ukryj panel|Przeciągnij/.test(s)))
-      const res: Record<string, unknown> = { wywiad: await allTips() }
+      const res: Record<string, unknown> = { wywiad: await (async () => {
+        const out: unknown[] = []
+        for (const tab of INTEL_TAB_IDS) {
+          await intelTab(page, tab)
+          out.push(...(await allTips()))
+        }
+        return out
+      })() }
       await go(page, '1', 'page-bridge')
       res.mostek = await allTips()
       await go(page, '0', 'page-reports')
@@ -309,33 +340,44 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
     await step('ukryte', async () => {
       await page.keyboard.press('Control+Shift+Digit4')
       await page.waitForTimeout(1500)
-      const t = await text(page, '[data-testid="page-intel"]')
+      const t = await wholeIntel(page)
       dump('WY.27-tekst', t)
       const leaks = t.split('\n').filter((l) => /\d[\d\s]*,\d\d/.test(l))
       dump('WY.27-kwoty-widoczne', leaks)
+      await intelTab(page, 'spending')
       dump('WY.27-killzones-dymki', await page.locator('[data-testid="intel-killzones"] rect[data-testid] title').allTextContents())
       dump('WY.27-dymki', await page.getByTestId('page-intel').locator('[title]').evaluateAll((els) => els.map((e) => e.getAttribute('title')).filter((s) => s && /\d,\d\d/.test(s))))
+      await intelTab(page, 'structure')
       dump('WY.27-kolory-bilansu', await page.getByTestId('intel-fuel-balance').evaluateAll((els) => els.map((e) => `${(e as HTMLElement).innerText} ${getComputedStyle(e).color}`)))
+      await intelTab(page, 'spending')
       dump('WY.27-kolory-fvg', await page.locator('[data-testid="intel-fvg-row"] span.num').evaluateAll((els) => els.map((e) => `${(e as HTMLElement).innerText} ${getComputedStyle(e).color}`)))
       await shot(page, 'WY.27-wywiad')
+      await intelTab(page, 'structure')
       const chart = page.getByTestId('intel-wealth-chart')
       const box = (await chart.boundingBox())!
       await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.3)
       await page.waitForTimeout(400)
       await shotEl(page.getByTestId('intel-wealth'), 'WY.27-krzywa-dymek')
-      for (const id of ['intel-fuel', 'intel-range', 'intel-course', 'intel-log', 'intel-inflation', 'intel-maneuver']) await shotEl(page.getByTestId(id), `WY.27-${id}`)
+      for (const id of ['intel-fuel', 'intel-range', 'intel-course', 'intel-log', 'intel-inflation', 'intel-maneuver']) {
+        await openPanel(page, id)
+        await shotEl(page.getByTestId(id), `WY.27-${id}`)
+      }
       await page.keyboard.press('Control+Shift+Digit4')
       await page.waitForTimeout(1000)
-      dump('WY.27-po-odkryciu', (await text(page, '[data-testid="page-intel"]')).slice(0, 400))
+      dump('WY.27-po-odkryciu', (await wholeIntel(page)).slice(0, 400))
     })
 
     // WY.28 – zrzuty do oceny (krzywa, Killzones, prognoza, kurs).
     await step('zrzuty', async () => {
-      for (const id of ['intel-wealth', 'intel-killzones-panel', 'intel-range', 'intel-course']) await shotEl(page.getByTestId(id), `WY.28-${id}`)
+      for (const id of ['intel-wealth', 'intel-killzones-panel', 'intel-range', 'intel-course']) {
+        await openPanel(page, id)
+        await shotEl(page.getByTestId(id), `WY.28-${id}`)
+      }
     })
 
     // WY.6 – wybór linii po restarcie.
     await step('restart', async () => {
+      await intelTab(page, 'structure')
       await page.getByRole('radio', { name: 'siła floty netto' }).click()
       await page.waitForTimeout(800)
       await app.close()
@@ -343,6 +385,7 @@ test('WY przebieg 1 – Wywiad persony rok (odczyt)', async () => {
       await page.getByTestId('page-bridge').waitFor({ timeout: 60_000 })
       await page.waitForTimeout(3000)
       await go(page, '9', 'page-intel')
+      await intelTab(page, 'structure')
       await page.waitForTimeout(1500)
       dump('WY.6-po-restarcie', { netto: await page.getByRole('radio', { name: 'siła floty netto' }).getAttribute('aria-checked'), fakty: await intelFacts(page) })
     })

@@ -2,6 +2,7 @@ import { bankNamesClash } from '@shared/calc/household'
 import { isOwnName } from '@shared/import/classify'
 import { opKindOf, sameChoice, shareWho, type Choice, type ImportGroup } from '@shared/import/reconcile'
 import { HOUSE_MEMBER_ID, inflowOf, type Account, type HouseholdMember, type Loan, type Share } from '@shared/schema'
+import { financeLabel } from '../household/financeWords'
 
 /**
  * What a theme, a group or a row becomes, as offered by the direction of the money: 'expense', 'refund', 'income',
@@ -89,8 +90,8 @@ function offered(members: readonly Member[], current?: Choice): Member[] {
   return out
 }
 
-const financed = (m: Member) => ({ value: `refundable:${m.id}`, label: `Finansuje: ${m.name}` })
-const gifted = (m: Member) => ({ value: `gift:${m.id}`, label: `Prezent od: ${m.name}` })
+const financed = (m: Member) => ({ value: `refundable:${m.id}`, label: financeLabel(false, m.name) })
+const gifted = (m: Member) => ({ value: `gift:${m.id}`, label: financeLabel(true, m.name) })
 const returned = (m: Member) => ({ value: `refundable:${m.id}`, label: `Zwrot towaru – dla: ${m.name}` })
 const shared = (direction: 'in' | 'out') => ({ value: 'share', label: direction === 'out' ? 'Wspólnie – kilka osób płaci' : 'Zwrot towaru – wspólnego zakupu' })
 const fromMember = (m: Member) => MEMBER_MONEY.map((k) => ({ value: `household:${m.id}:${k}`, label: `Od domownika: ${m.name} – ${MEMBER_MONEY_TEXT[k]}` }))

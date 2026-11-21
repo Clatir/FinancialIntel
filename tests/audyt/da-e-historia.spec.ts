@@ -9,6 +9,7 @@ import {
   OP,
   byId,
   Log, findOp, goFolderTab, goSync, openOp, openRok, readJson, recordFiles, reopen, sleep, toasts, trapped, typeAmount, writeJson } from './da-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const histText = async (page: Page) => (await page.getByTestId('history-dialog').innerText().catch(() => '(brak okna historii)')).replace(/\n{2,}/g, '\n')
 
@@ -25,7 +26,7 @@ test('DA.21 – historia operacji', async () => {
     await openOp(page, 'BOLT.EU', OP.bolt)
     await typeAmount(page, 'operation-amount', '25,50')
     await page.waitForTimeout(800)
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · na mieście' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · na mieście')
     await page.waitForTimeout(800)
     await page.getByTestId('operation-note').click()
     await page.getByTestId('operation-note').fill('przejazd na lotnisko')

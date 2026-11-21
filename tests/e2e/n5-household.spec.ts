@@ -71,7 +71,7 @@ test('AP-19: domownik „pytaj” wybiera resztę, zakup za domownika bez „pla
     await quick.getByTestId('quick-time').fill('12:00')
     await quick.getByTestId('quick-time').press('Tab')
     await quick.getByTestId('quick-financer').selectOption({ label: 'Tata' })
-    await expect(quick.getByTestId('quick-preview-financed')).toContainText('Finansuje Tata: 250,00 zł')
+    await expect(quick.getByTestId('quick-preview-financed')).toContainText('Kupione dla: Tata (250,00 zł)')
     await expect(quick.getByTestId('quick-log')).toHaveCount(0)
     await quick.getByTestId('quick-financer').selectOption({ value: '' })
     await expect(quick.getByTestId('quick-preview-financed')).toHaveText('Za domownika: wybierz, kto finansuje zakup.')

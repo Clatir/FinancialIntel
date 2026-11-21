@@ -8,6 +8,13 @@ import { tempDir } from './helpers'
 const FIXTURE = join(__dirname, '..', 'fixtures', 'mbank', 'lista_operacji.csv')
 const HISTORY = join(__dirname, '..', 'fixtures', 'mbank', 'historia_rachunku.csv')
 
+/** A fixture copied as a fresh file: Windows keeps the source's mtime, and the watcher skips files older than `BANK_FILE_DAYS`. */
+function copyFresh(from: string, to: string): void {
+  copyFileSync(from, to)
+  const now = new Date()
+  utimesSync(to, now, now)
+}
+
 let watcher: BankFiles | null = null
 afterEach(() => {
   watcher?.stop()
@@ -29,12 +36,12 @@ function watch(dirs: string[]): { lists: BankFile[][]; next: (n: number) => Prom
 describe('pliki z mBanku w Pobranych (1.9.0, F14)', () => {
   it('CSV z mBanku z okresem i liczbą operacji; inny CSV, stary plik i inne rozszerzenie – pominięte', async () => {
     const dir = tempDir('fi-dl-')
-    copyFileSync(FIXTURE, join(dir, 'lista_operacji.csv'))
+    copyFresh(FIXTURE, join(dir, 'lista_operacji.csv'))
     writeFileSync(join(dir, 'inny.csv'), 'a;b;c\n1;2;3\n')
-    copyFileSync(HISTORY, join(dir, 'stara.csv'))
+    copyFresh(HISTORY, join(dir, 'stara.csv'))
     const old = new Date(Date.now() - 30 * 86_400_000)
     utimesSync(join(dir, 'stara.csv'), old, old)
-    copyFileSync(FIXTURE, join(dir, 'wyciag.txt'))
+    copyFresh(FIXTURE, join(dir, 'wyciag.txt'))
     const { next } = watch([dir])
     const files = await next(1)
     expect(files.map((f) => [f.name, f.where, f.format, f.period, f.rows, !!f.account])).toEqual([['lista_operacji.csv', 'Pobrane', 'lista', { from: '2024-10-18', to: '2025-10-18' }, 269, true]])
@@ -52,7 +59,7 @@ describe('pliki z mBanku w Pobranych (1.9.0, F14)', () => {
     // Nothing there: no list sent (the window starts empty).
     await new Promise((r) => setTimeout(r, 300))
     expect(lists).toEqual([])
-    copyFileSync(HISTORY, join(other, 'historia.csv'))
+    copyFresh(HISTORY, join(other, 'historia.csv'))
     const found = await next(1)
     expect(found.map((f) => [f.name, f.where, f.period?.from])).toEqual([['historia.csv', 'Wyciągi', '2026-09-01']])
     await fs.rm(join(other, 'historia.csv'))
@@ -62,7 +69,7 @@ describe('pliki z mBanku w Pobranych (1.9.0, F14)', () => {
   it('plik wybrany w oknie importu ma swój identyfikator; wyłączone obserwowanie – pusta lista', async () => {
     const dir = tempDir('fi-dl-')
     const path = join(dir, 'wybrany.csv')
-    copyFileSync(HISTORY, path)
+    copyFresh(HISTORY, path)
     const { lists } = watch([])
     expect(lists).toEqual([])
     expect(watcher!.files).toEqual([])

@@ -9,6 +9,7 @@ import { toast, undoKept } from '../../store/ui'
 import { plnText } from '../../components/fields'
 import { countLabel, monthGenLabel, plDate } from '../../lib/format'
 import { deleteWithUndo } from '../history/actions'
+import { cargoStatusesNow } from './status'
 
 /** A new container's fields before it goes into the hold (the load line is checked first – spec). */
 export type ContainerDraft = Pick<
@@ -220,17 +221,24 @@ export function clearPast(c: Container): void {
   })
 }
 
+/** „Zapłacone poza budżetem”: one due by its day, several by their number and the last day (T552). */
+export function settledText(name: string, dues: number, due: string): string {
+  return dues > 1 ? `${name}: zapłacono poza budżetem ${countLabel(dues, 'termin', 'terminy', 'terminów')} – do ${plDate(due)}.` : `${name}: termin ${plDate(due)} zapłacony poza budżetem.`
+}
+
 /**
  * „Zapłacone poza budżetem” (AP-10, T375): a due of an earlier month still unpaid – and the ones before it – settled
  * outside the budget (`aliveAt` the day after it, as „Nadal płacę”): no more „po terminie”; „Cofnij” takes it back.
+ * The toast counts the container's late dues up to this one (T552).
  */
 export function settleDue(c: Container, due: string): void {
   if (!canWrite()) return
   const before = c.aliveAt
   const nextAlive = addDays(due, 1)
+  const settled = cargoStatusesNow().filter((s) => s.containerId === c.id && s.carried && s.due <= due).length
   patchContainer(c.id, { aliveAt: c.aliveAt && c.aliveAt > nextAlive ? c.aliveAt : nextAlive })
   const after = useData.getState().records.containers[c.id]?.record
-  toast(`${c.name}: termin ${plDate(due)} zapłacony poza budżetem.`, 'info', 6000, {
+  toast(settledText(c.name, settled, due), 'info', 6000, {
     label: 'Cofnij',
     run: () => {
       const cur = useData.getState().records.containers[c.id]?.record

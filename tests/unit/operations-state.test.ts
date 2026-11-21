@@ -139,7 +139,7 @@ describe('„Cofnij” zbiorczej zmiany cofa tylko swoje pola (1.6.4, B66)', () 
     const a = tx({ counterparty: 'A' })
     load([a])
     ops.tickOperations([a.id], true)
-    ops.financeTicked([a.id], { memberId: HOUSE_MEMBER_ID }, 'Finansuje Dom')
+    ops.financeTicked([a.id], { memberId: HOUSE_MEMBER_ID }, 'Kupione dla: Dom')
     expect(current(a.id)).toMatchObject({ refundable: true, memberId: HOUSE_MEMBER_ID })
     data.updateRecord('transactions', a.id, (r) => ({ ...r, amount: -2500 }))
     lastUndo()()
@@ -631,6 +631,69 @@ describe('podgląd zmiany zbiorczej: operacje zmienione od jego otwarcia zostaj�
     expect(current(a.id).impulse).toBe('impulse')
     expect(data.useData.getState().records.transactions[b.id]).toBeUndefined()
     expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Nic nie zapisano – operacje zmieniły się od podglądu i zostają, jak są (2).')
+  })
+
+  // U1 (1.21.1, T550): one a newer version of the app wrote since the preview is counted as such (as `SaveResult.newer`) –
+  // not as „zmienione od podglądu”.
+  const newerSince = (id: string) =>
+    data.useData.setState((s) => ({ records: { ...s.records, transactions: { ...s.records.transactions, [id]: { ...s.records.transactions[id]!, readOnly: true } } } }))
+
+  it('zapisana od podglądu przez nowszą wersję: zostaje, liczona jako nowsza wersja – nie „zmienione od podglądu”', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    const plan = ops.bulkPlan([a.id, b.id], { kind: 'impulse', to: 'plan' })
+    newerSince(b.id)
+    expect(await ops.applyBulk(plan)).toBe(true)
+    expect([current(a.id).impulse, current(b.id).impulse]).toEqual(['plan', null])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Oznaczono jako plan: 1 operacja, bez zmian (zapisane przez nowszą wersję aplikacji): 1.')
+  })
+
+  it('nowsza wersja już przy podglądzie i od podglądu – jedna liczba; obok zmienionej od podglądu', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    const c = tx({ counterparty: 'C' })
+    const d = tx({ counterparty: 'D' })
+    load([a, b, c, d])
+    newerSince(d.id)
+    ops.tickOperations([a.id, b.id, c.id, d.id], true)
+    const plan = ops.bulkPlan([a.id, b.id, c.id, d.id], { kind: 'impulse', to: 'plan' })
+    expect(plan.newer).toBe(1)
+    newerSince(b.id)
+    data.updateRecord('transactions', c.id, (r) => ({ ...r, note: 'z synchronizacji' }))
+    expect(await ops.applyBulk(plan)).toBe(true)
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Oznaczono jako plan: 1 operacja, zmienione od podglądu zostają, jak są: 1, bez zmian (zapisane przez nowszą wersję aplikacji): 2.')
+  })
+
+  it('wszystkie zapisane od podglądu przez nowszą wersję: nic nie zapisane – mówi, że nowsza wersja', async () => {
+    const a = tx({ counterparty: 'A' })
+    const b = tx({ counterparty: 'B' })
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    const plan = ops.bulkPlan([a.id], { kind: 'impulse', to: 'plan' })
+    newerSince(a.id)
+    expect(await ops.applyBulk(plan)).toBe(false)
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Nic nie zapisano – operację od podglądu zapisała nowsza wersja aplikacji; zostaje, jak jest.')
+
+    load([a, b])
+    ops.tickOperations([a.id, b.id], true)
+    const two = ops.bulkPlan([a.id, b.id], { kind: 'impulse', to: 'plan' })
+    newerSince(a.id)
+    newerSince(b.id)
+    expect(await ops.applyBulk(two)).toBe(false)
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Nic nie zapisano – operacje od podglądu zapisała nowsza wersja aplikacji; zostają, jak są (2).')
+
+    const c = tx({ counterparty: 'C' })
+    load([a, b, c])
+    ops.tickOperations([a.id, b.id, c.id], true)
+    const three = ops.bulkPlan([a.id, b.id, c.id], { kind: 'impulse', to: 'plan' })
+    newerSince(a.id)
+    newerSince(b.id)
+    data.updateRecord('transactions', c.id, (r) => ({ ...r, note: 'z synchronizacji' }))
+    expect(await ops.applyBulk(three)).toBe(false)
+    expect([current(a.id).impulse, current(b.id).impulse, current(c.id).impulse]).toEqual([null, null, null])
+    expect(ui.useUi.getState().toasts.at(-1)!.text).toBe('Nic nie zapisano – zmienione od podglądu zostają, jak są: 1, zapisane przez nowszą wersję aplikacji: 2.')
   })
 
   it('usunięcie: zmieniona od podglądu nie jest usunięta – zostaje ze słowem', async () => {

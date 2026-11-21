@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { test } from '@playwright/test'
 import { start, useState } from './lab'
 import { auditId, CAT, editJson, go, out, shotEl, stepper, textOf, TODAY_MOKKA, writeTx } from './wy-pomoc'
+import { intelTab } from './wywiad'
 
 const RUN = 'wy-3'
 
@@ -22,6 +23,7 @@ test('WY przebieg 3 – brzegi Wywiadu', async () => {
     await page.getByTestId('page-bridge').waitFor({ timeout: 60_000 })
     await page.waitForTimeout(4000)
     await go(page, '9', 'page-intel')
+    await intelTab(page, 'spending')
     await page.waitForTimeout(2000)
     await step('bez-podkategorii', async () => {
       const sp = page.getByTestId('intel-spending')
@@ -47,6 +49,7 @@ test('WY przebieg 3 – brzegi Wywiadu', async () => {
       await shotEl(page.getByTestId('intel-comparison'), 'WY.14-bez-wydatkow')
     })
     await step('symulator-pisanie', async () => {
+      await intelTab(page, 'forecasts')
       const m = page.getByTestId('intel-maneuver')
       const r: Record<string, unknown> = {}
       for (const [id, v] of [['maneuver-costs', '250'], ['maneuver-noxtb', '24']] as const) {

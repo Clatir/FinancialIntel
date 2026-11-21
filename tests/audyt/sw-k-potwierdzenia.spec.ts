@@ -6,6 +6,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from '@playwright/test'
 import { ACC, CAT, SWM, addMembers, added, bridge, brief, category, enterSave, kind, log, openFresh, openQuick, openRok, ops, qread, quickVisible, snap, typeAmount, typeIn, waitHidden } from './sw-pomoc'
+import { intelTab } from './wywiad'
 
 function prepare(dataDir: string): void {
   addMembers(dataDir)
@@ -60,6 +61,7 @@ test('SW potwierdzenia: 24, 26, 31, 33, 12, 27', async () => {
     const n26 = await added(dataDir, before)
     log(run, 'SW.26 nowe', n26.map(brief))
     await page.keyboard.press('Control+9')
+    await intelTab(page, 'spending')
     await page.waitForTimeout(2500)
     log(run, 'SW.26 Wyprawy', (await page.getByTestId('intel-expeditions').innerText().catch(() => '(brak)')).replace(/\s+/g, ' ').slice(0, 600))
     await page.getByTestId('intel-expeditions').scrollIntoViewIfNeeded().catch(() => undefined)
@@ -127,7 +129,7 @@ test('SW potwierdzenia: 24, 26, 31, 33, 12, 27', async () => {
     await page.locator('[data-testid="category-row"][data-name="Zwierzęta"] [data-testid="category-archive"]').click()
     await page.waitForTimeout(1500)
     const r33a = await qread(q)
-    log(run, 'SW.33a po archiwizacji „Zwierzęta”', r33a, '| wartość pola kategorii', await q.getByTestId('quick-category').inputValue())
+    log(run, 'SW.33a po archiwizacji „Zwierzęta”', r33a, '| wartość pola kategorii', await q.getByTestId('quick-category').getAttribute('data-value'))
     await snap(q, 'SW.33-kategoria')
     log(run, 'SW.33a Enter', await enterSave(app, q, 'quick-amount'))
     await page.waitForTimeout(1000)
@@ -153,7 +155,7 @@ test('SW potwierdzenia: 24, 26, 31, 33, 12, 27', async () => {
     log(run, 'SW.33b archiwizacja trwała ms', Date.now() - t0)
     await page.waitForTimeout(2000)
     const r33b = await qread(q)
-    log(run, 'SW.33b po', r33b, '| finansuje', await q.getByTestId('quick-financer').evaluate((s: HTMLSelectElement) => s.selectedOptions[0]?.textContent), '| wartość kategorii', await q.getByTestId('quick-category').inputValue(), '| widoczne', await quickVisible(app))
+    log(run, 'SW.33b po', r33b, '| finansuje', await q.getByTestId('quick-financer').evaluate((s: HTMLSelectElement) => s.selectedOptions[0]?.textContent), '| wartość kategorii', await q.getByTestId('quick-category').getAttribute('data-value'), '| widoczne', await quickVisible(app))
     await snap(q, 'SW.33-trzy')
     log(run, 'SW.33b Enter', await enterSave(app, q, 'quick-amount'))
     await page.waitForTimeout(1000)

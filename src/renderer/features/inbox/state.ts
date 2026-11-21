@@ -2,7 +2,7 @@
  * „Meldunki do rozpatrzenia” (F6): the inbox's reports now (`shared/calc/inbox.ts`) – the side menu's counter and the
  * inbox screen see the same list; where each report's button leads.
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { doubleCorrections, openingOf } from '@shared/calc/balances'
 import { confirmationsOf } from '@shared/calc/briefing'
 import { memberName, skippedDebtsOf } from '@shared/calc/household'
@@ -13,6 +13,7 @@ import { listOf, updateSettings, useData } from '../../store/data'
 import { useGhosts } from '../../store/ghosts'
 import { api, errorMessage } from '../../lib/api'
 import { useFleet } from '../../store/fleet'
+import { publishInboxCount } from '../../store/inboxCount'
 import { focusRecord, navigate, toast } from '../../store/ui'
 import { useCargoStatuses, useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
@@ -144,10 +145,15 @@ export function dismissCorrection(id: string): void {
   })
 }
 
-/** How many reports wait (the side menu: the duplicates as last counted). */
-export function useInboxCount(): number {
+/**
+ * How many reports wait (the side menu: the duplicates as last counted) – the one pass of the inbox for the count (U6,
+ * T555): published to `store/inboxCount`, Mostek and its detached windows read it there.
+ */
+export function useInboxCountHost(): number {
   const duplicates = useKnownDuplicateCount()
-  return useInbox(duplicates).length
+  const count = useInbox(duplicates).length
+  useEffect(() => publishInboxCount(count), [count])
+  return count
 }
 
 /** The report of the pairs of transfers together (F10): its list shown first (`TransferPairs`), not joined at once. */

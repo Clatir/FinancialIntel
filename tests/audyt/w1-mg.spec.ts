@@ -7,6 +7,7 @@
 import { test, type Page } from '@playwright/test'
 import { shot, start, useState } from './lab'
 import { body, logger, recs } from './w1-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const RUN = 'w1-mg'
 
@@ -40,7 +41,7 @@ test('W1 MG.10 – wydatek z celu po przeniesieniu środków tego dnia', async (
     await a.press('Enter')
     await page.getByTestId('operation-counterparty').fill(who)
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Rozrywka i hobby' })
+    await pickCategory(page, 'operation-category', 'Rozrywka i hobby')
     await page.waitForTimeout(400)
     const opts = await page.getByTestId('operation-goal').locator('option').allInnerTexts()
     const opt = opts.find((o) => o.startsWith(goalName))

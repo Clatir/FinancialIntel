@@ -3,9 +3,9 @@
  * draft and applied on leaving the field or Enter – an intermediate value is never saved; a value that cannot be read
  * goes back to the saved one with a message.
  */
-import { forwardRef, useRef, useState } from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import { formatPln } from '@shared/format'
-import { parseAmountInput, parseClockInput, parseDateInput, parseMonthInput, plDate } from '../lib/format'
+import { monthLabel, parseAmountInput, parseClockInput, parseDateInput, parseMonthInput, plDate } from '../lib/format'
 import { toast } from '../store/ui'
 import { cx } from './ui'
 
@@ -115,35 +115,42 @@ export const AmountField = forwardRef<
 
 
 /**
- * A date shown as 16.10.2026; typed as 16.10, 16.10.2026 or 2026-10-16. `notAfter` (an operation's date – B12): typed
- * without a year, the day nearest to the field's date, never more than a week after `notAfter` – 28.12 typed on
- * 3 January is the December gone by, 02.01 typed on an operation of 30.12 the January after.
+ * What a typed date means: the day, `null` for an empty text when the field may be empty (`allowEmpty` – an open end of
+ * a period), `undefined` when it cannot be read (the field goes back to the saved value with a message).
  */
-export function DateField({
-  value,
-  onChange,
-  className,
-  notAfter,
-  ...rest
-}: {
-  value: string
-  onChange: (date: string) => void
+export function readDateDraft(text: string, o: { year: number; notAfter?: string; near: string | null; allowEmpty?: boolean }): string | null | undefined {
+  if (!text.trim()) return o.allowEmpty ? null : undefined
+  return parseDateInput(text, o.year, o.notAfter, o.near ?? undefined) ?? undefined
+}
+
+type DateFieldProps = {
   className?: string
   notAfter?: string
+  placeholder?: string
   'aria-label'?: string
   'data-testid'?: string
-}) {
+} & ({ allowEmpty?: false; value: string; onChange: (date: string) => void } | { allowEmpty: true; value: string | null; onChange: (date: string | null) => void })
+
+/**
+ * A date shown as 16.10.2026; typed as 16.10, 16.10.2026 or 2026-10-16. `notAfter` (an operation's date – B12): typed
+ * without a year, the day nearest to the field's date, never more than a week after `notAfter` – 28.12 typed on
+ * 3 January is the December gone by, 02.01 typed on an operation of 30.12 the January after. `allowEmpty`: the value may
+ * be `null` (an open end of a period) and an emptied field saves it.
+ */
+export function DateField(props: DateFieldProps) {
+  const { value, className, notAfter, placeholder, allowEmpty, ...rest } = props
   const [draft, setDraft] = useState<string | null>(null)
   // Escape: the blur it causes runs with this render's draft – it must not save it.
   const cancelled = useRef(false)
-  const year = Number(value.slice(0, 4)) || new Date().getFullYear()
-  const parse = (text: string): string | null => parseDateInput(text, year, notAfter, value)
-  const invalid = draft != null && parse(draft) == null
+  const year = Number(value?.slice(0, 4)) || new Date().getFullYear()
+  const parse = (text: string) => readDateDraft(text, { year, notAfter, near: value, allowEmpty })
+  const invalid = draft != null && parse(draft) === undefined
   return (
     <input
       className={cx('input num', className)}
       spellCheck={false}
-      value={draft ?? plDate(value)}
+      placeholder={placeholder}
+      value={draft ?? (value ? plDate(value) : '')}
       aria-invalid={invalid}
       aria-label={rest['aria-label']}
       data-testid={rest['data-testid']}
@@ -152,8 +159,8 @@ export function DateField({
       onBlur={() => {
         if (draft != null && !cancelled.current) {
           const d = parse(draft)
-          if (!d) toast('Nieprawidłowa data – zostaje poprzednia.', 'error')
-          else if (d !== value) onChange(d)
+          if (d === undefined) toast('Nieprawidłowa data – zostaje poprzednia.', 'error')
+          else if (d !== value) (props.onChange as (date: string | null) => void)(d)
         }
         cancelled.current = false
         setDraft(null)
@@ -171,9 +178,35 @@ export function DateField({
   )
 }
 
+/** A month as the field shows it at rest: „listopad 2026”; none – empty. */
+export const monthFieldText = (value: string | null): string => (value ? monthLabel(value) : '')
+
 /**
- * A month 'RRRR-MM' (typed also as 03.2027 or 3/2027); empty = none when `allowEmpty`. Saved on leaving the field or
- * Enter (B1): a month half typed never saves, one that cannot be read goes back to the saved one with a message.
+ * What the month field's draft means. `start` is the plain text the focus put in (the value of that moment): a draft equal
+ * to it is no edit – nothing is saved, Esc is not the field's, and a value changed under the field in the meantime
+ * („Cofnij”, a reload) stays what the field shows. An edit: the month (`null` – emptied) or `invalid` when it cannot be read.
+ */
+export function readMonthDraft(draft: string | null, start: string, allowEmpty?: boolean): { edited: false } | { edited: true; month: string | null; invalid: boolean } {
+  if (draft == null || draft === start) return { edited: false }
+  const month = parseMonthInput(draft)
+  return { edited: true, month: month ?? null, invalid: month === undefined || (month === null && !allowEmpty) }
+}
+
+/**
+ * The value changed under a focused field: the start of the draft is the new value at once (what is typed afterwards, the
+ * old value included, is an edit); the draft itself follows only while nothing was typed (`reset`). `null` – no focus.
+ */
+export function monthFollow(draft: string | null, start: string, value: string | null): { start: string; draft: string; reset: boolean } | null {
+  if (draft == null) return null
+  const now = value ?? ''
+  const reset = draft === start
+  return { start: now, draft: reset ? now : draft, reset }
+}
+
+/**
+ * A month shown in words („listopad 2026”); typed as RRRR-MM, 03.2027 or 3/2027 – the focus brings the plain RRRR-MM to
+ * edit. Empty = none when `allowEmpty`. Saved on leaving the field or Enter (B1): a month half typed never saves, one that
+ * cannot be read goes back to the saved one with a message.
  */
 export function MonthField({
   value,
@@ -192,32 +225,69 @@ export function MonthField({
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // The plain text of the value when the focus came – what an untouched draft equals.
+  const start = useRef('')
   // Escape: the blur it causes runs with this render's draft – it must not save it.
   const cancelled = useRef(false)
-  const parsed = draft == null ? value : parseMonthInput(draft)
-  const invalid = draft != null && (parsed === undefined || (parsed === null && !allowEmpty))
+  const input = useRef<HTMLInputElement>(null)
+  const read = readMonthDraft(draft, start.current, allowEmpty)
+  const invalid = read.edited && read.invalid
+  // Whether the whole text was selected (the focus selects it): then a value changed under the field is selected anew.
+  const whole = useRef(false)
+  // The value changed under the field (a „Cofnij”, a reload): the start follows it always, the draft and the selection
+  // only while nothing was typed.
+  useEffect(() => {
+    const follow = monthFollow(draft, start.current, value)
+    if (!follow) return
+    start.current = follow.start
+    if (!follow.reset) return
+    setDraft(follow.draft)
+    const el = input.current
+    if (!whole.current) return
+    requestAnimationFrame(() => {
+      if (el && document.activeElement === el) el.select()
+    })
+    // `draft` is read as of this render: only a change of the value matters here.
+  }, [value])
   return (
     <input
+      ref={input}
       className={cx('input num', className)}
       spellCheck={false}
-      value={draft ?? value ?? ''}
+      // Focused and untouched: the plain value as it is now (it may have changed under the field).
+      value={read.edited ? draft! : draft != null ? (value ?? '') : monthFieldText(value)}
       placeholder={placeholder}
       aria-invalid={invalid}
       aria-label={rest['aria-label']}
       data-testid={rest['data-testid']}
-      onFocus={(e) => e.currentTarget.select()}
+      onFocus={(e) => {
+        // The plain month to edit (typing replaces it – it is selected, as AmountField does it); only while the field
+        // still has the focus, `select()` would pull it back otherwise.
+        start.current = value ?? ''
+        setDraft(start.current)
+        whole.current = true
+        const el = e.currentTarget
+        requestAnimationFrame(() => {
+          if (document.activeElement === el) el.select()
+        })
+      }}
+      onSelect={(e) => {
+        const el = e.currentTarget
+        whole.current = el.selectionStart === 0 && el.selectionEnd === el.value.length
+      }}
       onChange={(e) => setDraft(e.currentTarget.value)}
       onBlur={() => {
-        if (draft != null && !cancelled.current) {
-          if (invalid) toast(`Nieprawidłowy miesiąc – zostaje ${value ? 'poprzedni' : 'pusty'} (wpisz RRRR-MM${allowEmpty ? ' albo zostaw puste' : ''}).`, 'error')
-          else if (parsed !== value) onChange(parsed ?? null)
+        if (read.edited && !cancelled.current) {
+          if (read.invalid) toast(`Nieprawidłowy miesiąc – zostaje ${value ? 'poprzedni' : 'pusty'} (wpisz RRRR-MM${allowEmpty ? ' albo zostaw puste' : ''}).`, 'error')
+          else if (read.month !== value) onChange(read.month)
         }
         cancelled.current = false
         setDraft(null)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape' && draft != null) {
+        // Only a real edit is taken back by Esc; otherwise it is not the field's (the window, a dialog hears it).
+        if (e.key === 'Escape' && read.edited) {
           e.stopPropagation()
           cancelled.current = true
           setDraft(null)

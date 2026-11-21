@@ -1,5 +1,17 @@
 # Financial Intel – zmiany
 
+## 1.21.1
+
+Poprawki po 1.21.0 – „Cofnij”, słowa i drobiazgi ergonomii:
+
+- **„Cofnij” dokładniejsze:** cofnięcie reguły dla tytułu oddaje też pola otwartej operacji, które reguła zmieniła (także po pytaniu o potwierdzone saldo i przy zmianie wcześniejszych operacji); „Koperty ze średnich” w minionym miesiącu cofają też kopię planu następnego miesiąca, a gdy folder nie pozwoli usunąć planu, mówisz o tym i wracają poprzednie limity – tak samo przy łupach i dopełnieniu kadłuba.
+- **Te same słowa wszędzie:** „Kupione dla: X” i „Prezent dla: X” w imporcie, regułach, menu pod prawym przyciskiem, pasku zaznaczonych i szybkim wpisie; „Zapłacone poza budżetem” mówi, ile terminów rozliczono i do którego dnia.
+- **Nawigacja:** `Alt+←` wraca do poprzedniej zakładki Ustawień; `Tab` w menu „Podziel…” zamyka je; panel nie zamyka się przy wyborze z własnej listy, a zamyka przy kliknięciu w cudzą; symulator manewrów zachowuje wpisane wartości po zmianie miesiąca; liczba na „Skategoryzuj pozostałe” mówi tyle, ile pokaże lista.
+- **Pola:** miesiąc w polach pokazany słownie („listopad 2026”), wpisujesz jak dotąd; daty „od / do” okresu w Operacjach to zwykłe pole daty; menu pod prawym przyciskiem w Operacjach ma szukanie kategorii; „Podziel…” także w szybkim wpisie; zaznaczone propozycje Ładowni zostają po przejściu na inny ekran.
+- **Szybciej:** licznik meldunków liczony raz dla menu i Mostka; lista rozliczeń z domownikami nie przerysowuje się przy każdej zmianie.
+- Kwota w komunikacie o nowej regule kwoty jest ukrywana razem z innymi (`Ctrl+Shift+4`).
+
+
 ## 1.21.0
 
 Ergonomia – mniej klikania, więcej podpowiedzi i „Cofnij” wszędzie, gdzie coś zmieniasz (nazwy w aplikacji bez zmian):

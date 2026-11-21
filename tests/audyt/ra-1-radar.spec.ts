@@ -27,6 +27,7 @@ import {
   where,
   writeIctjPayout
 } from './mg-pomoc'
+import { openForm } from '../e2e/forms'
 
 const RUN = 'ra-1'
 const STATE = 'rok + zdarzenia RA (pożyczki Oli/Igi/od Marka, boje, Wywóz śmieci, Kurs angielskiego, zwroty, Tata/Babcia, plan XII 7 000, Telefon X bez płatności, pula Podatek 1 200)'
@@ -184,7 +185,7 @@ test('RA przebieg 1 – Radar na stanie rok + zdarzenia', async () => {
     await step('RA.12-klik', async () => {
       await go(page, '7', 'page-radar')
       const open = page.locator('[data-testid="radar-member-open"]').first()
-      await open.locator('summary').click()
+      // The member's open purchases are always shown (no <details> to open), the panel only when there is someone to settle.
       await page.waitForTimeout(400)
       const list = (await open.innerText()).replace(/\s+/g, ' ')
       await page.locator('[data-testid="radar-member-purchase"]').first().click()
@@ -280,6 +281,7 @@ test('RA przebieg 1 – Radar na stanie rok + zdarzenia', async () => {
     // ---------------- RA.6: new buoys
     await step('RA.6', async () => {
       await go(page, '7', 'page-radar')
+      await openForm(page, 'buoy')
       const panel = page.getByTestId('radar-new-buoy')
       const res: Record<string, unknown> = {}
       const kind = async (label: string) => panel.getByRole('radio', { name: label }).or(panel.getByRole('button', { name: label })).first().click()

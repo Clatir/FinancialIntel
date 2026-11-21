@@ -3,10 +3,12 @@
 import { test, type Page } from '@playwright/test'
 import { shot } from './lab'
 import { addRecords, ANNA, cat, goOps, run, say, WALLET } from './op-pomoc'
+import { intelTab } from './wywiad'
 
 async function journal(page: Page): Promise<string[]> {
   await page.keyboard.press('Control+9')
   await page.getByTestId('page-intel').waitFor({ state: 'visible', timeout: 30_000 })
+  await intelTab(page, 'log')
   await page.waitForTimeout(1500)
   return (await page.getByTestId('intel-log-row').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ')).slice(-3)
 }

@@ -7,6 +7,20 @@ export function ownsEscape(target: EventTarget | null): boolean {
   return target instanceof Element && (target.matches('[role="combobox"][aria-expanded="true"]') || !!target.closest('[role="menu"]'))
 }
 
+/**
+ * Whether a click on `target` is a click on a list the `box` itself opened (T553): the list is in a portal outside the
+ * box, but its field – inside the box – points at it with `aria-controls`. A list of another element on the page is not
+ * the box's own: a click there is a click away.
+ */
+export function inOwnList(
+  box: { querySelectorAll: (selector: string) => ArrayLike<{ getAttribute: (name: string) => string | null }> } | null,
+  target: { closest?: (selector: string) => { id: string } | null } | null
+): boolean {
+  const list = target?.closest?.('[role="listbox"],[role="menu"]')
+  if (!list || !box) return false
+  return Array.from(box.querySelectorAll('[aria-controls]')).some((el) => el.getAttribute('aria-controls') === list.id)
+}
+
 const MAX_HEIGHT = 260
 
 interface Place {

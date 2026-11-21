@@ -8,6 +8,7 @@ import { test } from '@playwright/test'
 import { seedFolder, zl } from '../e2e/seed'
 import { LAB, reading, shot, start, text, useState } from './lab'
 import { command, editSettings, go, MBANK, out, textOf } from './dw-pomoc'
+import { wholeIntel } from './wywiad'
 
 test('W1 – gra od 15.10: pasek, dziennik, Wywiad, klasa na trzech ekranach', async () => {
   const RUN = 'dw-11a'
@@ -41,12 +42,12 @@ test('W1 – gra od 15.10: pasek, dziennik, Wywiad, klasa na trzech ekranach', a
     await shot(page, 'DW.24-przeglad-roczny')
     await go(page, '9', 'page-intel')
     await page.waitForTimeout(1500)
-    s.wywiad6 = await text(page, '[data-testid="page-intel"]')
+    s.wywiad6 = await wholeIntel(page)
     const p12 = page.getByTestId('page-intel').getByText('12 mies.', { exact: true }).first()
     if (await p12.count()) {
       await p12.click()
       await page.waitForTimeout(1500)
-      s.wywiad12 = await text(page, '[data-testid="page-intel"]')
+      s.wywiad12 = await wholeIntel(page)
     }
     await shot(page, 'DW.2-wywiad')
     dump('kroki', s)

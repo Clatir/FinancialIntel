@@ -4,9 +4,10 @@
 import { describe, expect, it } from 'vitest'
 import { lateFees, lateFeeSpan, lateFeeText, type LateFee } from '@shared/calc/briefing'
 import { cargoStatuses, type CargoInput, type CargoStatus } from '@shared/calc/cargoStatus'
-import { radar } from '@shared/calc/radar'
-import { containerSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Container, type Transaction } from '@shared/schema'
-import { radarRows } from '../../src/renderer/features/radar/rows'
+import { radar, type RadarItem } from '@shared/calc/radar'
+import type { ScheduledDay } from '@shared/calc/scheduled'
+import { containerSchema, scheduledSchema, SCHEMA_VERSION, transactionSchema, XTB_WALLET_ACCOUNT_ID, type Container, type Transaction } from '@shared/schema'
+import { radarRows, type RadarRow } from '../../src/renderer/features/radar/rows'
 
 const zl = (v: number) => Math.round(v * 100)
 const AT = '2026-01-01T00:00:00.000Z'
@@ -41,6 +42,17 @@ const containers = [rent, netflix, phone, insurance]
 const cargo = cargoStatuses(input({ containers, transactions }))
 const items = radar({ today: TODAY, plans: [], containers, tanks: [], loans: [], money, cargo })
 const late = (rows: ReturnType<typeof radarRows>) => rows.filter((r) => r.late).map((r) => [r.item.name, r.item.date, r.item.amount, r.late!.dues.length])
+/** A shields line that counts every amount out from 10 000 zł (the radar's own never counts the fees – F27). */
+const SHIELDS = zl(10_000)
+const counting = (list: readonly RadarItem[]): RadarItem[] => {
+  let shields = SHIELDS
+  return list.map((i) => (i.amount == null ? i : { ...i, shieldsAfter: (shields -= i.direction === 'out' ? i.amount : 0) }))
+}
+/** The same line over the rows as the list shows them: each row's shields – a running sum of the rows above it. */
+const running = (rows: readonly RadarRow[]): Array<number | undefined> => {
+  let shields = SHIELDS
+  return rows.map(({ item: i }) => (i.amount == null ? undefined : (shields -= i.direction === 'out' ? i.amount : 0)))
+}
 
 describe('Radar: zaległe terminy po kontenerze (UX-30, D106 pkt 5)', () => {
   it('kilka zaległych terminów kontenera – jeden wiersz w miejscu najstarszego, tekst i suma jak w odprawie', () => {
@@ -96,20 +108,59 @@ describe('Radar: zaległe terminy po kontenerze (UX-30, D106 pkt 5)', () => {
     expect(rows.filter((r) => r.item.ref === insurance.id && r.item.overdue)).toHaveLength(1)
   })
 
-  it('„osłony po” wiersza zbiorczego – po ostatnim sklejonym terminie (kwota to suma wszystkich)', () => {
-    // The shields after each item as the list has them (the line of F27 – here set on the dues to see which one the row takes).
-    let shields = zl(10_000)
-    const withShields = items.map((i) => (i.amount == null ? i : { ...i, shieldsAfter: (shields -= i.direction === 'out' ? i.amount : 0) }))
+  it('„osłony po” – bieżąca suma wierszy: wiersz zbiorczy i wiersze pomiędzy nim a późniejszymi terminami grupy widzą je wydane', () => {
+    // U2 (1.21.1, T551). The line here counts the fees too (set on the dues to see what the rows do with them – the radar's
+    // own never counts them, F27: the test below).
+    const withShields = counting(items)
     const rentDues = withShields.filter((i) => i.ref === rent.id && i.overdue)
     expect(rentDues.map((i) => i.date)).toEqual(['2026-08-10', '2026-09-10', '2026-10-10', '2026-11-10'])
-    const row = radarRows(withShields, cargo, TODAY).find((r) => r.late?.containerId === rent.id)!
-    expect(row.item.amount).toBe(zl(8000))
-    // Before: the oldest due's – the shields as if only its 2 000 zł went.
-    expect(row.item.shieldsAfter).toBe(rentDues.at(-1)!.shieldsAfter)
-    expect(row.item.shieldsAfter).not.toBe(rentDues[0]!.shieldsAfter)
-    // A last due without the shields after it: none on the row either.
+    const rows = radarRows(withShields, cargo, TODAY)
+    // Each row's shields – those of the rows above it, as the single rows have them: the grouped row's dues all go at its place.
+    expect(rows.map((r) => r.item.shieldsAfter)).toEqual(running(rows))
+    const grouped = (id: string) => rows.find((r) => r.late?.containerId === id)!.item
+    expect(grouped(rent.id).amount).toBe(zl(8000))
+    expect(grouped(insurance.id).shieldsAfter).toBe(zl(10_000 - 600))
+    expect(grouped(rent.id).shieldsAfter).toBe(zl(10_000 - 600 - 8000))
+    // Netflix's October due, between the rent's row and its November due (and the insurance's): both gone before it.
+    const october = rows.find((r) => r.item.ref === netflix.id && r.item.date === '2026-10-12')!.item
+    expect(october.shieldsAfter).toBe(zl(10_000 - 600 - 8000 - 60))
+    expect(withShields.find((i) => i.key === october.key)!.shieldsAfter).toBe(zl(10_000 - 300 - 3 * 2000 - 60))
+    // After the groups' last dues: the row as the line has it – the same item.
+    const phoneDue = rows.find((r) => r.item.ref === phone.id && r.item.date === '2026-11-20')!.item
+    expect(phoneDue).toBe(withShields.find((i) => i.key === phoneDue.key))
+    expect(phoneDue.shieldsAfter).toBe(zl(10_000 - 600 - 8000 - 60 - 50))
+  })
+
+  it('„osłony po”: termin, którego linia nie liczy, niczego nie zmienia; wiersz zbiorczy bez liczonych terminów – bez osłon', () => {
+    const withShields = counting(items)
+    const rentDues = withShields.filter((i) => i.ref === rent.id && i.overdue)
+    // The rent's last due not counted: the rent's row and the rows after it go on from the other three.
     const lastBare = withShields.map((i) => (i === rentDues.at(-1) ? { ...i, shieldsAfter: undefined } : i))
-    expect(radarRows(lastBare, cargo, TODAY).find((r) => r.late?.containerId === rent.id)!.item.shieldsAfter).toBeUndefined()
+    const rows = radarRows(lastBare, cargo, TODAY)
+    expect(rows.find((r) => r.late?.containerId === rent.id)!.item.shieldsAfter).toBe(zl(10_000 - 600 - 6000))
+    expect(rows.find((r) => r.item.ref === netflix.id && r.item.date === '2026-10-12')!.item.shieldsAfter).toBe(zl(10_000 - 600 - 6000 - 60))
+    // None of the rent's dues counted: none on its row.
+    const bare = withShields.map((i) => (i.ref === rent.id && i.overdue ? { ...i, shieldsAfter: undefined } : i))
+    expect(radarRows(bare, cargo, TODAY).find((r) => r.late?.containerId === rent.id)!.item.shieldsAfter).toBeUndefined()
+  })
+
+  it('„osłony po” z linii Radaru (opłat nie liczy): wiersze pomiędzy terminami grupy bez zmian, wiersze opłat bez osłon', () => {
+    // A planned expense past its day (8 November) – between the rent's row (10 August) and its November due.
+    const service = scheduledSchema.parse({ ...base(), name: 'Serwis', date: '2026-11-08', amount: -zl(500) })
+    const day: ScheduledDay = { scheduled: service, date: '2026-11-08', state: 'late', txId: null, matched: false, days: -13 }
+    const lined = radar({ today: TODAY, plans: [], containers, tanks: [], loans: [], money, cargo, scheduled: [day], layers: { shields: zl(5000), hull: 0, goals: [], targets: { shields: null, hull: null } } })
+    const rows = radarRows(lined, cargo, TODAY)
+    const plan = rows.find((r) => r.item.kind === 'plan')!.item
+    // The shields never see the fees (F27): the rent's later dues take nothing from it – its own row, its own shields.
+    expect(plan).toBe(lined.find((i) => i.kind === 'plan'))
+    expect(plan.shieldsAfter).toBe(zl(4500))
+    const at = (key: string) => rows.findIndex((r) => r.item.key === key)
+    expect(at(`late:${rent.id}`)).toBeLessThan(at(plan.key))
+    expect(lined.find((i) => i.ref === rent.id && i.date === '2026-11-10')!.date > plan.date).toBe(true)
+    // The fees' rows – the grouped ones too – say no shields.
+    const fees = rows.filter((r) => r.item.kind === 'fixed' || r.item.kind === 'asteroid')
+    expect(fees.filter((r) => r.late)).toHaveLength(2)
+    expect(fees.map((r) => r.item.shieldsAfter)).toEqual(fees.map(() => undefined))
   })
 
   it('pozycje Radaru nie są zmieniane (kalendarz i salda kont czytają je dalej)', () => {

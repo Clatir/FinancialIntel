@@ -12,7 +12,10 @@ test('SW zwiad', async () => {
     log(run, 'okno', await qread(q))
     log(run, 'tekst', await qtext(q))
     log(run, 'konta', await q.getByTestId('quick-account').evaluate((s: HTMLSelectElement) => [...s.options].map((o) => o.textContent)))
-    log(run, 'kategorie', await q.getByTestId('quick-category').evaluate((s: HTMLSelectElement) => [...s.options].map((o) => o.textContent).join(' | ')))
+    // The category field is a combobox: its options are read from the open list (in a portal).
+    await q.getByTestId('quick-category').click()
+    log(run, 'kategorie', (await q.getByTestId('quick-category-list').locator('[role="option"]').allInnerTexts()).join(' | '))
+    await q.keyboard.press('Escape')
     await snap(q, 'sw-zwiad-okno')
     await q.keyboard.press('Escape')
     await page.getByTestId('nav-settings').click()

@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { test } from '@playwright/test'
 import { answerDialogs, start, useState } from './lab'
 import { breakdowns, EXP, flat, go, out, parseCsv, pdfText, pr1, readAll, readXlsx, rec, screenValues, shipState, snap, stepper, textOf, waitFile, type Screens } from './pr-pomoc'
+import { wholeIntel } from './wywiad'
 
 const RUN = 'pr-1'
 
@@ -91,7 +92,7 @@ test('PR przebieg 1 – persona rok: przekrój liczb (odczyt)', async () => {
         v.dowodztwo = flat(await textOf(page.getByTestId('page-command')))
         await go(page, '9', 'page-intel')
         await page.waitForTimeout(1500)
-        v.wywiad = flat(await textOf(page.getByTestId('page-intel')))
+        v.wywiad = flat(await wholeIntel(page))
         return v
       })
       dump('PR.3-ekrany', v)

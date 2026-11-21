@@ -4,6 +4,7 @@
 import { test, type ElectronApplication, type Page } from '@playwright/test'
 import { start, useState } from './lab'
 import { flat, go, out, pr1, quickWindow, readAll, rec, screenValues, snap, stepper, textOf, type Ctx } from './pr-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const RUN = 'pr-9'
 const PETS_FOOD = '01KDEFCAT00000000000000401'
@@ -107,7 +108,7 @@ test('PR przebieg 9 – „Cofnij” po wydatku 1 000 000 zł, dostawa z XTB 999
       await q.getByTestId('quick-amount').click()
       await q.getByTestId('quick-amount').fill('10')
       await q.getByTestId('quick-counterparty').fill('Zoo PR9')
-      await q.getByTestId('quick-category').selectOption(PETS_FOOD)
+      await pickCategory(q, 'quick-category', PETS_FOOD)
       await q.getByTestId('quick-time').fill('')
       await q.getByTestId('quick-note').click()
       await q.getByTestId('quick-save').click()

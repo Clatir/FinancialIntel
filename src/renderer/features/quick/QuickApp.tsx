@@ -9,6 +9,7 @@ import { newId } from '@shared/ids'
 import { HOUSE_MEMBER_ID, type Share } from '@shared/schema'
 import { shareAmounts, shareComplete, startShare } from '@shared/calc/share'
 import { ShareEditor } from '../household/ShareEditor'
+import { financeLabel } from '../household/financeWords'
 import { TagsField } from '../../components/TagsField'
 import { hashTags, tagKey, withoutHashTags, withTags } from '@shared/calc/tags'
 import { quickPartLines, quickShareAs, quickSurplusInput, restToChoose, senderOwn } from '@shared/calc/quick'
@@ -16,13 +17,14 @@ import { debtShares, evenShares, surplusView, type SurplusAs, type SurplusShare,
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
 import { ownsEscape } from '../../components/AnchoredList'
-import { IconClose, IconPlus } from '../../components/icons'
+import { IconClose } from '../../components/icons'
 import { api } from '../../lib/api'
 import type { QuickDraft } from '../../store/quickHost'
 import { useUi } from '../../store/ui'
 import { fieldWords } from './fieldWords'
 import { ForeignField } from '../operations/ForeignField'
 import { CategoryCombobox } from '../operations/CategoryCombobox'
+import { SplitMenu } from '../operations/SplitMenu'
 import { CounterpartyField } from '../operations/CounterpartyField'
 import type { CategoryChoice } from '../operations/pick'
 import { currencyRefusal, DEFAULT_CURRENCY } from '@shared/foreign'
@@ -512,7 +514,7 @@ export function QuickApp() {
       const fromDeposit = Math.min(v, m?.deposit ?? 0)
       out.push(
         <div key={`member:${id}`} data-testid="quick-preview-financed">
-          {gift ? 'Prezent od' : 'Finansuje'} {m?.name ?? 'domownik'}: {money(v)} – nie zjada energii
+          {financeLabel(!!gift, m?.name ?? 'domownik')} ({money(v)}) – nie zjada energii
           {fromDeposit ? `; z zaliczki ${money(fromDeposit)}` : ''}
           {v > fromDeposit ? (gift ? `; osłony ${money(v - fromDeposit)}, nikt nic nie jest winien` : `; pożyczają osłony ${money(v - fromDeposit)}, ma oddać`) : ''}.
         </div>
@@ -793,31 +795,31 @@ export function QuickApp() {
               <div className="flex items-center gap-1.5">
                 <CategoryPick data={data} value={d.categoryId} onChange={(categoryId) => set({ categoryId })} testId="quick-category" />
                 {!share && (
-                  <button
-                    type="button"
-                    className="btn h-[24px] shrink-0 px-1.5"
-                    title="Podziel paragon: kilka kategorii albo część domownika"
-                    onClick={() =>
-                      setLines([
-                        { amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable' && !!d.memberId, memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift },
-                        { amount: 0, categoryId: null, refundable: false, memberId: null }
-                      ])
-                    }
-                    data-testid="quick-split"
-                  >
-                    <IconPlus size={11} />
-                  </button>
-                )}
-                {!share && data.members.length > 0 && (
-                  <button
-                    type="button"
-                    className="btn h-[24px] shrink-0 px-1.5"
-                    title="Wspólnie: kilka osób płaci za ten zakup – równo, procentami albo kwotami"
-                    onClick={() => setShare(startShare(d.kind === 'refundable' && d.memberId ? d.memberId : data.members[0]!.id, d.kind === 'refundable' && !!d.gift))}
-                    data-testid="quick-joint-start"
-                  >
-                    wspólnie
-                  </button>
+                  <SplitMenu
+                    testId="quick-split-menu"
+                    items={[
+                      {
+                        label: 'Na kategorie',
+                        hint: 'Kilka kategorii albo część swoja i część domownika',
+                        testId: 'quick-split',
+                        run: () =>
+                          setLines([
+                            { amount: d.amount, categoryId: d.categoryId, refundable: d.kind === 'refundable' && !!d.memberId, memberId: d.kind === 'refundable' ? d.memberId : null, gift: d.kind === 'refundable' && !!d.gift },
+                            { amount: 0, categoryId: null, refundable: false, memberId: null }
+                          ])
+                      },
+                      ...(data.members.length > 0
+                        ? [
+                            {
+                              label: 'Na osoby',
+                              hint: 'Kilka osób płaci za ten zakup: równo, procentami albo kwotami',
+                              testId: 'quick-joint-start',
+                              run: () => setShare(startShare(d.kind === 'refundable' && d.memberId ? d.memberId : data.members[0]!.id, d.kind === 'refundable' && !!d.gift))
+                            }
+                          ]
+                        : [])
+                    ]}
+                  />
                 )}
               </div>
               {ruleHint && (

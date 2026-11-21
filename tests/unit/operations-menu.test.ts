@@ -9,6 +9,7 @@ import {
   navigate,
   placeAt,
   placeSub,
+  realHover,
   skipReason,
   whatOf,
   type MenuInput,
@@ -219,10 +220,40 @@ describe('kategoria, finansujący, rodzaj, usuń', () => {
     expect(leaf(sub(menu, 'category').items, `category-${FOOD}`).command).toEqual({ type: 'category', categoryId: FOOD, label: 'Jedzenie' })
     const fin = sub(menu, 'finance').items
     expect(leaf(fin, 'finance-me').command).toEqual({ type: 'finance', memberId: null, gift: false, label: 'Mój wydatek' })
-    expect(leaf(fin, 'finance-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: false, label: 'Finansuje Ola' })
-    expect(leaf(fin, 'finance-gift-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: true, label: 'Prezent od: Ola' })
+    expect(leaf(fin, 'finance-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: false, label: 'Kupione dla: Ola' })
+    expect(leaf(fin, 'finance-gift-m1').command).toEqual({ type: 'finance', memberId: 'm1', gift: true, label: 'Prezent dla: Ola' })
     // „wspólnie…” is the bar's alone – the share's editor does not fit a menu.
     expect(fin.some((n) => n.id.includes('share'))).toBe(false)
+  })
+
+  it('kategoria: pole szukania na górze, bez wpisu – całe drzewo z podkategoriami „· nazwa”', () => {
+    const items = sub(buildMenu(input([tx()])), 'category').items
+    expect(items.map((n) => n.id)).toEqual(['category-search', `category-${FOOD}`, 'category-sub1'])
+    expect(items[0]).toMatchObject({ type: 'search', query: '', none: false })
+    expect(leaf(items, 'category-sub1').label).toBe('· Zakupy')
+  })
+
+  it('kategoria: wpisany fragment zostawia pasujące (bez polskich znaków i wielkości liter), podkategoria z główną', () => {
+    const items = sub(buildMenu(input([tx()], { categoryQuery: 'ZAKUPY' })), 'category').items
+    expect(items.map((n) => n.id)).toEqual(['category-search', 'category-sub1'])
+    expect(leaf(items, 'category-sub1').label).toBe('Jedzenie · Zakupy')
+    expect(leaf(items, 'category-sub1').command).toEqual({ type: 'category', categoryId: 'sub1', label: 'Jedzenie · Zakupy' })
+    // The main category's name holds both: the main one and its subcategory.
+    expect(sub(buildMenu(input([tx()], { categoryQuery: 'jedz' })), 'category').items.map((n) => n.id)).toEqual(['category-search', `category-${FOOD}`, 'category-sub1'])
+  })
+
+  it('kategoria: fragment bez trafienia – tylko pole z „none”, a nawigacja zostaje na polu', () => {
+    const menu = buildMenu(input([tx()], { categoryQuery: 'zzz' }))
+    const items = sub(menu, 'category').items
+    expect(items).toEqual([{ type: 'search', id: 'category-search', query: 'zzz', none: true }])
+    const opened = navigate(menu, { path: [], focus: 'category' }, 'ArrowRight').nav
+    expect(opened).toEqual({ path: ['category'], focus: 'category-search' })
+  })
+
+  it('kategoria: „none” tylko przy wpisanym fragmencie – pusta lista bez wpisu nie mówi „Żadna kategoria…”', () => {
+    expect(sub(buildMenu(input([tx()], { categories: [] })), 'category').items).toEqual([{ type: 'search', id: 'category-search', query: '', none: false }])
+    expect(sub(buildMenu(input([tx()], { categories: [], categoryQuery: '  ' })), 'category').items[0]).toMatchObject({ none: false })
+    expect(sub(buildMenu(input([tx()], { categoryQuery: 'zzz' })), 'category').items[0]).toMatchObject({ none: true })
   })
 
   it('rodzaj: bez korekty; przelew – podmenu kont drugiej strony', () => {
@@ -319,6 +350,9 @@ describe('klawiatura', () => {
     nav = navigate(root, nav, 'ArrowDown').nav
     nav = navigate(root, nav, 'ArrowRight').nav
     expect(nav.path).toEqual(['category'])
+    // The category list opens on its search field (U5): typing at once finds a category.
+    expect(nav.focus).toBe('category-search')
+    nav = navigate(root, nav, 'ArrowDown').nav
     expect(nav.focus).toBe(`category-${FOOD}`)
     nav = navigate(root, nav, 'ArrowLeft').nav
     expect(nav.path).toEqual([])
@@ -419,5 +453,28 @@ describe('miejsce na ekranie', () => {
     const p = placeSub({ left: 20, top: 100, width: 230, height: 26 }, { w: 220, h: 200 }, narrow)
     expect(p.left).toBeGreaterThanOrEqual(8)
     expect(p.left + 220).toBeLessThanOrEqual(300 - 8)
+  })
+})
+
+describe('realHover: wejście myszy w pozycję', () => {
+  const last = { x: 100, y: 50, t: 1000 }
+
+  it('inna pozycja niż ostatnio zapisana albo brak zapisu – najechanie', () => {
+    expect(realHover(last, 120, 50, 5000)).toBe(true)
+    expect(realHover(last, 100, 51, 5000)).toBe(true)
+    expect(realHover(null, 100, 50, 5000)).toBe(true)
+  })
+
+  it('ruch przed wejściem (ta sama pozycja, świeży czas – kolejność zdarzeń zależy od systemu) – najechanie', () => {
+    expect(realHover(last, 100, 50, 1000)).toBe(true)
+    expect(realHover(last, 100, 50, 1050)).toBe(true)
+    expect(realHover({ ...last, t: 1030 }, 100, 50, 1000)).toBe(true)
+  })
+
+  it('ta sama pozycja, stary czas – lista przesunęła się pod nieruchomym kursorem, to nie najechanie', () => {
+    expect(realHover(last, 100, 50, 1051)).toBe(false)
+    expect(realHover(last, 100, 50, 9000)).toBe(false)
+    // The menu's opening position is no move: it never counts as fresh.
+    expect(realHover({ x: 100, y: 50, t: -Infinity }, 100, 50, 0)).toBe(false)
   })
 })

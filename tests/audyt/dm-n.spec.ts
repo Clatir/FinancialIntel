@@ -12,6 +12,7 @@
  */
 import { test, type Page } from '@playwright/test'
 import { ACC, addRecords, editorText, fixedId, log, mostek, openOp, przychody, radar, raport, rd, runRok, snap, toastsAfter, line, typeIn, recs, rowsOf } from './dm-pomoc'
+import { openForm } from '../e2e/forms'
 
 const S = 'rok+dm-n'
 const L = { ola: fixedId(401), iga: fixedId(402), zosia: fixedId(403), x: fixedId(404), y: fixedId(405) }
@@ -43,6 +44,7 @@ async function newLoanPanel(page: Page) {
   await page.keyboard.press('Control+7')
   await page.getByTestId('page-radar').waitFor()
   await page.waitForTimeout(600)
+  await openForm(page, 'loan')
   return page.getByTestId('radar-new-loan')
 }
 

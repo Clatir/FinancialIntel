@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
-import { openForm } from './forms'
+import { openForm, splitQuick } from './forms'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -52,7 +52,7 @@ test('Ctrl+N z każdego ekranu, szkic formularza po zmianie ekranu, szybki wpis:
     // The quick entry: a receipt split, then „Wpływ” – saved as money in, without the receipt's lines (B118).
     const quick = await quickWindow(app, page)
     await quick.getByTestId('quick-amount').fill('250')
-    await quick.getByTestId('quick-split').click()
+    await splitQuick(quick, 'categories')
     await expect(quick.getByTestId('quick-lines')).toBeVisible()
     await quick.getByRole('radio', { name: 'Wpływ' }).click()
     await expect(quick.getByTestId('quick-lines')).toHaveCount(0)

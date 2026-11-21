@@ -8,9 +8,15 @@ import { dm, formatPln } from '../../src/shared/format'
 import { launch } from './app'
 import { openForm } from './forms'
 import { records } from './files'
-import { seedFolder, zl } from './seed'
+import { seedFolder, seedId, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
+/** An amount as the list says it („12 345,67 zł”, „−80,00 zł”) – in grosze. */
+const groszeOf = (text: string): number => {
+  const m = /^(−?)([\d\s]+),(\d{2}) zł$/.exec(text.trim())
+  if (!m) throw new Error(`not an amount: ${text}`)
+  return (m[1] ? -1 : 1) * (Number(m[2]!.replace(/\s/g, '')) * 100 + Number(m[3]))
+}
 const AUTO = '01KDEFCAT00000000000000300'
 const RENT = '01K9Z6B00000000000000000C1'
 
@@ -126,6 +132,7 @@ test('Radar: zaległe terminy jednego kontenera jednym wierszem, jak w odprawie;
   const mon = (d: string) => `${SHORT_MONTHS[Number(d.slice(5, 7)) - 1]}${years ? ` ${d.slice(0, 4)}` : ''}`
   // Netflix only last month: its one due unpaid.
   const netflixDue = `${addMonths(month, -1)}-12`
+  const repaidFirst = `${addMonths(month, -2)}-20`
   const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-radar-z6b-')), 'FinancialIntel')
   seedFolder(dataDir, {
     settings: (s) => ({ ...s, budget: { ...s.budget, start } }),
@@ -135,6 +142,22 @@ test('Radar: zaległe terminy jednego kontenera jednym wierszem, jak w odprawie;
       containers: [
         { id: RENT, name: 'Czynsz', amount: zl(2000), cycleMonths: 1, dueMonth: start.slice(0, 7), dueDay: 10, until: addMonths(month, -1), accountId: MBANK, counterparty: 'Spółdzielnia' },
         { name: 'Netflix', amount: zl(60), cycleMonths: 1, dueMonth: addMonths(month, -1), dueDay: 12, from: addMonths(month, -1), until: addMonths(month, -1), accountId: MBANK, counterparty: 'NETFLIX' }
+      ],
+      // U2 (T551): a loan given – its first repayment between the rent's oldest and last dues, its second today; the
+      // shields after them move by the repayments alone.
+      loans: [
+        {
+          name: 'Pożyczka dla Ani',
+          direction: 'given',
+          counterparty: 'Anna Nowak',
+          amount: zl(600),
+          date: start,
+          accountId: MBANK,
+          schedule: [
+            { id: seedId(), date: repaidFirst, amount: zl(300) },
+            { id: seedId(), date: today, amount: zl(250) }
+          ]
+        }
       ]
     }
   })
@@ -167,6 +190,14 @@ test('Radar: zaległe terminy jednego kontenera jednym wierszem, jak w odprawie;
     const shieldsX = async (row: typeof rent) => (await row.getByTestId('radar-shields-after').boundingBox())!.x
     expect(await shieldsX(rent)).toBe(await shieldsX(netflix))
     expect((await rent.getByTestId('radar-item-open').boundingBox())!.width).toBeGreaterThanOrEqual(80)
+    // „osłony po” (U2, T551): the shields never see the fees – the rent's row says none, and the repayment between its
+    // dues takes nothing of its later ones: the next repayment adds its own 250 zł alone.
+    await expect(rent.getByTestId('radar-shields-after')).toHaveText('')
+    const repayments = page.locator('[data-testid="radar-item"][data-kind="repayment"]')
+    await expect(repayments).toHaveCount(2)
+    await expect(repayments.first()).toContainText(dm(repaidFirst))
+    const shieldsOf = async (n: number) => groszeOf(await repayments.nth(n).getByTestId('radar-shields-after').innerText())
+    expect((await shieldsOf(1)) - (await shieldsOf(0))).toBe(zl(250))
     // A row past its day: its day in the accent, its note in the day's hint – the notes' column is hidden here (T548).
     const dayOf = (row: typeof rent) => row.getByTestId('radar-item-day')
     await expect(dayOf(netflix)).toHaveClass(/\btext-accent\b/)

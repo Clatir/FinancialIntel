@@ -4,6 +4,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading, shot, start, useState } from './lab'
 import { go, out, shotEl, stepper, textOf } from './wy-pomoc'
+import { intelTab } from './wywiad'
 
 const RUN = 'ry-6'
 
@@ -38,6 +39,7 @@ test('RY przebieg 6 – potwierdzenia', async () => {
     })
     await step('dziennik', async () => {
       await go(page, '9', 'page-intel')
+      await intelTab(page, 'log')
       await page.getByRole('radio', { name: '12 mies.', exact: true }).click()
       await page.waitForTimeout(1200)
       const rows = await page.getByTestId('intel-log-row').evaluateAll((els) => els.map((e) => (e as HTMLElement).innerText.replace(/\s+/g, ' ')))

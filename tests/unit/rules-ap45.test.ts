@@ -283,7 +283,7 @@ describe('AP-45: reguły dla wpisów ręcznych (T470)', () => {
     expect(manualRuleHint({ counterparty: 'Netflix', direction: 'out' }, hintCtx([plain]))).toBeNull()
     const h = manualRuleHint({ counterparty: 'Netflix', direction: 'out' }, hintCtx([plain, manual]))
     expect(h).toMatchObject({ rule: { id: manual.id }, categoryId: FUN, pays: true, refundable: true, memberId: TOMEK, gift: false, share: null })
-    expect(ruleHintText(h!, { category: () => 'Rozrywka', member: () => 'Tomek' })).toBe('z reguły „Netflix”: Rozrywka · finansuje: Tomek')
+    expect(ruleHintText(h!, { category: () => 'Rozrywka', member: () => 'Tomek' })).toBe('z reguły „Netflix”: Rozrywka · kupione dla: Tomek')
     const byTitle = when([title('czynsz')], { manual: true, label: 'Czynsz', categoryId: RENT })
     expect(manualRuleHint({ counterparty: '', title: 'Czynsz za grudzień', direction: 'out' }, hintCtx([byTitle]))?.categoryId).toBe(RENT)
     expect(manualRuleHint({ counterparty: '  ', direction: 'out' }, hintCtx([byTitle]))).toBeNull()

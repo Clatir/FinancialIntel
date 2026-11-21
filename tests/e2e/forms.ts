@@ -20,11 +20,12 @@ export async function openForm(page: Page, which: keyof typeof FORMS): Promise<v
 // „bez kategorii”. `scope` may be a locator (a phone's editor): the list is in a portal, so it is looked up on the page.
 type Scope = Pick<Page, 'getByTestId'> & { page?: () => Page }
 
-export async function pickCategory(scope: Scope, testId: string, nameOrId: string | null): Promise<void> {
+export async function pickCategory(scope: Scope, testId: string, nameOrId: string | null, nth = 0): Promise<void> {
   const page: Page = typeof scope.page === 'function' ? scope.page() : (scope as Page)
   // The field typed in before (a counterparty with suggestions) leaves first: its list may cover this one.
   await page.evaluate('document.activeElement?.blur?.()')
-  await scope.getByTestId(testId).first().click()
+  // `nth`: the n-th field of the same test id (the lines of a split receipt).
+  await scope.getByTestId(testId).nth(nth).click()
   const list = page.getByTestId(`${testId}-list`).first()
   await list.waitFor()
   const by = !nameOrId ? '[data-id=""]' : /^01[0-9A-Z]{24}$/.test(nameOrId) ? `[data-id="${nameOrId}"]` : `[data-label="${nameOrId}"]`
@@ -37,4 +38,10 @@ export async function pickCategory(scope: Scope, testId: string, nameOrId: strin
 export async function splitOperation(page: Page, how: 'categories' | 'people'): Promise<void> {
   await page.getByTestId('operation-split-menu').click()
   await page.getByTestId(how === 'categories' ? 'operation-split' : 'operation-share-start').click()
+}
+
+// U5: the quick entry's „Podziel…” is the same menu – „Na kategorie” (`quick-split`) and „Na osoby” (`quick-joint-start`).
+export async function splitQuick(quick: Pick<Page, 'getByTestId'>, how: 'categories' | 'people'): Promise<void> {
+  await quick.getByTestId('quick-split-menu').click()
+  await quick.getByTestId(how === 'categories' ? 'quick-split' : 'quick-joint-start').click()
 }

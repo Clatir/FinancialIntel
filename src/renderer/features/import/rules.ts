@@ -33,6 +33,7 @@ import { countLabel } from '../../lib/format'
 import { plnText } from '../../components/fields'
 import { advanceRuleKey } from '@shared/import/audit'
 import { MEMBER_MONEY_TEXT } from './options'
+import { financeLabelInline } from '@shared/financeWords'
 
 const NO_ALIASES: BrandAliases = {}
 /** The names the user merged (1.2.2): an operation's brand is looked up and remembered through them. */
@@ -164,7 +165,7 @@ export function ruleDecisionText(
   if (r.kind === 'income' && r.loanId && r.loanAmount) return `${ruleDecisionText({ ...r, loanId: undefined, loanAmount: undefined }, catLabel, members)} · w tym spłata pożyczki: ${loanName} ${plnText(r.loanAmount)} zł`
   if (r.kind === 'expense') {
     const archived = !!r.categoryId && !!settings?.categories.find((c) => c.id === r.categoryId)?.archived
-    return `${r.refundable ? `${r.gift ? 'prezent od' : 'finansuje'}: ${memberName(r.memberId, members)} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}${archived ? ' (zarchiwizowana)' : ''}`
+    return `${r.refundable ? `${financeLabelInline(!!r.gift, memberName(r.memberId, members))} · ` : r.share ? `wspólnie: ${shareNames(r.share, members)} · ` : ''}${catLabel(r.categoryId) || 'bez kategorii'}${archived ? ' (zarchiwizowana)' : ''}`
   }
   if (r.kind === 'income') {
     if (!r.household) return 'wpływ (przychód)'
@@ -410,7 +411,8 @@ export function saveConditionsRule(id: string | null, d: ConditionsDraft): strin
     toast(`Reguła „${label}” zmieniona.`, 'success', 6000, { label: 'Cofnij', run: () => ruleBack(was, rule) })
   } else {
     setRules((list) => [...list, rule])
-    toast(`Nowa reguła: „${label}”.`, 'success', 6000, {
+    // At least `UNDO_MIN_MS` – the action's own time (T550).
+    toast(`Nowa reguła: „${label}”.`, 'success', undefined, {
       label: 'Cofnij',
       run: () => {
         // Deleted only while as it was added (an edit since stays – T418).
@@ -484,7 +486,8 @@ export function addAmountRule(input: { brand: string; label: string; maxAmount: 
     updatedAt: new Date().toISOString()
   })
   setRules((rules) => [...rules, rule])
-  toast(`Nowa reguła: ${input.label} do ${(input.maxAmount / 100).toLocaleString('pl-PL')} zł.`, 'success', 6000, {
+  // At least `UNDO_MIN_MS` – the action's own time (T550).
+  toast(`Nowa reguła: ${input.label} do ${plnText(input.maxAmount)} zł.`, 'success', undefined, {
     label: 'Cofnij',
     run: () => {
       // Deleted only while as it was added (an edit since stays – review 3 of N4).

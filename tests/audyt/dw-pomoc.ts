@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync, ex
 import { join } from 'node:path'
 import type { ElectronApplication, Locator, Page } from '@playwright/test'
 import { LAB } from './lab'
+import { pickCategory } from '../e2e/forms'
 
 export function out(run: string): (name: string, content: unknown) => void {
   const dir = join(LAB, 'przebiegi', run, 'out')
@@ -330,7 +331,7 @@ export async function quickExpense(
   await q.getByTestId('quick-amount').click()
   await q.getByTestId('quick-amount').fill(o.amount)
   await q.getByTestId('quick-counterparty').fill(o.name)
-  if (o.category) await q.getByTestId('quick-category').selectOption(o.category)
+  if (o.category) await pickCategory(q, 'quick-category', o.category)
   if (o.date) {
     await q.getByTestId('quick-date').click()
     await q.getByTestId('quick-date').fill(o.date)

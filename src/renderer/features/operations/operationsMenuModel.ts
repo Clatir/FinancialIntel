@@ -9,6 +9,8 @@ import { tagKey } from '@shared/calc/tags'
 import { plDate, plural } from '@shared/format'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction } from '@shared/schema'
 import { bulkProbe, type BulkChange, type OpState } from './bulkModel'
+import { financeLabel } from '../household/financeWords'
+import { filterChoices } from './pick'
 
 /** What an item does when chosen: the old actions of the bar, a change with its preview, a change at once. */
 export type MenuCommand =
@@ -49,6 +51,8 @@ export type MenuWidget =
   | { type: 'calendar'; id: string; month: string; today: string; selected: string | null; disabled?: string }
   | { type: 'shift'; id: string; disabled?: string }
   | { type: 'newtag'; id: string; disabled?: string }
+  /** The category list's search field (the fragment typed; `none` – nothing in the tree holds it). */
+  | { type: 'search'; id: string; query: string; none: boolean; disabled?: string }
 
 export type MenuNode = MenuLeaf | MenuSub | MenuSep | MenuWidget
 
@@ -63,6 +67,8 @@ export interface MenuInput {
   today: string
   /** In the order of the tree: `name` as listed, `label` as the toast says it, `sub` – a subcategory. */
   categories: ReadonlyArray<{ id: string; name: string; label: string; sub: boolean }>
+  /** The fragment typed in the category list's search field – the list shows only the categories that hold it (as `filterChoices`). */
+  categoryQuery?: string
   accounts: ReadonlyArray<{ id: string; name: string; archived: boolean }>
   members: ReadonlyArray<{ id: string; name: string; archived: boolean }>
   tags: readonly string[]
@@ -129,10 +135,18 @@ export function buildMenu(input: MenuInput): MenuNode[] {
   const accountsShown = input.accounts.filter((a) => !a.archived || usedAccounts.has(a.id))
   const activeMembers = input.members.filter((m) => !m.archived)
 
+  // The search field first, as the editor's category field has it (Z7): a fragment keeps the categories whose whole label
+  // holds it – a subcategory then shows its main one („Jedzenie · Zakupy”), as the field's list does.
+  const query = input.categoryQuery ?? ''
+  const matching = new Set(filterChoices(input.categories.map((c) => ({ id: c.id, label: c.label, main: !c.sub })), query).map((c) => c.id))
+  const shownCategories = input.categories.filter((c) => matching.has(c.id))
   const category = group(
     'category',
     'Kategoria',
-    input.categories.map((c) => ({ type: 'leaf', id: `category-${c.id}`, label: c.sub ? `· ${c.name}` : c.name, command: { type: 'category', categoryId: c.id, label: c.label } }) as MenuLeaf),
+    [
+      { type: 'search', id: 'category-search', query, none: !!query.trim() && !shownCategories.length },
+      ...shownCategories.map((c) => ({ type: 'leaf', id: `category-${c.id}`, label: c.sub && !query.trim() ? `· ${c.name}` : c.label, command: { type: 'category', categoryId: c.id, label: c.label } }) as MenuLeaf)
+    ],
     null
   )
 
@@ -141,8 +155,8 @@ export function buildMenu(input: MenuInput): MenuNode[] {
     'Finansujący',
     [
       { type: 'leaf', id: 'finance-me', label: 'ja (mój wydatek)', command: { type: 'finance', memberId: null, gift: false, label: 'Mój wydatek' } },
-      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-${m.id}`, label: `kupione dla: ${m.name} (odda)`, command: { type: 'finance', memberId: m.id, gift: false, label: `Finansuje ${m.name}` } })),
-      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-gift-${m.id}`, label: `prezent dla: ${m.name}`, command: { type: 'finance', memberId: m.id, gift: true, label: `Prezent od: ${m.name}` } }))
+      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-${m.id}`, label: `kupione dla: ${m.name} (odda)`, command: { type: 'finance', memberId: m.id, gift: false, label: financeLabel(false, m.name) } })),
+      ...activeMembers.map((m): MenuLeaf => ({ type: 'leaf', id: `finance-gift-${m.id}`, label: `prezent dla: ${m.name}`, command: { type: 'finance', memberId: m.id, gift: true, label: financeLabel(true, m.name) } }))
     ],
     null
   )
@@ -354,6 +368,19 @@ export function navigate(root: MenuNode[], nav: MenuNav, key: MenuKey): { nav: M
       return node.type === 'leaf' ? { nav, run: node } : { nav }
     }
   }
+}
+
+/** How long a mousemove counts as the same move as the mouseenter beside it (ms). */
+export const SAME_MOVE_MS = 50
+
+/**
+ * Whether the mouse entering an item is the mouse's own move. The order of the move's events differs between systems
+ * (the mousemove may come before the mouseenter of the same move), so a fresh mousemove (`last.t` within `SAME_MOVE_MS`
+ * of the entry) is the same move whatever the order. A list that shifts under a resting pointer gives an entry at the
+ * same position with no fresh move – no hover (an item coming under the pointer while one types in the field).
+ */
+export function realHover(last: { x: number; y: number; t: number } | null, x: number, y: number, t: number): boolean {
+  return !last || last.x !== x || last.y !== y || Math.abs(t - last.t) <= SAME_MOVE_MS
 }
 
 // ------------------------------------------------------------------ place on the screen

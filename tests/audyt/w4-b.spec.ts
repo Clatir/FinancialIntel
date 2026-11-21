@@ -8,6 +8,7 @@ import { LAB, shot, start, text, useState } from './lab'
 import { seedFolder, zl } from '../e2e/seed'
 import { editJson, go, out, textOf } from './dw-pomoc'
 import { OP, answerQuestions, banners, byId, mainLog, openOp, openRok, sleep, trap, trapped } from './da-pomoc'
+import { intelTab } from './wywiad'
 
 const toasts = (page: Page): Promise<string[]> => page.getByRole('status').allInnerTexts().catch(() => [])
 const ACC = '01KDEFACC00000000000000001'
@@ -27,6 +28,7 @@ test('W4 – WY.20 wariant: raty pożyczki dla Tomka po 2027', async () => {
     await page.waitForTimeout(5000)
     const ship = await textOf(page.locator('section[data-panel="bridge:Stan okrętu"]'))
     await go(page, '9', 'page-intel')
+    await intelTab(page, 'forecasts')
     await page.waitForTimeout(2500)
     dump('WY.20b', { mostek: ship, prognoza: await textOf(page.getByTestId('intel-range-text')), symulator: await textOf(page.getByTestId('maneuver-range')) })
     await page.getByTestId('intel-maneuver').scrollIntoViewIfNeeded()
@@ -70,6 +72,7 @@ test('W4 – WY.19 kurs przy pustych osłonach i kadłubie', async () => {
     await page.waitForTimeout(5000)
     const bridge = await text(page, '[data-testid="page-bridge"]')
     await go(page, '9', 'page-intel')
+    await intelTab(page, 'forecasts')
     await page.waitForTimeout(2500)
     const c = page.getByTestId('intel-course')
     dump('WY.19', {

@@ -64,7 +64,8 @@ test('RA przebieg 3 – boje po terminie, 30 dni, odhacz, wpływ przy pełnych o
     await step('RA.12-zakup', async () => {
       await go(page, '7', 'page-radar')
       const opens = page.locator('[data-testid="radar-member-open"]')
-      for (let i = 0; i < (await opens.count()); i++) await opens.nth(i).locator('summary').click()
+      // The open purchases are always shown (no <details> to open).
+      await opens.first().waitFor().catch(() => undefined)
       await page.waitForTimeout(300)
       const btn = page.locator('[data-testid="radar-member-purchase"]:not([disabled])').first()
       const label = (await btn.innerText().catch(() => '(brak)')).replace(/\s+/g, ' ')

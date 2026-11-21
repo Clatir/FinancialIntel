@@ -4,6 +4,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading, shot, start, text, useState } from './lab'
 import { cat, command, deleteOpen, energy, gameFiles, go, goOps, openOp, out, quickWindow, textOf, toasts, undo } from './dw-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const RUN = 'dw-3'
 
@@ -34,7 +35,7 @@ test('DW.3 / DW.6 – ocena dzisiejsza i korekta zamrożonych dni', async () => 
     await q.getByTestId('quick-amount').click()
     await q.getByTestId('quick-amount').fill('100')
     await q.getByTestId('quick-counterparty').fill('Sklep DW3')
-    await q.getByTestId('quick-category').selectOption(cat(101))
+    await pickCategory(q, 'quick-category', cat(101))
     await q.getByTestId('quick-time').fill(time)
     await q.getByTestId('quick-time').press('Tab')
     dump('1-szybki-wpis-podglad', await textOf(q.getByTestId('quick-entry')))
@@ -80,7 +81,7 @@ test('DW.3 / DW.6 – ocena dzisiejsza i korekta zamrożonych dni', async () => 
     await q.getByTestId('quick-amount').click()
     await q.getByTestId('quick-amount').fill('300')
     await q.getByTestId('quick-counterparty').fill('Hurtownia DW6')
-    await q.getByTestId('quick-category').selectOption(cat(101))
+    await pickCategory(q, 'quick-category', cat(101))
     await q.getByTestId('quick-date').click()
     await q.getByTestId('quick-date').fill('01.11.2026')
     await q.getByTestId('quick-date').press('Tab')

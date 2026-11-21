@@ -2,6 +2,7 @@
 import { test, type Page } from '@playwright/test'
 import { reading } from './lab'
 import { balanceOf, bridgeNumbers, editorText, goOps, openOp, ops, periodAll, rows, run, say, snap, step, sums, text, toasts, typeIn, WALLET } from './op-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const amountVal = (page: Page) => page.getByTestId('operation-amount').inputValue()
 const radios = async (page: Page, label: string) =>
@@ -207,7 +208,7 @@ test('OP.16 rodzaj, kierunek, zwrot towaru', async () => {
     await page.getByTestId('operation-account').selectOption({ label: 'Portfel XTB' })
     await page.getByTestId('operation-counterparty').fill('Rodzaj test')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await page.waitForTimeout(500)
     const file = async () => (await ops(dataDir)).find((t) => t.counterparty === 'Rodzaj test')
     say('OP.16 wydatek', { kierunek: await radios(page, 'Kierunek'), kwota: await amountVal(page), plik: [(await file())?.kind, (await file())?.amount] })
@@ -252,7 +253,7 @@ test('OP.16 rodzaj, kierunek, zwrot towaru', async () => {
     await page.getByTestId('operation-account').selectOption({ label: 'Portfel XTB' })
     await page.getByTestId('operation-counterparty').fill('Zwrot towaru test')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await page.waitForTimeout(700)
     const ret = (await ops(dataDir)).find((t) => t.counterparty === 'Zwrot towaru test')
     say('OP.16 zwrot towaru', {

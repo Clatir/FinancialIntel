@@ -44,7 +44,7 @@ import { useWealth } from '../intel/wealth'
 import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
 import { glossaryOf, ictOf } from '@shared/glossary'
 import { HOUSE_MEMBER_ID } from '@shared/schema'
-import { useInboxCount } from '../inbox/state'
+import { useInboxCount } from '../../store/inboxCount'
 import { EveningReport } from '../evening/EveningReport'
 import { monthBarOf } from './monthBar'
 import { openSettlements, settlementsShown } from '../radar/settlements'
@@ -385,6 +385,7 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   // A household member's purchase or money (D80) says whose it is instead of the category.
   const noteOf = (t: (typeof recent)[number]): string => {
     const financed = financersText(t, members)
+    // A list of the financers (me, members, „(prezent)”) – the field's word, not one member's label (T552).
     if (financed) return `finansuje: ${financed}`
     const payer = payerOf(t)
     if (payer) return `od: ${memberName(payer, members)}`

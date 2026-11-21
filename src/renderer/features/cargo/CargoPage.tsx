@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { addMonths, daysInMonth, monthsBetween, warsawNow } from '@shared/calc/dates'
 import { glossaryOf } from '@shared/glossary'
 import { nextDueOf, paymentsIndex } from '@shared/calc/cargoStatus'
@@ -108,8 +108,10 @@ export function CargoPage() {
   const setDraft = (d: ContainerDraft | null) => (d ? setForm((f) => ({ ...f, draft: d })) : clearForm())
   const openDraft = (d: ContainerDraft) => setForm((f) => ({ draft: d, key: f.key + 1 }))
   const [showArchived, setShowArchived] = useState(false)
-  // The history's proposals ticked for „Dodaj zaznaczone” (UX-81): only a choice of the moment, nothing typed.
-  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  // The history's proposals ticked for „Dodaj zaznaczone” (UX-81): a draft like the forms – another screen and back keeps
+  // the ticks (the folder's change drops them); a proposal gone from the list drops out of `pickedList`.
+  const [pickedDraft, setPickedDraft, clearPicked] = useDraft<{ keys: string[] }>('cargo:picked', () => ({ keys: [] }))
+  const picked = useMemo<ReadonlySet<string>>(() => new Set(pickedDraft.keys), [pickedDraft])
   // The over-the-line question answered „yes” for this very set of ticks – another tick asks again.
   const [overOk, setOverOk] = useState('')
   // Opened from the palette (F19): selected, the archive shown for an archived one.
@@ -123,6 +125,12 @@ export function CargoPage() {
   const watch = useCargoWatch()
   const proposals = watch.proposals
   const ignored = useData((s) => s.fi?.settings.cargo.ignored.length ?? 0)
+  // A tick of a proposal that has left the list (added, hidden) goes with it – it never comes back ticked.
+  useEffect(() => {
+    if (!fleet) return
+    const live = new Set(proposals.map((p) => p.key))
+    if (pickedDraft.keys.some((k) => !live.has(k))) setPickedDraft({ keys: pickedDraft.keys.filter((k) => live.has(k)) })
+  }, [fleet, proposals, pickedDraft, setPickedDraft])
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const sim = (change: Parameters<typeof simulateCargo>[1]) =>
     simulateCargo({ shields: fleet.shields.amount, hull: fleet.hull.amount, costs: fleet.costs.average, salary: fleet.plan?.salary ?? null, limitPct: fleet.cargo.limitPct, month, containers, debt: fleet.debt }, change)
@@ -131,7 +139,7 @@ export function CargoPage() {
   // All the ticked ones as one cost: the load line and the range after adding them together.
   const pickedSim = pickedList.length ? sim({ add: { amount: sum(pickedList.map((p) => monthlyShare({ amount: p.amount, cycleMonths: p.cycleMonths, schedule: p.schedule }))), cycleMonths: 1 } }) : null
   const pickedOver = !!pickedSim?.after.over
-  const tick = (key: string, on: boolean) => setPicked((x) => new Set(on ? [...x, key] : [...x].filter((k) => k !== key)))
+  const tick = (key: string, on: boolean) => setPickedDraft((d) => ({ keys: on ? [...d.keys.filter((k) => k !== key), key] : d.keys.filter((k) => k !== key) }))
   const priceOf = new Map(watch.prices.map((p) => [p.containerId, p]))
   const deadOf = new Map(watch.dead.map((d) => [d.containerId, d]))
   const current = selected ? containers.find((c) => c.id === selected) : undefined
@@ -270,7 +278,7 @@ export function CargoPage() {
                       type="checkbox"
                       checked={pickedList.length === proposals.length}
                       disabled={readOnly}
-                      onChange={(e) => setPicked(e.currentTarget.checked ? new Set(proposals.map((p) => p.key)) : new Set())}
+                      onChange={(e) => setPickedDraft({ keys: e.currentTarget.checked ? proposals.map((p) => p.key) : [] })}
                       data-testid="cargo-proposals-pick-all"
                     />{' '}
                     zaznacz wszystkie ({proposals.length})
@@ -316,7 +324,7 @@ export function CargoPage() {
                         disabled={readOnly}
                         onClick={() => {
                           addProposals(pickedList)
-                          setPicked(new Set())
+                          clearPicked()
                         }}
                         data-testid="cargo-proposals-add-picked"
                       >
@@ -484,9 +492,9 @@ function ContainerFields({ c, set, saved, catchUp, due }: { c: ContainerDraft; s
       <Field label="Okres" hint="Puste = bez końca; rata z ostatnim miesiącem.">
         <div className="flex items-center gap-2 text-muted">
           od
-          <MonthField className="w-[90px]" value={c.from} allowEmpty onChange={(from) => set({ from })} aria-label="Od miesiąca" data-testid="container-from" />
+          <MonthField className="w-[124px]" value={c.from} allowEmpty onChange={(from) => set({ from })} aria-label="Od miesiąca" data-testid="container-from" />
           do
-          <MonthField className="w-[90px]" value={c.until} allowEmpty onChange={(until) => set({ until })} aria-label="Do miesiąca" data-testid="container-until" />
+          <MonthField className="w-[124px]" value={c.until} allowEmpty onChange={(until) => set({ until })} aria-label="Do miesiąca" data-testid="container-until" />
         </div>
       </Field>
       <Field label="Notatka">

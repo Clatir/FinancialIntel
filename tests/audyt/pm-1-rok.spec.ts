@@ -27,6 +27,7 @@ import {
   typeAmount,
   CAT
 } from './pm-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const RUN = 'pm-1'
 
@@ -290,7 +291,7 @@ test('PM przebieg 1 – rok: pensja, przychody, podział, łupy, plan w przód, 
       await date.click()
       await date.fill('15.10.2026')
       await date.press('Tab')
-      await page.getByTestId('operation-category').selectOption(CAT.groceries)
+      await pickCategory(page, 'operation-category', CAT.groceries)
       await page.getByTestId('operation-counterparty').fill('AUDYT PM21 SKLEP')
       await page.getByTestId('operation-counterparty').press('Enter')
       await page.waitForTimeout(1500)

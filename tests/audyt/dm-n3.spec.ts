@@ -4,6 +4,7 @@
  */
 import { test, type Page } from '@playwright/test'
 import { log, mostek, raport, rd, runRok, snap, toastsAfter, typeIn, line, radar } from './dm-pomoc'
+import { openForm } from '../e2e/forms'
 
 const S = 'rok+dm-n3'
 const row = (page: Page) => page.locator('[data-testid="loan-row"][data-name="Pożyczka dla Oli"]')
@@ -15,6 +16,7 @@ test('DM.18 – nadpłata pożyczki udzielonej (tylko okno)', async () => {
   try {
     await page.keyboard.press('Control+7')
     await page.waitForTimeout(800)
+    await openForm(page, 'loan')
     const p = page.getByTestId('radar-new-loan')
     await p.locator('[role="radiogroup"][aria-label="Kierunek pożyczki"]').getByRole('radio', { name: 'Pożyczam komuś' }).click()
     await p.getByTestId('loan-name').fill('Pożyczka dla Oli')

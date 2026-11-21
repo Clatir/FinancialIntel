@@ -22,7 +22,8 @@ const data = await import('../../src/renderer/store/data')
 const ui = await import('../../src/renderer/store/ui')
 const { matchesTitle, findMatchingByTitle, applyTargetToTransaction, applyTitleRule, titleKeyword, titleRulePlan } = await import('../../src/renderer/features/operations/titleRules')
 const { useBulkPreview, closeBulkPreview } = await import('../../src/renderer/features/operations/bulkPreview')
-const { addKeywordRule, rememberCategory } = await import('../../src/renderer/features/import/rules')
+const { addKeywordRule, rememberCategory, addAmountRule, saveConditionsRule } = await import('../../src/renderer/features/import/rules')
+const { updateOperation } = await import('../../src/renderer/features/operations/state')
 const { confirmedChanges } = await import('@shared/calc/balances')
 const { balanceSchema } = await import('@shared/schema')
 
@@ -488,6 +489,225 @@ describe('reguła tytułu – poprawki po przeglądzie 1.21.0 (T549)', () => {
     again()
     expect(rulesNow()).toHaveLength(2)
     expect(lastToast()!.text).toBe('Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.')
+  })
+})
+
+// U1 (1.21.1, T550): „Cofnij” of the rule alone takes back the open operation's own edit in the editor too (while it is
+// as the edit left it – T418) and stays at least `UNDO_MIN_MS` (the toast's action, no fixed time).
+describe('„Cofnij” samej reguły tytułu – też edycja otwartej operacji (U1, T550)', () => {
+  const FOOD = defaultCategoryId(1)
+  const income = { keyword: 'ubezpieczyciel', kind: 'income', direction: 'in' } as const
+  /** The editor's `patch` as `TitleRuleAction` runs it (`updateOperation`), returning the fields it set. */
+  const editor = (id: string, p: Partial<Transaction>, draft = false) => () => {
+    updateOperation(id, (r) => ({ ...r, ...p }), draft)
+    return p
+  }
+  const toIncome = { kind: 'income', amount: 1000, categoryId: null, memberId: null, refundable: false, inflowKind: undefined, advance: false, counterAccountId: null } as const
+
+  it('„Cofnij” zdejmuje regułę i oddaje otwartej operacji pola sprzed reguły', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([current])
+    expect(applyTitleRule(income, current, editor(current.id, toIncome))).toMatchObject({ ok: true })
+    expect(rec(current.id)).toMatchObject({ kind: 'income', amount: 1000, categoryId: null })
+    lastToast()!.action!.run()
+    expect(rulesNow()).toEqual([])
+    // Before: the rule went, the operation stayed an income – half of what the toast's „Cofnij” took.
+    expect(rec(current.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+  })
+
+  it('z historią, gdy w niej nic do zmiany, a otwarta to szkic: „Cofnij” cofa też jego edycję', () => {
+    const already = tx({ kind: 'income', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const draft = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([already, draft])
+    data.useData.setState((s) => ({ drafts: { ...s.drafts, [draft.id]: true as const } }))
+    expect(applyTitleRule({ ...income, updateHistory: true }, draft, editor(draft.id, toIncome, true))).toMatchObject({ ok: true, count: 0 })
+    expect(rec(draft.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    lastToast()!.action!.run()
+    expect(rec(draft.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+    expect(rulesNow()).toEqual([])
+  })
+
+  it('pole edycji zmienione od tego czasu: operacja zostaje, jak jest – ze słowem; reguła cofnięta', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD, note: 'stara' })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const undo = lastToast()!.action!.run
+    data.updateRecord('transactions', current.id, (r) => ({ ...r, amount: 2500 }))
+    undo()
+    expect(rulesNow()).toEqual([])
+    expect(rec(current.id)).toMatchObject({ kind: 'income', amount: 2500 })
+    expect(lastToast()!.text).toBe('Otwarta operacja zmieniła się od tego czasu – zostaje, jak jest.')
+  })
+
+  it('zmiana innego pola od tego czasu (notatka) zostaje, pola reguły wracają', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const undo = lastToast()!.action!.run
+    data.updateRecord('transactions', current.id, (r) => ({ ...r, note: 'dopisana' }))
+    undo()
+    expect(rec(current.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD, note: 'dopisana' })
+  })
+
+  it('edycja, która nic nie zmieniła (operacja już taka): „Cofnij” nie zapisuje operacji', () => {
+    const current = tx({ kind: 'income', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const after = rec(current.id)
+    lastToast()!.action!.run()
+    expect(rec(current.id)).toBe(after)
+    expect(rulesNow()).toEqual([])
+  })
+
+  it('toast z „Cofnij” trwa co najmniej UNDO_MIN_MS – reguła tytułu, reguła z warunkami, reguła marki do kwoty', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela' })
+    load([current])
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      applyTitleRule(income, current, vi.fn())
+      expect(
+        saveConditionsRule(null, {
+          label: '',
+          direction: 'out',
+          conditions: [{ field: 'counterparty', value: 'Orlen' }, { field: 'amount', min: null, max: 4000 }],
+          combine: 'all',
+          choice: { kind: 'expense', categoryId: FOOD, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null },
+          manual: false,
+          tags: []
+        })
+      ).toBeNull()
+      addAmountRule({ brand: 'orlen', label: 'Orlen', maxAmount: 4000, categoryId: FOOD })
+      const texts = () => ui.useUi.getState().toasts.filter((t) => t.action?.label === 'Cofnij').map((t) => t.text)
+      expect(texts()).toHaveLength(3)
+      vi.advanceTimersByTime(ui.UNDO_MIN_MS - 1)
+      expect(texts()).toHaveLength(3)
+      vi.advanceTimersByTime(1)
+      expect(texts()).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// U1 – review (T550): the edit with the preview, the edit waiting at its question (F12), a draft written by the edit, the
+// edit only with the rule taken back, „Cofnij” asking as an edit does; the amount of a brand's rule through `plnText`.
+describe('„Cofnij” reguły tytułu – poprawki przeglądu U1 (T550)', () => {
+  const FOOD = defaultCategoryId(1)
+  const income = { keyword: 'ubezpieczyciel', kind: 'income', direction: 'in' } as const
+  const editor = (id: string, p: Partial<Transaction>, draft = false) => () => {
+    updateOperation(id, (r) => ({ ...r, ...p }), draft)
+    return p
+  }
+  const toIncome = { kind: 'income', amount: 1000, categoryId: null, memberId: null, refundable: false, inflowKind: undefined, advance: false, counterAccountId: null } as const
+  const asDraft = (id: string) => data.useData.setState((s) => ({ drafts: { ...s.drafts, [id]: true as const } }))
+  const AT = '2026-10-01T10:00:00.000Z'
+  /** A balance confirmed on 10.10 – an edit of an operation of 5.10 changing its amount asks first (F12). */
+  function confirmedBalance(): void {
+    const balance = (over: Record<string, unknown>) => balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: nextId(), createdAt: AT, updatedAt: AT, accountId: MBANK_ACCOUNT_ID, ...over })
+    const list = [balance({ date: '2026-10-01', kind: 'opening', amount: 100000 }), balance({ date: '2026-10-10', kind: 'confirmation', amount: 99000 })]
+    data.useData.setState((s) => ({ records: { ...s.records, balances: Object.fromEntries(list.map((b) => [b.id, { record: b, relPath: `balances/${b.id}.json`, readOnly: false }])) } }))
+  }
+  const guard = async () => (await import('../../src/renderer/store/guard')).useGuard
+  beforeEach(async () => (await import('../../src/renderer/store/guard')).clearGuards())
+
+  it('z podglądem, otwarta to szkic: „Cofnij” zmiany zbiorczej cofa historię, regułę i edycję szkicu', async () => {
+    const past = tx({ date: '2024-03-01', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const draft = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([past, draft])
+    asDraft(draft.id)
+    expect(applyTitleRule({ ...income, updateHistory: true }, draft, editor(draft.id, toIncome, true))).toMatchObject({ ok: true, preview: true })
+    useBulkPreview.getState().preview!.apply!()
+    await settle()
+    expect([rec(past.id).kind, rec(draft.id).kind]).toEqual(['income', 'income'])
+    ui.useUi.getState().toasts.find((t) => t.text.startsWith('Zastosowano regułę'))!.action!.run()
+    expect(rec(past.id)).toMatchObject({ kind: 'expense', amount: 1000 })
+    expect(rulesNow()).toEqual([])
+    // Before: the draft's edit stayed – the rule and the history went, the open one kept what the rule had set.
+    expect(rec(draft.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+  })
+
+  it('edycja czeka na pytanie przy potwierdzonym saldzie: „Cofnij” reguły zdejmuje też to pytanie', async () => {
+    const a = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([a])
+    confirmedBalance()
+    const asks = await guard()
+    applyTitleRule(income, a, editor(a.id, toIncome))
+    expect(asks.getState().asks.map((x) => x.id)).toEqual([a.id])
+    expect(rec(a.id)).toEqual(a)
+    lastToast()!.action!.run()
+    expect(rulesNow()).toEqual([])
+    // Before: the question stayed – „Zmień mimo to” would write the rule's edit with the rule gone, beyond any „Cofnij”.
+    expect(asks.getState().asks).toEqual([])
+    expect(rec(a.id)).toEqual(a)
+  })
+
+  it('pytanie innej, późniejszej edycji tej operacji zostaje', async () => {
+    const a = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([a])
+    confirmedBalance()
+    const asks = await guard()
+    applyTitleRule(income, a, editor(a.id, toIncome))
+    // Typed again in the editor: the question of the rule's edit replaced by the newest one (`askGuard`).
+    updateOperation(a.id, (r) => ({ ...r, amount: -3000 }), false)
+    const mine = asks.getState().asks.map((x) => x.seq)
+    lastToast()!.action!.run()
+    expect(asks.getState().asks.map((x) => x.seq)).toEqual(mine)
+  })
+
+  it('„Cofnij” edycji po „Zmień mimo to” pyta jak edycja (potwierdzone saldo) – zapis dopiero po odpowiedzi', async () => {
+    const a = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([a])
+    confirmedBalance()
+    const asks = await guard()
+    const { answerGuard } = await import('../../src/renderer/store/guard')
+    applyTitleRule(income, a, editor(a.id, toIncome))
+    answerGuard(asks.getState().asks[0]!.seq, true)
+    expect(rec(a.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    lastToast()!.action!.run()
+    // Before: written at once, past the question of the confirmed balance.
+    expect(rec(a.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    expect(asks.getState().asks.map((x) => x.id)).toEqual([a.id])
+    answerGuard(asks.getState().asks[0]!.seq, true)
+    expect(rec(a.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+  })
+
+  it('szkic zapisany przez edycję reguły: „Cofnij” oddaje pola i mówi, że wpis zostaje zapisany', () => {
+    const draft = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([draft])
+    asDraft(draft.id)
+    applyTitleRule(income, draft, editor(draft.id, toIncome, true))
+    expect(data.useData.getState().drafts[draft.id]).toBeUndefined()
+    lastToast()!.action!.run()
+    expect(rec(draft.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+    expect(lastToast()!.text).toBe('Nowy wpis zostaje zapisany, z polami sprzed reguły.')
+  })
+
+  it('reguła zmieniona od tego czasu zostaje – edycja otwartej operacji też (nie pół cofnięcia)', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const undo = lastToast()!.action!.run
+    data.updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: f.settings.import.rules.map((r) => ({ ...r, household: true })) } } }))
+    undo()
+    expect(rulesNow()).toHaveLength(1)
+    // Before: the operation's fields went back while the rule stayed.
+    expect(rec(current.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    expect(lastToast()!.text).toBe('Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.')
+  })
+
+  it('reguła marki do kwoty: kwota w toaście jak na ekranach – z groszami, ukryta przy ukrytych kwotach', async () => {
+    const { setAmountsHidden } = await import('../../src/renderer/components/fields')
+    load([])
+    addAmountRule({ brand: 'orlen', label: 'Orlen', maxAmount: 4050, categoryId: FOOD })
+    // Before: „do 40,5 zł” – and the amount shown with the amounts hidden.
+    expect(lastToast()!.text).toBe('Nowa reguła: Orlen do 40,50 zł.')
+    setAmountsHidden(true)
+    try {
+      addAmountRule({ brand: 'shell', label: 'Shell', maxAmount: 3000, categoryId: FOOD })
+      expect(lastToast()!.text).toBe('Nowa reguła: Shell do ••• zł.')
+    } finally {
+      setAmountsHidden(false)
+    }
   })
 })
 

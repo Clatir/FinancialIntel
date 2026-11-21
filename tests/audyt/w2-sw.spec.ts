@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { test, type Page } from '@playwright/test'
 import { shot } from './lab'
 import { ACC, CAT, SWM, addMembers, added, brief, category, enterSave, kind, log, openFresh, openQuick, openRok, ops, qread, quickVisible, typeAmount, typeIn, waitHidden } from './sw-pomoc'
+import { intelTab } from './wywiad'
 
 const RUN = 'w2-sw'
 
@@ -59,6 +60,7 @@ test('W2 – SW.24, SW.26, SW.31, SW.33', async () => {
     await page.waitForTimeout(800)
     log(RUN, 'SW.26 nowe', (await added(dataDir, before)).map(brief))
     await page.keyboard.press('Control+9')
+    await intelTab(page, 'spending')
     await page.waitForTimeout(2500)
     log(RUN, 'SW.26 Wyprawy', (await page.getByTestId('intel-expeditions').innerText().catch(() => '(brak)')).replace(/\s+/g, ' ').slice(0, 600))
     await page.getByTestId('intel-expeditions').scrollIntoViewIfNeeded().catch(() => undefined)
@@ -106,7 +108,7 @@ test('W2 – SW.24, SW.26, SW.31, SW.33', async () => {
     await page.waitForTimeout(600)
     await page.locator('[data-testid="category-row"][data-name="Zwierzęta"] [data-testid="category-archive"]').click()
     await page.waitForTimeout(1500)
-    log(RUN, 'SW.33(1) po archiwum kategorii – komunikat', (await qread(q)).message, '| kategoria', (await qread(q)).category, '| wartość pola', await q.getByTestId('quick-category').inputValue())
+    log(RUN, 'SW.33(1) po archiwum kategorii – komunikat', (await qread(q)).message, '| kategoria', (await qread(q)).category, '| wartość pola', await q.getByTestId('quick-category').getAttribute('data-value'))
     await page.getByTestId('settings-tab-household').click()
     await page.waitForTimeout(600)
     await page.locator('[data-testid="member-row"][data-name="Ania"] [data-testid="member-archived"] [role="switch"]').click()
@@ -129,7 +131,7 @@ test('W2 – SW.24, SW.26, SW.31, SW.33', async () => {
     await page.locator('[data-testid="category-row"][data-name="Zdrowie"] [data-testid="category-archive"]').click()
     await page.waitForTimeout(1500)
     const r2 = await qread(q)
-    log(RUN, 'SW.33(2) po archiwum kategorii', r2, '| wartość pola', await q.getByTestId('quick-category').inputValue())
+    log(RUN, 'SW.33(2) po archiwum kategorii', r2, '| wartość pola', await q.getByTestId('quick-category').getAttribute('data-value'))
     await shot(q, 'W2-SW.33-2')
     log(RUN, 'SW.33(2) Enter', await enterSave(app, q, 'quick-amount'))
     await page.waitForTimeout(1000)

@@ -7,6 +7,7 @@ import { TextField } from '../../components/ui'
 import { CategorySelect, useCategories } from '../operations/pickers'
 import { addKeywordRule, directionText, removeRule, ruleDecisionText, setRuleManual } from './rules'
 import { useMembers } from '../household/actions'
+import { financeLabel } from '../household/financeWords'
 
 const NO_RULES: ImportRule[] = []
 
@@ -20,10 +21,10 @@ interface KeywordOption {
 }
 
 /** What a keyword decides (a small set: the import's decisions per group cover the rest); a member's purchases too. */
-function keywordOptions(members: ReadonlyArray<{ id: string; name: string; archived: boolean }>): KeywordOption[] {
+export function keywordOptions(members: ReadonlyArray<{ id: string; name: string; archived: boolean }>): KeywordOption[] {
   return [
     { value: 'expense', label: 'Wydatek – kategoria', kind: 'expense', direction: 'out' },
-    ...members.filter((m) => !m.archived).map((m) => ({ value: `refundable:${m.id}`, label: `Finansuje: ${m.name} – kategoria`, kind: 'expense' as const, direction: 'out' as const, memberId: m.id })),
+    ...members.filter((m) => !m.archived).map((m) => ({ value: `refundable:${m.id}`, label: `${financeLabel(false, m.name)} – kategoria`, kind: 'expense' as const, direction: 'out' as const, memberId: m.id })),
     { value: 'income', label: 'Wpływ (przychód)', kind: 'income', direction: 'in' },
     { value: 'transfer', label: 'Przelew własny', kind: 'transfer', direction: null }
   ]

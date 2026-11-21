@@ -25,6 +25,7 @@ import {
   txs,
   writeFiles
 } from './im-pomoc'
+import { pickCategory, splitOperation } from '../e2e/forms'
 
 const backups = (dataDir: string) => (existsSync(join(dataDir, 'backups', 'pre-import')) ? readdirSync(join(dataDir, 'backups', 'pre-import')) : [])
 
@@ -483,7 +484,7 @@ test('im-b2: import L1 na przygotowanym „rok”, potem L1 znowu, L2', async ()
       const orlen = page.getByTestId('operation-row').filter({ hasText: /orlen/i }).first()
       await orlen.click()
       await page.waitForTimeout(500)
-      await page.getByTestId('operation-split').click()
+      await splitOperation(page, 'categories')
       await page.waitForTimeout(400)
       const amt = page.getByTestId('split-amount')
       for (const [i, v] of [[0, '120'], [1, '80']] as const) {
@@ -491,7 +492,7 @@ test('im-b2: import L1 na przygotowanym „rok”, potem L1 znowu, L2', async ()
         await amt.nth(i).fill(v)
         await amt.nth(i).press('Enter')
       }
-      await page.getByTestId('split-category').nth(1).selectOption({ label: 'Auto · paliwo' })
+      await pickCategory(page, 'split-category', 'Auto · paliwo', 1)
       await page.getByTestId('split-financer').nth(1).selectOption('pay:01KDEFMEM00000000000000001')
       await page.waitForTimeout(1200)
       o.log('IM.16 edytor ORLEN po podziale', (await readable(page, '[data-testid="operation-splits"]').catch(() => '-')))

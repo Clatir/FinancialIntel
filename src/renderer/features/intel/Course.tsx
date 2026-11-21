@@ -18,6 +18,7 @@ import { toast } from '../../store/ui'
 import { monthLabel, plMonth } from '../../lib/format'
 import { useCargoStatuses } from '../cargo/status'
 import { setSalary } from '../month/actions'
+import { MANEUVER_MONTHS, rebaseManeuverMonths } from './maneuverMonths'
 
 const zl = (g: number) => `${plnText(g)} zł`
 const mm = (m: string | null) => (m ? plMonth(m) : '—')
@@ -214,8 +215,10 @@ const classOf = (range: number | null) => (range == null ? '—' : SHIP_CLASS_LA
 export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: CourseInput | null }) {
   // The form is a draft (AP-8, UX-17): leaving Wywiad – or just another tab – loses nothing typed.
   const [kind, setKind, clearKind] = useDraft<CourseKind>('intel.maneuver-kind', () => 'median')
-  const [f, setF, clearForm] = useDraft<Form>('intel.maneuver', () => blankForm(fleet.month))
-  const set = (p: Partial<Form>) => setF((x) => ({ ...x, ...p }))
+  const [stored, setF, clearForm] = useDraft<Form>('intel.maneuver', () => blankForm(fleet.month))
+  // After the month changes the stored months move into the range the selects offer (the typed amounts stay).
+  const f = useMemo(() => rebaseManeuverMonths(stored, fleet.month), [stored, fleet.month])
+  const set = (p: Partial<Form>) => setF((x) => ({ ...rebaseManeuverMonths(x, fleet.month), ...p }))
   const m = useMemo(() => maneuverOf(f), [f])
   const changed = formChanged(f, blankForm(fleet.month))
   const [before, after] = useMemo(() => {
@@ -223,7 +226,7 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
     const base = { ...input, income: courseIncome(fleet.incomeStats, kind) }
     return [course(base, kind), course(maneuver(base, m), kind)]
   }, [input, fleet.incomeStats, kind, m])
-  const months = Array.from({ length: 13 }, (_, i) => addMonths(fleet.month, i))
+  const months = Array.from({ length: MANEUVER_MONTHS + 1 }, (_, i) => addMonths(fleet.month, i))
   return (
     <Panel title="Symulator manewrów" testId="intel-maneuver">
       {!input || !before || !after ? (
@@ -268,7 +271,7 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
             <div className="flex flex-wrap items-center gap-2">
               <input className="input h-[24px] w-[110px]" value={f.goalName} maxLength={80} placeholder="nazwa" onChange={(e) => set({ goalName: e.currentTarget.value })} aria-label="Nazwa nowego celu" data-testid="maneuver-goal-name" />
               <AmountField className="h-[24px] w-[100px]" value={f.goalTarget} allowEmpty onChange={(goalTarget) => set({ goalTarget })} aria-label="Kwota nowego celu" data-testid="maneuver-goal" />
-              <MonthField className="h-[24px] w-[76px]" value={f.goalDeadline || null} allowEmpty onChange={(goalDeadline) => set({ goalDeadline: goalDeadline ?? '' })} aria-label="Termin nowego celu" data-testid="maneuver-goal-deadline" />
+              <MonthField className="h-[24px] w-[124px]" value={f.goalDeadline || null} allowEmpty onChange={(goalDeadline) => set({ goalDeadline: goalDeadline ?? '' })} aria-label="Termin nowego celu" data-testid="maneuver-goal-deadline" />
               <Toggle checked={f.goalRate} onChange={(goalRate) => set({ goalRate })} label="rata z pensji" data-testid="maneuver-goal-rate" />
             </div>
           </Field>

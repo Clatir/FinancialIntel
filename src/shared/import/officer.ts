@@ -10,6 +10,7 @@ import { findRule, ruleTargetOf } from './classify'
 import { operationName, readableName } from './names'
 import { defaultCategoryId, HOUSE_MEMBER_ID, type ImportRule, type Share, type Transaction } from '../schema'
 import { shareOf } from '../calc/share'
+import { financeLabelInline } from '../financeWords'
 
 export interface OfficerData {
   /** The category used last with each brand key (and each name's key), expenses only. */
@@ -201,12 +202,12 @@ export function hintChanges(now: HintedDecision, h: RuleHint): boolean {
   return h.refundable !== now.refundable || (h.refundable && (h.memberId !== now.memberId || h.gift !== now.gift))
 }
 
-/** The hint in words („z reguły „…”: kategoria · finansuje: …”). */
+/** The hint in words („z reguły „…”: kategoria · kupione dla: …”). */
 export function ruleHintText(h: RuleHint, names: { category: (id: string) => string; member: (id: string) => string }): string {
   const parts: string[] = []
   if (h.categoryId) parts.push(names.category(h.categoryId))
   if (h.pays) {
-    if (h.refundable && h.memberId) parts.push(`${h.gift ? 'prezent od' : 'finansuje'}: ${names.member(h.memberId)}`)
+    if (h.refundable && h.memberId) parts.push(financeLabelInline(!!h.gift, names.member(h.memberId)))
     else if (h.share) parts.push(`wspólnie: ${h.share.lines.map((l) => (l.memberId ? names.member(l.memberId) : 'ja')).join(', ')}`)
     else parts.push('płacę ja')
   }

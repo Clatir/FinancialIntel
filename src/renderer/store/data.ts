@@ -1218,9 +1218,18 @@ export async function deleteRecord(collection: Collection, id: string): Promise<
   })
 }
 
-/** `deleteRecord` nobody waits for (an undo, a cleanup): its refusal said (B9, B67), never an unhandled error. */
-export function deleteOrSay(collection: Collection, id: string): void {
-  deleteRecord(collection, id).catch((e: unknown) => toast(errorMessage(e), 'error', 8000))
+/**
+ * `deleteRecord` nobody has to wait for (an undo, a cleanup): its refusal said (B9, B67), never an unhandled error.
+ * Resolves to whether it was deleted – a caller that does more after it (T550) reads it; the rest may ignore it.
+ */
+export function deleteOrSay(collection: Collection, id: string): Promise<boolean> {
+  return deleteRecord(collection, id).then(
+    () => true,
+    (e: unknown) => {
+      toast(errorMessage(e), 'error', 8000)
+      return false
+    }
+  )
 }
 
 /**

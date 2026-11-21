@@ -4,6 +4,7 @@
 import { test, type ElectronApplication, type Page } from '@playwright/test'
 import { recorded, start, useState } from './lab'
 import { flat, go, out, pr1, quickWindow, readAll, rec, screenValues, snap, stepper, textOf, type Ctx } from './pr-pomoc'
+import { openForm, pickCategory } from '../e2e/forms'
 
 const RUN = 'pr-6'
 const PETS_FOOD = '01KDEFCAT00000000000000401'
@@ -64,7 +65,7 @@ test('PR przebieg 6 – kwota 0 i duże kwoty (PR.10)', async () => {
       await q.getByTestId('quick-amount').click()
       await q.getByTestId('quick-amount').fill('10')
       await q.getByTestId('quick-counterparty').fill('Zoo PR10')
-      await q.getByTestId('quick-category').selectOption(PETS_FOOD)
+      await pickCategory(q, 'quick-category', PETS_FOOD)
       await q.getByTestId('quick-time').fill('')
       await q.getByTestId('quick-note').click()
       await q.waitForTimeout(500)
@@ -85,6 +86,7 @@ test('PR przebieg 6 – kwota 0 i duże kwoty (PR.10)', async () => {
     // Cel 0.
     await step('cel-0', async () => {
       await go(page, '6', 'page-starmap')
+      await openForm(page, 'goal')
       await page.getByTestId('starmap-new-name').fill('Cel zero PR')
       const t = page.getByTestId('starmap-new-target')
       await t.click()

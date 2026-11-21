@@ -12,6 +12,7 @@ import { SCHEMAS, serializeRecord } from '../../src/shared/records'
 import { SCHEMA_VERSION } from '../../src/shared/schema/common'
 import { records } from '../e2e/files'
 import { LAB, note, reading, shot, start, text, useState, type Run, type StartOptions } from './lab'
+import { pickCategory } from '../e2e/forms'
 
 export const ACC = { mbank: '01KDEFACC00000000000000001', xtb: '01KDEFACC00000000000000002', cash: '01KDEFACC00000000000000003' }
 export const CAT = {
@@ -358,7 +359,7 @@ export async function fill(page: Page, f: { amount?: string; date?: string; coun
   if (f.date) await typeIn(page, 'operation-date', f.date)
   if (f.counterparty != null) await typeIn(page, 'operation-counterparty', f.counterparty)
   if (f.categoryId) {
-    await page.getByTestId('operation-category').selectOption(f.categoryId)
+    await pickCategory(page, 'operation-category', f.categoryId)
     await page.waitForTimeout(250)
   }
   if (f.accountId) {

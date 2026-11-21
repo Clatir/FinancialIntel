@@ -6,6 +6,7 @@ import { importDone } from '../e2e/app'
 import { answerDialogs, LAB, reading, start } from './lab'
 import { cp1250, historiaCsv, listaCsv, type BankEvent } from './persona'
 import { addRecords, cat, editorText, editSettings, enrich, goInbox, goOps, ID, openOp, ops, opt, periodAll, rows, run, say, search, shown, snap, step, sums, text, toasts, typeIn, WALLET } from './op-pomoc'
+import { pickCategory } from '../e2e/forms'
 
 const FILES = join(LAB, 'pliki', 'op')
 const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith('.json') ? [join(dir, e.name)] : []))
@@ -33,7 +34,7 @@ test('OP.18 historia zmian (dwa komputery, folder tylko do odczytu)', async () =
     await goOps(page)
     await openOp(page, 'lody grycan', '18.10')
     await typeIn(page, 'operation-amount', '26,03', 'Tab')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · na mieście' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · na mieście')
     await page.getByTestId('operation-note').fill('notatka z pierwszego komputera')
     await page.getByTestId('operation-counterparty').click()
     await page.waitForTimeout(800)
@@ -160,7 +161,7 @@ test('OP.38 reguła dla tytułu', async () => {
     const panel = page.getByTestId('operation-title-rule-panel')
     say('OP.38 panel', await opt(panel))
     await panel.getByRole('radio', { name: 'Zwrot / kategoria' }).click()
-    await page.getByTestId('title-rule-category').selectOption({ label: 'Jedzenie · na mieście' })
+    await pickCategory(page, 'title-rule-category', 'Jedzenie · na mieście')
     say('OP.38 „Tylko dla…”', await page.getByTestId('title-rule-only-counterparty').isChecked())
     await page.getByTestId('title-rule-update-history').check()
     await page.waitForTimeout(300)
@@ -181,7 +182,7 @@ test('OP.38 reguła dla tytułu', async () => {
     await openOp(page, 'piotr testowy', '31.10')
     await page.getByTestId('operation-title-rule').click()
     await page.getByTestId('operation-title-rule-panel').getByRole('radio', { name: 'Zwrot / kategoria' }).click()
-    await page.getByTestId('title-rule-category').selectOption({ label: 'Jedzenie · na mieście' })
+    await pickCategory(page, 'title-rule-category', 'Jedzenie · na mieście')
     await page.getByTestId('title-rule-update-history').check()
     await page.getByTestId('title-rule-apply-btn').click()
     await page.getByTestId('operations-bulk-confirm').click()
