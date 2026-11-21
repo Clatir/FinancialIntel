@@ -3,7 +3,7 @@
  * name and amount from ICTTJ) and the own ones – on one priority list (drag, or the arrows), each with its money
  * against its target, its month and the ETA at the pace of the last months.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
 import { addMonths, monthsBetween } from '@shared/calc/dates'
 import { goalInstallment, ratedIn } from '@shared/calc/fleet'
@@ -19,6 +19,8 @@ import { useRecordList } from '../../store/records'
 import { navigate, toast } from '../../store/ui'
 import { AmountField, MonthField, plnText } from '../../components/fields'
 import { Meter } from '../../components/meters'
+import { IconPlus } from '../../components/icons'
+import { revealField } from '../../lib/reveal'
 import { Columns } from '../../components/layout'
 import { Badge, Empty, NameInput, Panel, Toggle, cx } from '../../components/ui'
 import { Modal } from '../../components/Modal'
@@ -57,6 +59,8 @@ export function StarMapPage() {
     [fleet, active, amounts, pace]
   )
   const [dragged, setDragged] = useState<string | null>(null)
+  // The form of a new goal sits behind „+ Cel” (UX-75); its draft stays (`NewGoal`).
+  const [formOpen, setFormOpen, closeForm] = useDraft<boolean>('starmap:newGoal:open', () => false)
   // The goal whose money is being moved (C2, B30): archiving it, or an archived one.
   const [moving, setMoving] = useState<{ goal: Goal; archive: boolean } | null>(null)
   const archiveOrAsk = (g: Goal) => ((amounts.get(g.id) ?? 0) > 0 ? setMoving({ goal: g, archive: true }) : archiveGoal(g, true))
@@ -93,7 +97,27 @@ export function StarMapPage() {
       <div className="min-h-0 flex-1 overflow-auto">
         <Columns id="starmap" tracks={['minmax(460px,2fr)', 'minmax(280px,1fr)']} className="grid min-h-full items-start">
           <div className="flex min-w-0 flex-col">
-            <Panel title="Kolejność wypełniania" hint={glossaryOf('Mapa gwiezdna')} testId="starmap-goals">
+            <Panel
+              title="Kolejność wypełniania"
+              hint={glossaryOf('Mapa gwiezdna')}
+              testId="starmap-goals"
+              actions={
+                <button
+                  className="btn h-[22px]"
+                  aria-expanded={formOpen}
+                  disabled={readOnly}
+                  onClick={() => {
+                    if (formOpen) return closeForm()
+                    setFormOpen(true)
+                    revealField('starmap-new-name')
+                  }}
+                  title="Nowy własny cel"
+                  data-testid="starmap-new-open"
+                >
+                  <IconPlus size={12} /> Cel
+                </button>
+              }
+            >
               {!active.length ? (
                 <Empty>Brak celów – dodaj własny albo wybierz scenariusz prognozy ICTTJ (Ustawienia → ICTTJ).</Empty>
               ) : (
@@ -167,7 +191,7 @@ export function StarMapPage() {
             )}
           </div>
           <div className="flex min-w-0 flex-col">
-            <NewGoal readOnly={readOnly} />
+            {formOpen && <NewGoal readOnly={readOnly} onDone={closeForm} />}
             <Panel title="Tempo" testId="starmap-pace">
               <div className="flex flex-col gap-1 text-[12px]">
                 <span className="num text-[16px] text-fg-strong" data-testid="starmap-monthly">
@@ -474,7 +498,7 @@ function GoalRow({
         </span>
         {!ictj && !readOnly ? (
           // A month typed whole, saved on leaving the field (W2): never a save per key.
-          <MonthField className="h-[22px] w-[90px]" value={g.deadline} allowEmpty onChange={(deadline) => patchGoal(g.id, { deadline })} placeholder="termin" aria-label="Termin celu" />
+          <DeadlineField value={g.deadline} onChange={(deadline) => patchGoal(g.id, { deadline })} />
         ) : (
           g.deadline && <span className="whitespace-nowrap text-[11.5px] text-dim">termin {monthLabel(g.deadline)}</span>
         )}
@@ -496,6 +520,29 @@ function GoalRow({
         <NewerNote show={newer} />
       </div>
     </div>
+  )
+}
+
+/**
+ * An own goal's deadline as the app writes a month everywhere else – „czerwiec 2027”, not „2027-06” (the form's „RRRR-MM”
+ * is for typing only): a button until it is clicked, then the `MonthField` (typed whole, saved on leaving the field – W2).
+ */
+function DeadlineField({ value, onChange }: { value: string | null; onChange: (month: string | null) => void }) {
+  const [editing, setEditing] = useState(false)
+  const box = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (editing) box.current?.querySelector('input')?.focus()
+  }, [editing])
+  if (!editing)
+    return (
+      <button type="button" className="input h-[22px] w-[130px] truncate text-left" onClick={() => setEditing(true)} title="Zmień termin celu (miesiąc, np. 06.2027)" aria-label="Termin celu" data-testid="starmap-deadline">
+        {value ? monthLabel(value) : <span className="text-dim">termin</span>}
+      </button>
+    )
+  return (
+    <span ref={box} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setEditing(false)}>
+      <MonthField className="h-[22px] w-[130px]" value={value} allowEmpty onChange={onChange} placeholder="RRRR-MM" aria-label="Termin celu" data-testid="starmap-deadline-edit" />
+    </span>
   )
 }
 
@@ -558,7 +605,7 @@ function orderedIds(): string[] {
   return byPriority(goals).map((g) => g.id)
 }
 
-function NewGoal({ readOnly }: { readOnly: boolean }) {
+function NewGoal({ readOnly, onDone }: { readOnly: boolean; onDone: () => void }) {
   // Kept while another screen is looked at (N36).
   const [g, setG, clearG] = useDraft<{ name: string; target: number | null; deadline: string }>('starmap:newGoal', () => ({ name: '', target: null, deadline: '' }))
   const { name, target, deadline } = g
@@ -571,6 +618,7 @@ function NewGoal({ readOnly }: { readOnly: boolean }) {
     addGoal({ name, target, deadline: deadline || null })
     toast(`Nowy cel „${name.trim()}” na końcu listy.`, 'success')
     clearG()
+    onDone()
   }
   return (
     <Panel title="Nowy cel" testId="starmap-new">
@@ -578,7 +626,9 @@ function NewGoal({ readOnly }: { readOnly: boolean }) {
         <input className="input h-[26px]" placeholder="Nazwa, np. Rower" value={name} maxLength={80} disabled={readOnly} onChange={(e) => setName(e.currentTarget.value)} data-testid="starmap-new-name" />
         <div className="flex items-center gap-2">
           <AmountField className="h-[26px] w-[130px]" value={target} allowEmpty onChange={setTarget} aria-label="Kwota nowego celu" data-testid="starmap-new-target" />
-          <input type="month" className="input h-[26px] w-[150px]" value={deadline} disabled={readOnly} onChange={(e) => setDeadline(e.currentTarget.value)} aria-label="Termin nowego celu" />
+          <fieldset disabled={readOnly} className="contents">
+            <MonthField className="h-[26px] w-[150px]" value={deadline || null} allowEmpty placeholder="Termin RRRR-MM" onChange={(m) => setDeadline(m ?? '')} aria-label="Termin nowego celu" data-testid="starmap-new-deadline" />
+          </fieldset>
         </div>
         <button className="btn btn-accent h-[26px] self-start" disabled={readOnly} onClick={add} data-testid="starmap-new-add">
           Dodaj cel

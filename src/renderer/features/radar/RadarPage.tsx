@@ -4,12 +4,12 @@
  * accounts' balances ahead (F26); the loans both ways with their schedules (new, repayment / installment, close), the
  * receivables (the house, the loans given) and the PIT-38 deadline (the amount stays in ICTTJ).
  */
-import { useContext, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { glossaryOf } from '@shared/glossary'
 import type { AccountAhead } from '@shared/calc/ahead'
-import { dm } from '@shared/calc/briefing'
-import { addDays, addMonths, daysBetween, daysInMonth } from '@shared/calc/dates'
-import { HOUSE_DAYS, loanPayers, type LoanState } from '@shared/calc/loans'
+import { dm, lateFeeText } from '@shared/calc/briefing'
+import { addDays, addMonths, daysInMonth } from '@shared/calc/dates'
+import { loanPayers, type LoanState } from '@shared/calc/loans'
 import { impliedLoanRate } from '@shared/calc/payoff'
 import { pit38Deadline, type RadarItem } from '@shared/calc/radar'
 import { percentText } from '@shared/format'
@@ -19,14 +19,15 @@ import { canWrite, useData, useEntryNewer, useFolderLocked } from '../../store/d
 import { NewerNote } from '../../components/NewerNote'
 import { useDraft } from '../../store/drafts'
 import { useFleet } from '../../store/fleet'
-import { navigate, toast } from '../../store/ui'
+import { focusRecord, toast } from '../../store/ui'
 import { AmountField, DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
+import { IconPlus } from '../../components/icons'
+import { revealField } from '../../lib/reveal'
 import { Badge, CompactContext, Empty, Field, LimitHint, NumberField, Panel, Segmented, Toggle, cx } from '../../components/ui'
 import { countLabel, monthLabel, plDate } from '../../lib/format'
 import { AccountSelect } from '../operations/pickers'
 import { useMembers } from '../household/actions'
-import { isOpeningItem, memberName, openText } from '@shared/calc/household'
 import { openOperation, openRefundables } from '../operations/state'
 import { closeReturn, useReturns } from '../sensors/state'
 import { addLoan, closeLoan, deleteLoan, ensureLoanContainer, planTransfer, recordPayment, typedLoanRate, type NewLoan } from './actions'
@@ -36,21 +37,19 @@ import { BuoysPanel, NewBuoyPanel } from './Buoys'
 import { PayoffPanel } from './Payoff'
 import { useFuture } from './future'
 import { RadarCalendar } from './Calendar'
-import { KIND_LABEL } from './labels'
+import { KIND_LABEL, TARGET_TITLE, radarTarget } from './labels'
+import { radarRows } from './rows'
+import { SettlementsPanel } from './SettlementsPanel'
+import { useCargoStatuses } from '../cargo/status'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
 export function RadarPage() {
   const fleet = useFleet()
-  const members = useMembers()
-  const transactions = useData((s) => s.records.transactions)
   // Opened from the palette (F19): the loan marked (a closed one's list opened).
   useFocusRecord('loan')
-  // Whom a member's money comes through (D81).
-  const via = (id: string) => {
-    const v = members.find((m) => m.id === id)?.via
-    return v ? memberName(v, members) : null
-  }
+  // The buoy a radar row opened (UX-74): its panel is on this screen – a closed „Pozostałe boje” list opens.
+  useFocusRecord('buoy')
   const readOnly = useFolderLocked()
   // The items, the buoys' days and the accounts ahead (F16, F26, F27) – the notes carry amounts (B61): masked or shown at
   // once with Ctrl+$.
@@ -58,6 +57,9 @@ export function RadarPage() {
   const items = future.items
   // The list or the month's calendar (AP-42) – kept while another screen is looked at.
   const [view, setView] = useDraft<'list' | 'calendar'>('radar:view', () => 'list')
+  // The forms of a new buoy and a new loan sit behind „+ …” (UX-75); their drafts stay (`NewBuoyPanel`, `NewLoanPanel`).
+  const [buoyOpen, setBuoyOpen, closeBuoyForm] = useDraft<boolean>('radar:newBuoy:open', () => false)
+  const [loanOpen, setLoanOpen, closeLoanForm] = useDraft<boolean>('radar:newLoan:open', () => false)
   if (!fleet) return <Empty>Wczytywanie…</Empty>
   const loans = fleet.loans
   const r = fleet.receivables
@@ -96,15 +98,57 @@ export function RadarPage() {
               ) : !items.length ? (
                 <Empty>Nic na radarze w najbliższych 90 dniach.</Empty>
               ) : (
-                <Timeline items={items} />
+                <Timeline items={items} today={fleet.today} />
               )}
             </Panel>
-            <BuoysPanel days={future.days} today={fleet.today} readOnly={readOnly} />
-            {!readOnly && <NewBuoyPanel today={fleet.today} />}
+            <BuoysPanel
+              days={future.days}
+              today={fleet.today}
+              readOnly={readOnly}
+              actions={
+                !readOnly && (
+                  <button
+                    className="btn h-[22px]"
+                    aria-expanded={buoyOpen}
+                    onClick={() => {
+                      if (buoyOpen) return closeBuoyForm()
+                      setBuoyOpen(true)
+                      revealField('buoy-name')
+                    }}
+                    title="Nowa boja – zaplanowany wydatek, wpływ albo termin"
+                    data-testid="radar-new-buoy-open"
+                  >
+                    <IconPlus size={12} /> Boja
+                  </button>
+                )
+              }
+            />
+            {!readOnly && buoyOpen && <NewBuoyPanel today={fleet.today} onDone={closeBuoyForm} />}
           </div>
           <div className="flex min-w-0 flex-col">
             <AccountsPanel accounts={future.accounts} readOnly={readOnly} />
-            <Panel title={active.length ? `Pożyczki (${active.length})` : 'Pożyczki'} name="Pożyczki" testId="radar-loans">
+            <Panel
+              title={active.length ? `Pożyczki (${active.length})` : 'Pożyczki'}
+              name="Pożyczki"
+              testId="radar-loans"
+              actions={
+                !readOnly && (
+                  <button
+                    className="btn h-[22px]"
+                    aria-expanded={loanOpen}
+                    onClick={() => {
+                      if (loanOpen) return closeLoanForm()
+                      setLoanOpen(true)
+                      revealField('loan-name')
+                    }}
+                    title="Nowa pożyczka – udzielona albo wzięta"
+                    data-testid="radar-new-loan-open"
+                  >
+                    <IconPlus size={12} /> Pożyczka
+                  </button>
+                )
+              }
+            >
               <div className="flex flex-col text-[12px]">
                 {!active.length && <span className="text-muted">Brak otwartych pożyczek.</span>}
                 {active.map((s) => (
@@ -130,60 +174,11 @@ export function RadarPage() {
             </Panel>
             {/* The taken loans' payoff (AP-41): shown while one is open – a proposal, nothing stored. */}
             <PayoffPanel fleet={fleet} readOnly={readOnly} />
-            {!readOnly && <NewLoanPanel today={fleet.today} />}
+            {!readOnly && loanOpen && <NewLoanPanel today={fleet.today} onDone={closeLoanForm} />}
+            {/* The household (D80, UX-82): each member's balance both ways, their purchases and the ways to settle them. */}
+            <SettlementsPanel fleet={fleet} readOnly={readOnly} />
             <Panel title="Należności" testId="radar-receivables">
               <div className="flex flex-col gap-1 text-[12px]">
-                {/* The household (D80): each member's balance both ways – owed purchases, their advance held. */}
-                {r.members
-                  .filter((m) => m.owed > 0 || m.deposit > 0 || m.unassigned.length > 0)
-                  .map((m) => {
-                    const days = m.since ? daysBetween(m.since, fleet.today) : null
-                    // Their money repaid but not assigned to a purchase (D91): what they owe is lower already.
-                    const waiting = m.unassigned.reduce((a, u) => a + u.amount, 0)
-                    return (
-                      <div key={m.memberId} className="flex flex-col" data-testid="radar-member">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-muted">{memberName(m.memberId, members)}</span>
-                          <span className="text-[11px] text-dim">{m.owed > 0 ? 'ma oddać' : m.deposit > 0 ? 'zaliczka (depozyt)' : 'rozliczony'}</span>
-                          {(m.owed > 0 || m.deposit > 0) && <span className={cx('num ml-auto', m.owed > 0 ? 'text-fg-strong' : 'text-muted')}>{zl(m.owed > 0 ? m.owed : m.deposit)}</span>}
-                        </div>
-                        {/* Both at once (AF-16): their advance beside the debt – in the deposit too. */}
-                        {m.owed > 0 && m.deposit > 0 && (
-                          <div className="flex items-baseline gap-2" data-testid="radar-member-deposit">
-                            <span className="text-[11px] text-dim">zaliczka (depozyt)</span>
-                            <span className="num ml-auto text-muted">{zl(m.deposit)}</span>
-                          </div>
-                        )}
-                        {m.since && m.owed > 0 && (
-                          <span className={cx('text-[11.5px]', (days ?? 0) > HOUSE_DAYS ? 'text-accent' : 'text-dim')}>
-                            {m.open[0] && isOpeningItem(m.open[0].txId) ? 'saldo na start rozliczeń z' : 'najstarszy zakup z'} {plDate(m.since)} ({countLabel(days ?? 0, 'dzień', 'dni', 'dni')})
-                            {via(m.memberId) ? ` · przekazuje przez: ${via(m.memberId)}` : ''}
-                          </span>
-                        )}
-                        {waiting > 0 && (
-                          <button type="button" className="self-start text-left text-[11.5px] text-accent hover:underline" onClick={() => navigate({ page: 'inbox' })} title="Meldunki: wskaż, co spłaca ten zwrot" data-testid="radar-member-unassigned">
-                            zwrot do przypisania: {zl(waiting)} – wskaż w Meldunkach, co spłaca
-                          </button>
-                        )}
-                        {m.open.length > 0 && (
-                          <details className="text-[11.5px] text-dim" data-testid="radar-member-open">
-                            {/* The balance at the settlements' start apart (SW sp. 9); paid off – the items wait for the money's assignment. */}
-                            <summary className="cursor-pointer select-none hover:text-fg-strong">{m.owed > 0 ? `do oddania: ${openText(m.open)}` : `czeka na przypisanie zwrotu: ${openText(m.open)}`}</summary>
-                            {m.open.map((o) => {
-                              const t = transactions[o.txId]?.record
-                              return (
-                                <button key={o.txId} type="button" className="flex w-full items-baseline gap-2 text-left hover:text-fg-strong" disabled={!t} onClick={() => t && openOperation(t)} data-testid="radar-member-purchase">
-                                  <span className="num">{plDate(o.date)}</span>
-                                  <span className="min-w-0 flex-1 truncate">{isOpeningItem(o.txId) ? 'saldo na start rozliczeń' : t?.counterparty || 'zakup'}</span>
-                                  <span className="num">{zl(o.amount)}</span>
-                                </button>
-                              )
-                            })}
-                          </details>
-                        )}
-                      </div>
-                    )
-                  })}
                 <div className="flex items-baseline gap-2">
                   <span className="text-muted">Domownicy mają oddać razem</span>
                   <span className="num ml-auto text-fg-strong" data-testid="radar-house">
@@ -295,33 +290,95 @@ function AccountsPanel({ accounts, readOnly }: { accounts: readonly AccountAhead
   )
 }
 
-function Timeline({ items }: { items: RadarItem[] }) {
+/** A radar row's record opened on its screen (UX-74): a container in Ładownia, a loan or a buoy here, a return's purchase. */
+function openTarget(t: NonNullable<ReturnType<typeof radarTarget>>): void {
+  if (t.focus === 'operation') {
+    const tx = useData.getState().records.transactions[t.id]?.record
+    if (tx) openOperation(tx)
+    return
+  }
+  focusRecord(t.focus, t.id, { page: t.focus === 'container' ? 'cargo' : 'radar' })
+}
+
+/**
+ * The list's columns (UX-35) in a narrow window (the smallest – 1024 px, T548): the name keeps its room and the numbers
+ * theirs, unbroken – only the notes give way (a list narrower than 480 px – none, not a sliver of them); never a row
+ * without its name. A row of a container's overdue dues (UX-30) says them in the name's and the notes' room (LATE_NAME –
+ * the notes' width and their gap), its numbers in line.
+ */
+const NAME_MIN = 'min-w-[96px]'
+const LATE_NAME = 'flex-[1_1_158px] @max-[480px]:flex-1'
+const NOTE_COL = 'w-[150px] min-w-0 truncate text-right @max-[480px]:hidden'
+const AMOUNT_COL = 'w-[110px] min-w-[88px] whitespace-nowrap text-right'
+const SHIELDS_COL = 'w-[96px] min-w-[76px] whitespace-nowrap text-right'
+
+function Timeline({ items, today }: { items: RadarItem[]; today: string }) {
   // The phone (T311): two lines – the day, the name and the amount; the kind, the note and the shields after it under them.
   const compact = useContext(CompactContext)
+  // A container's overdue dues in one row, as the briefing says them (UX-30, T548) – the fees' state of the radar's items.
+  const cargo = useCargoStatuses()
+  const rows = useMemo(() => radarRows(items, cargo, today), [items, cargo, today])
   return (
-    <div className="flex flex-col text-[12px]">
-      {items.map((i, n) => {
+    <div className="@container flex flex-col text-[12px]">
+      {/* The columns named (UX-35): the phone's two-line rows say it in the line itself. */}
+      {!compact && (
+        <div className="flex items-baseline gap-2 border-b border-line px-1 pb-1 text-[10.5px] text-dim" data-testid="radar-columns">
+          <span className="w-[44px] shrink-0">dzień</span>
+          <span className="w-[72px] shrink-0">rodzaj</span>
+          <span className={cx(NAME_MIN, 'flex-1')}>pozycja</span>
+          <span className={NOTE_COL}>uwagi</span>
+          <span className={AMOUNT_COL}>kwota</span>
+          <span className={SHIELDS_COL} title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)">
+            osłony po
+          </span>
+        </div>
+      )}
+      {rows.map(({ item: i, late, span }, n) => {
         const month = i.date.slice(0, 7)
-        const newMonth = n === 0 || items[n - 1]!.date.slice(0, 7) !== month
-        const day = <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(i.date).slice(0, 5)}</span>
+        const newMonth = n === 0 || rows[n - 1]!.item.date.slice(0, 7) !== month
         const kind = <span className={cx('shrink-0 text-[11px] text-dim', !compact && 'w-[72px]')}>{KIND_LABEL[i.kind]}</span>
-        const name = <span className="min-w-0 flex-1 truncate text-fg-strong">{i.name}</span>
-        const note = i.overdue ? i.note || 'po terminie' : i.note
+        const target = radarTarget(i)
+        // A container's overdue dues (UX-30): the briefing's whole line in the hint – the row's own may be cut. The row
+        // says them in its name's place, the notes' column with it (the phone: the container, its dues in the second line).
+        const hint = target ? (late ? `${lateFeeText(late, zl, today)}\n${TARGET_TITLE[target.focus]}` : TARGET_TITLE[target.focus]) : undefined
+        const label = !late ? (
+          i.name
+        ) : compact ? (
+          late.name
+        ) : (
+          <>
+            {late.name}: <span className="text-accent">{span}</span>
+          </>
+        )
+        const name = target ? (
+          <button type="button" className={cx(compact ? 'min-w-0 flex-1' : cx(NAME_MIN, late ? LATE_NAME : 'flex-1'), 'truncate text-left text-fg-strong hover:underline')} onClick={() => openTarget(target)} title={hint} data-testid="radar-item-open" data-target={target.focus}>
+            {label}
+          </button>
+        ) : (
+          <span className={cx(compact ? 'min-w-0 flex-1' : cx(NAME_MIN, late ? LATE_NAME : 'flex-1'), 'truncate text-fg-strong')}>{label}</span>
+        )
+        const note = late ? span : i.overdue ? i.note || 'po terminie' : i.note
+        // A row past its day: its day in the accent, its note in the day's hint – a narrow list hides the notes (T548).
+        const day = (
+          <span className={cx('num w-[44px] shrink-0 text-[11px]', i.overdue ? 'text-accent' : 'text-muted')} title={i.overdue ? note : undefined} data-testid="radar-item-day">
+            {plDate(i.date).slice(0, 5)}
+          </span>
+        )
         const amount = (
-          <span className={cx('num text-right', compact ? 'shrink-0 whitespace-nowrap' : 'w-[110px]', i.direction === 'in' ? 'text-up' : 'text-fg')}>
+          <span className={cx('num text-right', compact ? 'shrink-0 whitespace-nowrap' : AMOUNT_COL, i.direction === 'in' ? 'text-up' : 'text-fg')}>
             {i.amount == null ? '—' : `${i.direction === 'in' ? '+' : i.direction === 'out' ? '−' : ''}${zl(i.amount)}`}
           </span>
         )
         const shields = (
           <span
-            className={cx('num text-right text-[11px]', compact ? 'shrink-0 whitespace-nowrap' : 'w-[96px]', i.shieldsAfter != null && i.shieldsAfter < 0 ? 'text-accent' : 'text-dim')}
+            className={cx('num text-right text-[11px]', compact ? 'shrink-0 whitespace-nowrap' : SHIELDS_COL, i.shieldsAfter != null && i.shieldsAfter < 0 ? 'text-accent' : 'text-dim')}
             title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)"
             data-testid="radar-shields-after"
           >
             {i.shieldsAfter != null ? zl(i.shieldsAfter) : ''}
           </span>
         )
-        const row = { 'data-testid': 'radar-item', 'data-kind': i.kind, 'data-overdue': i.overdue ? 'yes' : undefined }
+        const row = { 'data-testid': 'radar-item', 'data-kind': i.kind, 'data-overdue': i.overdue ? 'yes' : undefined, 'data-dues': late ? String(late.dues.length) : undefined }
         return (
           <div key={i.key} className="flex flex-col">
             {newMonth && <span className="label pt-2 first:pt-0">{monthLabel(month)}</span>}
@@ -343,7 +400,7 @@ function Timeline({ items }: { items: RadarItem[] }) {
                 {day}
                 {kind}
                 {name}
-                <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{note}</span>
+                {!late && <span className={cx(NOTE_COL, 'text-[11px]', i.overdue ? 'text-accent' : 'text-dim')} title={note || undefined}>{note}</span>}
                 {amount}
                 {shields}
               </div>
@@ -468,7 +525,7 @@ function sameDayNextMonth(date: string): string {
   return `${month}-${String(Math.min(Number(date.slice(8, 10)), daysInMonth(month))).padStart(2, '0')}`
 }
 
-function NewLoanPanel({ today }: { today: string }) {
+function NewLoanPanel({ today, onDone }: { today: string; onDone: () => void }) {
   const accounts = useData((s) => s.fi?.settings.accounts)
   const blank = (): NewLoan => ({
     direction: 'given',
@@ -497,6 +554,7 @@ function NewLoanPanel({ today }: { today: string }) {
     if (!canWrite()) return
     addLoan({ ...o, total: taken && o.total > 0 ? o.total : o.amount })
     clearO()
+    onDone()
   }
   return (
     <Panel title="Nowa pożyczka" testId="radar-new-loan">

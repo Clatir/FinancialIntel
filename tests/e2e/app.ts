@@ -39,6 +39,9 @@ export async function launch(
     // The game's first freeze waits after the opening (B33): not in tests that do not test it.
     FI_FREEZE_AFTER_OPEN_MS: '0',
     FI_FREEZE_QUIET_MS: '0',
+    // The start wizard by itself in a new empty folder (UX-79): not in tests that do not test it – they start on the
+    // bridge, as a folder the wizard already opened once on this computer.
+    FI_WIZARD_AUTO: '0',
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
     ...opts.env
   } as Record<string, string>
@@ -129,6 +132,21 @@ export async function importDone(page: Page, userData: string): Promise<void> {
       throw e
     }
   })
+}
+
+export type IntelTabId = 'structure' | 'spending' | 'forecasts' | 'log'
+
+/** Wywiad is in tabs (D106, T539): a panel is on the screen only on its tab – Struktura, Wydatki, Prognozy, Dziennik. */
+export async function intelTab(page: Page, tab: IntelTabId): Promise<void> {
+  await page.getByTestId(`intel-tab-${tab}`).click()
+  await expect(page.getByTestId('intel-tabpanel')).toHaveAttribute('data-tab', tab)
+}
+
+/** Ctrl+9 (Wywiad) and the tab. */
+export async function openIntel(page: Page, tab: IntelTabId): Promise<void> {
+  await page.keyboard.press('Control+9')
+  await expect(page.getByTestId('page-intel')).toBeVisible()
+  await intelTab(page, tab)
 }
 
 /**

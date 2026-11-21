@@ -1,5 +1,6 @@
 // adapted from ICTTJ src/renderer/components/Popover.tsx @ 84a8339
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { ownsEscape } from './AnchoredList'
 import { cx } from './ui'
 
 /** The gap kept between an open panel and the window's edge. */
@@ -65,10 +66,18 @@ export function Popover({
   }, [open, align, resized])
   useEffect(() => {
     if (!open) return
-    const onDown = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
+    // The list of a field in the panel (a combobox's options, a menu) is in a portal at the page's end – outside the box,
+    // yet not outside the panel: a click on it is not a click away.
+    const onDown = (e: MouseEvent) => {
+      const t = e.target
+      if (t instanceof Element && t.closest('[role="listbox"],[role="menu"]')) return
+      if (ref.current && !ref.current.contains(t as Node)) setOpen(false)
+    }
     // Escape closes only the panel: caught before the page's own shortcuts (e.g. the scanner's Esc → dashboard).
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      // An open list of a field in the panel takes this Esc: it closes the list, not the panel (as `Modal` does).
+      if (ownsEscape(e.target)) return
       e.preventDefault()
       e.stopImmediatePropagation()
       setOpen(false)

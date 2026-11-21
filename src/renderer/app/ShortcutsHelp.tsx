@@ -8,6 +8,7 @@ import { Kbd } from '../components/ui'
 import { PAGES } from '../features/screens/pages'
 import { api } from '../lib/api'
 import { useMachine } from '../store/machine'
+import { KEYS, pageKeys } from '../components/shortcuts'
 
 /** The quick entry's row: its shortcut of this computer (N37), not a fixed one. */
 const QUICK_ROW = '\u0000quick'
@@ -16,34 +17,48 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
   {
     title: 'Ogólne',
     items: [
-      ['Ctrl K', 'paleta komend'],
-      ['Ctrl S', 'zapisz teraz (zapis i tak jest automatyczny)'],
-      ['Ctrl N', 'nowa operacja'],
-      [QUICK_ROW, 'szybki wpis – w całym systemie (zmiana: Ustawienia → Powiadomienia i dźwięki)'],
-      ['Ctrl $', 'ukryj / pokaż kwoty'],
-      ['Ctrl + / Ctrl −', 'większy / mniejszy interfejs (90–150 %)'],
-      ['Ctrl Shift 0', 'interfejs 100 %'],
-      ['Esc / mysz „wstecz”', 'poprzednia strona (Ustawienia, Synchronizacja, Meldunki)'],
-      ['? lub F1', 'ta ściąga']
+      [KEYS.palette, 'paleta komend'],
+      [KEYS.save, 'zapisz teraz (zapis i tak jest automatyczny)'],
+      [KEYS.newOperation, 'nowa operacja'],
+      [QUICK_ROW, 'szybki wpis – w całym systemie (zmiana: Ustawienia → Zasobnik i start)'],
+      [KEYS.hideAmounts, 'ukryj / pokaż kwoty'],
+      ['Ctrl+Plus / Ctrl+Minus', 'większy / mniejszy interfejs (90–150 %)'],
+      ['Ctrl+Shift+0', 'interfejs 100 %'],
+      ['Alt+← / Alt+→', 'wstecz / dalej po ekranach (też przyciski myszy)'],
+      ['Esc', 'wstecz z Ustawień, Synchronizacji i Meldunków'],
+      [KEYS.help, 'ta ściąga']
     ]
   },
   {
     title: 'Ekrany',
     items: [
-      ...PAGES.map((p): [string, string] => [`Ctrl ${p.key}`, p.label.toLowerCase()]),
-      ['Ctrl Shift Y', 'synchronizacja i problemy'],
-      ['Ctrl Shift M', 'meldunki do rozpatrzenia'],
-      ['Ctrl ,', 'ustawienia']
+      ...PAGES.map((p): [string, string] => [pageKeys(p.key), p.label.toLowerCase()]),
+      [KEYS.sync, 'synchronizacja i problemy'],
+      [KEYS.inbox, 'meldunki do rozpatrzenia'],
+      [KEYS.settings, 'ustawienia']
     ]
   },
   {
-    title: 'Panele i osobne okna',
+    // UX-53: the panels' controls were in tooltips only.
+    title: 'Panele',
     items: [
       ['dwuklik tytułu', 'zwiń / rozwiń panel'],
+      ['× w nagłówku', 'ukryj panel – przywrócisz go w menu „Układ” nad stroną'],
+      ['przycisk w nagłówku', 'odłącz do osobnego okna (panele Mostka) albo powiększ'],
       ['↑ ↓ na uchwycie (Shift: × 5)', 'wysokość panelu'],
       ['Home / Esc na uchwycie, dwuklik', 'naturalna wysokość'],
       ['Esc', 'zamknij powiększenie panelu'],
       ['F11', 'pełny ekran osobnego okna (Esc – wyjście)']
+    ]
+  },
+  {
+    // UX-63: the quick entry's keys were told nowhere.
+    title: 'Szybki wpis',
+    items: [
+      ['Enter', 'zapisz i zamknij okno'],
+      ['Ctrl+Enter', 'zapisz i zostaw okno na kolejny wpis'],
+      ['Esc', 'zamknij okno (wpisane zostaje)'],
+      ['Alt+P / Alt+I', 'plan / impuls (dziennik kapitański)']
     ]
   },
   {
@@ -55,7 +70,7 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
       ['Ctrl klik', 'zaznacz / odznacz operację'],
       ['Shift klik', 'zaznacz zakres od ostatnio klikniętej'],
       ['Shift ↑ ↓', 'rozszerz zaznaczenie'],
-      ['Ctrl A', 'zaznacz wszystkie widoczne'],
+      ['Ctrl+A', 'zaznacz wszystkie widoczne'],
       ['Esc', 'odznacz wszystkie'],
       ['prawy przycisk', 'zmień zaznaczone (menu)']
     ]
@@ -75,7 +90,7 @@ export function ShortcutsHelp() {
       alive = false
     }
   }, [open, quickShortcut])
-  const quickKeys = quickShortcut ? shortcutLabel(quickShortcut).replaceAll('+', ' ') : 'brak skrótu'
+  const quickKeys = quickShortcut ? shortcutLabel(quickShortcut) : 'brak skrótu'
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement

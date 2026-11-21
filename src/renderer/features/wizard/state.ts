@@ -16,6 +16,7 @@ import { setTrayPrefs } from '../../store/tray'
 import { navigate, toast } from '../../store/ui'
 import { editPlan, plannedOf } from '../month/actions'
 import { playSound } from '../../lib/sounds'
+import { folderIsEmpty } from './quick'
 
 export const WIZARD_STEPS = ['Konta i salda', 'Historia z mBanku', 'Pensja i warstwy', 'Ładownia i koperty', 'ICTTJ i cele', 'Podział środków', 'Okręt i rozkazy'] as const
 
@@ -24,6 +25,11 @@ export interface WizardState {
   /** The wizard runs (the import page offers the way back). */
   active: boolean
   step: number
+  /**
+   * „Szybki start” (UX-79): the balances, the salary and the daily envelopes on one screen – every other answer as the
+   * wizard proposes it (or as typed in its steps before); started by the same „Uruchom budżet”.
+   */
+  quick: boolean
   /** Balance in the bank now, per account (null = not typed). */
   balances: Record<string, number | null>
   salary: number | null
@@ -55,6 +61,7 @@ export interface WizardState {
 const initial = (): WizardState => ({
   active: false,
   step: 0,
+  quick: false,
   balances: {},
   salary: null,
   shieldSalaries: 3,
@@ -79,7 +86,11 @@ export const useWizard = create<WizardState>(() => initial())
  * draft per data folder (its accounts, its goals), until the budget starts or the wizard is broken off.
  */
 const DRAFT_KEY = 'fi.wizard.draft:'
-const draftKey = (dir: string) => `${DRAFT_KEY}${dir.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()}`
+/** The same folder whatever the case and the trailing separator (Windows paths). */
+const folderKey = (dir: string) => dir.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+const draftKey = (dir: string) => `${DRAFT_KEY}${folderKey(dir)}`
+/** The folder's wizard has opened by itself once on this computer (UX-79): never again by itself there. */
+const AUTO_KEY = 'fi.wizard.auto:'
 
 function storage(): Storage | null {
   try {
@@ -173,6 +184,57 @@ export function startWizard(): void {
   navigate({ page: 'wizard' })
 }
 
+/**
+ * The mark of a wizard opened by itself, set before it opens (UX-79, T546): false – this computer keeps no mark (storage
+ * blocked), and then the wizard never opens by itself – it would at every opening of the folder.
+ */
+function markAutoOpened(dir: string): boolean {
+  const s = storage()
+  if (!s) return false
+  try {
+    const key = `${AUTO_KEY}${folderKey(dir)}`
+    if (s.getItem(key)) return false
+    s.setItem(key, new Date().toISOString())
+    return s.getItem(key) != null
+  } catch {
+    return false
+  }
+}
+
+let autoOpenInstalled = false
+
+/**
+ * The folder shown while it could not be written – only to read, or brought by a switch from Settings still holding the
+ * window (`switchFolder` shows it with `switching` on, then takes it off): looked at once it can (T546). Never marked
+ * while it waits; another folder shown – that one instead.
+ */
+let autoOpenWaiting: string | null = null
+
+/**
+ * A new empty folder opens the start wizard by itself (UX-79, D106 pkt 11, T546) – once per folder on this computer: the
+ * mark is kept the moment it opens, so a wizard left without „Uruchom budżet” (another screen, „Przerwij kreator”, the
+ * window closed) never comes back by itself; the banner stays the way to it. Only a folder shown with no record and no
+ * problem file, its budget not running, writable (one only to read, or shown during a switch from Settings, waits – it is
+ * looked at once the folder takes writes and the switch is over), and not in the test runs that switch it off
+ * (`AppInfo.wizardAuto`). The main window only – the phone never installs it. After the wizard's own subscription above:
+ * a draft of the folder is in place before `startWizard` looks at it.
+ */
+export function initWizardAutoOpen(): void {
+  if (autoOpenInstalled) return
+  autoOpenInstalled = true
+  useData.subscribe((s, prev) => {
+    const dir = s.status?.dataDir
+    if (s.phase !== 'ready' || !dir) return
+    if (prev.phase !== 'ready' || dir !== prev.status?.dataDir) autoOpenWaiting = dir
+    else if (autoOpenWaiting !== dir) return
+    if (s.status?.readOnly || s.switching) return
+    autoOpenWaiting = null
+    if (!s.fi || s.fi.settings.budget.start || s.appInfo?.wizardAuto === false) return
+    if (!folderIsEmpty(s.records) || s.problems.length || s.conflicts.length) return
+    if (markAutoOpened(dir)) startWizard()
+  })
+}
+
 export const patchWizard = (p: Partial<WizardState>) => useWizard.setState(p)
 
 /** Something the wizard wrote at once (a member, a goal): said when it is broken off, for it stays in the folder. */
@@ -203,14 +265,7 @@ export function cancelWizard(): void {
   navigate({ page: 'bridge' })
 }
 
-/** What „Uruchom budżet” still needs (AF-14): only what is missing – never the whole list when the steps are filled in. */
-export function finishBlockers(o: { missing: readonly string[]; salary: number | null; overSplit: boolean }): string[] {
-  return [
-    ...(o.missing.length ? [`saldo teraz (krok 1): ${o.missing.join(', ')}`] : []),
-    ...(o.salary == null || o.salary <= 0 ? ['pensja (krok 3)'] : []),
-    ...(o.overSplit ? ['kadłub, cele i zbiorniki w granicach środków (krok 6)'] : [])
-  ]
-}
+export { blockedSteps, finishBlockers, quickBlockers } from './blockers'
 
 /** How long the start waits for fi.json on the disk before it says the folder is slow (and waits on – T446). */
 const START_WRITE_MS = 15_000

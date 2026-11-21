@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addDays, addMonths, daysBetween, warsawNow } from '../../src/shared/calc/dates'
 import { dm } from '../../src/shared/format'
+import { SHORT_MONTHS } from '../../src/shared/calc/cargoWatch'
 import { launch } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
@@ -61,17 +62,22 @@ test('AP-10: zaległa opłata zostaje po terminie (odprawa, Ładownia, Radar), j
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
     // The briefing: last month's due still unpaid; the OC asteroid 6 days ahead – on the day of its history.
-    const lateAlert = page.locator('[data-testid="briefing-item"][data-kind="cargo"]').filter({ hasText: `termin ${dm(lateDue)} minął` })
-    await expect(lateAlert).toContainText('Kontener niezaładowany: Telefon Play 50,00 zł')
+    // From 3 days after this month's 20th that due is overdue too: the container's dues in one line (UX-30).
+    const both = today >= addDays(`${month}-20`, 3)
+    const years = lateDue.slice(0, 4) !== month.slice(0, 4)
+    const mon = (m: string) => `${SHORT_MONTHS[Number(m.slice(5, 7)) - 1]}${years ? ` ${m.slice(0, 4)}` : ''}`
+    const lateAlert = page.locator('[data-testid="briefing-item"][data-kind="cargo"]').filter({ hasText: both ? 'Telefon Play: 2 terminy' : `termin ${dm(lateDue)} minął` })
+    await expect(lateAlert).toContainText(both ? `Kontener niezaładowany – Telefon Play: 2 terminy bez płatności (${mon(lateDue)}–${mon(month)}), razem 100,00 zł.` : 'Kontener niezaładowany: Telefon Play 50,00 zł')
     await expect(page.locator('[data-testid="briefing-item"][data-kind="asteroid"]').filter({ hasText: 'OC auta' })).toContainText(`OC auta za ${daysBetween(today, due)} dni`)
 
-    // The Radar: the same two dates.
+    // The Radar: the same two dates – both dues overdue in one row there, as in the briefing (UX-30).
     await page.keyboard.press('Control+7')
     await expect(page.getByTestId('page-radar')).toBeVisible()
     const phoneItem = page.locator('[data-testid="radar-item"][data-kind="fixed"]').filter({ hasText: 'Telefon Play' }).first()
     await expect(phoneItem).toHaveAttribute('data-overdue', 'yes')
     await expect(phoneItem).toContainText(dm(lateDue))
-    await expect(phoneItem).toContainText(`po terminie ${daysBetween(lateDue, today)} dni`)
+    if (both) await expect(phoneItem.getByTestId('radar-item-open')).toHaveText(`Telefon Play: 2 terminy bez płatności (${mon(lateDue)}–${mon(month)})`)
+    else await expect(phoneItem).toContainText(`po terminie ${daysBetween(lateDue, today)} dni`)
     await expect(page.locator('[data-testid="radar-item"][data-kind="asteroid"]').filter({ hasText: 'OC auta' }).first()).toContainText(dm(due))
     // RA sp. 1: ZALANDO of the same amount did not close „Przegląd komina”; RA sp. 4: „Mandat” long past – lapsed.
     await expect(page.locator('[data-testid="buoy-day"][data-name="Przegląd komina"]')).toHaveAttribute('data-state', 'late')

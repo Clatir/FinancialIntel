@@ -25,7 +25,7 @@ import { useFleet } from '../../store/fleet'
 import { useGameView } from '../../store/game'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
-import { api } from '../../lib/api'
+import { api, errorMessage } from '../../lib/api'
 import { orderRange, swappedText } from '../../lib/guards'
 import { DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
@@ -49,8 +49,9 @@ const TABS: Array<{ value: Tab; label: string }> = [
   { value: 'export', label: 'Eksport' }
 ]
 
+/** A file saved (UX-85): where, and the way to it – „Pokaż w folderze” opens the file manager on the file. */
 const saved = (path: string | null) => {
-  if (path) toast(`Zapisano: ${path}`, 'success', 6000)
+  if (path) toast(`Zapisano: ${path}`, 'success', 6000, { label: 'Pokaż w folderze', run: () => void api.showPath(path).catch((e: unknown) => toast(errorMessage(e), 'error')) })
 }
 const NO_OPERATIONS = 'Brak operacji w okresie.'
 const NO_MONTHS = 'Brak miesięcy w okresie.'
@@ -646,7 +647,12 @@ function ExportPanel() {
             <button className="btn h-[26px]" onClick={() => save(budgetWorkbook(ops(), months(), parts()), NO_DATA, (sheets) => api.saveXlsx(name('budzet', 'xlsx'), sheets))} data-testid="export-xlsx">
               Excel (operacje + części + miesiące)
             </button>
-            <button className="btn h-[26px]" onClick={() => api.exportZip().then(saved, failed)} data-testid="export-zip">
+            <button
+              className="btn h-[26px]"
+              onClick={() => api.exportZip().then(saved, failed)}
+              title="Cały folder danych (wszystkie lata i historia zmian) – okres powyżej nie dotyczy kopii"
+              data-testid="export-zip"
+            >
               Pełna kopia danych – ZIP
             </button>
           </div>
@@ -654,6 +660,9 @@ function ExportPanel() {
             Pliki zawsze z prawdziwymi kwotami – ukrycie kwot (Ctrl+$) dotyczy tylko ekranu. CSV dla polskiego Excela (średnik, przecinek dziesiętny). „Części” – wiersz na
             każdą część paragonu (suma części = kwota operacji), do sumowania kategorii. Okres zapamiętany na tym komputerze. Debriefing i przegląd roczny jako PDF – w
             ich zakładkach.
+          </span>
+          <span className="text-[11px] text-dim" data-testid="export-zip-note">
+            Pełna kopia (ZIP) to cały folder danych – wszystkie lata i historia zmian; okres powyżej dotyczy tylko plików CSV i Excela.
           </span>
         </div>
       </Panel>

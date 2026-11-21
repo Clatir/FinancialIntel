@@ -6,6 +6,7 @@ import { addDays, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
 import { seedFolder } from './seed'
+import { pickCategory } from './forms'
 
 const GROCERIES = '01KDEFCAT00000000000000101'
 
@@ -27,7 +28,7 @@ test('szybki wpis seriami (1.6.0, F7): Ctrl+Enter – zapisz i następny, dział
     let quick = await quickWindow(app, page)
     await quick.getByTestId('quick-amount').fill('12,50+8,30')
     await quick.getByTestId('quick-counterparty').fill('Kawiarnia Mokka')
-    await quick.getByTestId('quick-category').selectOption(GROCERIES)
+    await pickCategory(quick, 'quick-category', GROCERIES)
     // A daytime hour: the default one (now) falls in the quiet hours when the suite runs at night.
     await quick.getByTestId('quick-time').fill('12:00')
     await quick.getByTestId('quick-time').press('Tab')
@@ -39,7 +40,7 @@ test('szybki wpis seriami (1.6.0, F7): Ctrl+Enter – zapisz i następny, dział
     expect(await visible(app)).toBe(2)
     await quick.getByTestId('quick-template').filter({ hasText: 'Kawiarnia Mokka' }).click()
     await expect(quick.getByTestId('quick-counterparty')).toHaveValue('Kawiarnia Mokka')
-    await expect(quick.getByTestId('quick-category')).toHaveValue(GROCERIES)
+    await expect(quick.getByTestId('quick-category')).toHaveAttribute('data-value', GROCERIES)
     await quick.getByTestId('quick-amount').fill('3*4')
     await quick.getByTestId('quick-yesterday').click()
     await quick.getByTestId('quick-amount').press('Enter')

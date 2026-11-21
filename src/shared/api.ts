@@ -218,6 +218,11 @@ export interface AppInfo {
    * from another computer (B33); test runs shorten them.
    */
   freeze: { afterOpenMs: number; quietMs: number }
+  /**
+   * The start wizard opens by itself in a new empty folder (UX-79); false – never by itself (test runs that do not test
+   * it: `FI_WIZARD_AUTO=0`). Absent = on.
+   */
+  wizardAuto?: boolean
 }
 
 /**
@@ -310,8 +315,11 @@ export interface FiApi {
   loadCurrent(): Promise<OpenFolderResult | null>
   /** A broken fi.json taken from its history (B109), then the folder opened. */
   repairSettings(dir: string): Promise<OpenFolderResult>
-  /** Proposed folder for new data: `OneDrive\FinancialIntel`, without OneDrive `Dokumenty\FinancialIntel`. */
-  defaultDataDir(): Promise<{ dir: string; oneDrive: boolean }>
+  /**
+   * Proposed folder for new data: `OneDrive\FinancialIntel`, without OneDrive `Dokumenty\FinancialIntel`; `exists` – it
+   * already holds a budget (fi.json there), so the proposal opens it instead of creating one (UX-47).
+   */
+  defaultDataDir(): Promise<{ dir: string; oneDrive: boolean; exists: boolean }>
   /** Show a folder picker. mode=create initializes an empty folder as new data. */
   pickDataDir(mode: 'open' | 'create'): Promise<OpenFolderResult>
   /** `force`: new data also in the remembered folder found empty or missing – the user confirmed it (B53). */
@@ -366,6 +374,8 @@ export interface FiApi {
   openExternal(url: string): Promise<void>
   /** Opens the folder of this computer's application log (userData/logs) in the file manager. */
   openLogs(): Promise<void>
+  /** The application quits for real (the palette's „Zakończ aplikację”, UX-78): the usual close – the writes first, not to the tray. */
+  quitApp(): Promise<void>
   /**
    * Tray of this computer; `loginSupported` = start with the system is possible (packaged, Windows); `loginEntry` = the
    * system starts this copy now (its entry), null = not known; `loginDisabled` = its entry turned off in Task Manager (T433).
@@ -539,6 +549,8 @@ export interface QuickData {
    */
   lastByBrand: Record<string, string>
   counterparties: string[]
+  /** The categories of the newest expenses, the newest first (Z7: the category field's „Ostatnie” section). */
+  recentCategories?: string[]
   rules: ImportRule[]
   aliases: BrandAliases
   /**

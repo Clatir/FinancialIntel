@@ -79,7 +79,7 @@ export function noticeReplacedShortcut(): void {
     (s) => {
       if (s.replaced)
         toast(
-          `Skrót szybkiego wpisu ${shortcutLabel(s.replaced)} zabierał polską literę (AltGr) w innych programach – teraz jest ${s.accelerator ? shortcutLabel(s.accelerator) : 'bez skrótu'}. Inny ustawisz w Ustawienia → Powiadomienia i dźwięki.`,
+          `Skrót szybkiego wpisu ${shortcutLabel(s.replaced)} zabierał polską literę (AltGr) w innych programach – teraz jest ${s.accelerator ? shortcutLabel(s.accelerator) : 'bez skrótu'}. Inny ustawisz w Ustawienia → Zasobnik i start.`,
           'info',
           15000
         )

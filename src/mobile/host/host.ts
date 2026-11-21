@@ -429,7 +429,7 @@ export class PhoneHost {
         return { ok: true, snapshot: await this.open() }
       }),
       repairSettings: pcOnly('repairSettings'),
-      defaultDataDir: call('defaultDataDir', () => ({ dir: MIRROR, oneDrive: true })),
+      defaultDataDir: call('defaultDataDir', () => ({ dir: MIRROR, oneDrive: true, exists: false })),
       pickDataDir: pcOnly('pickDataDir'),
       openDataDir: pcOnly('openDataDir'),
       cancelOpen: call('cancelOpen', () => undefined),
@@ -496,6 +496,7 @@ export class PhoneHost {
       showGhostFolder: call('showGhostFolder', () => undefined),
       openExternal: call('openExternal', (url: string) => this.d.openUrl(url)),
       openLogs: call('openLogs', () => undefined),
+      quitApp: pcOnly('quitApp'),
       trayPrefs: call('trayPrefs', () => this.tray()),
       setTrayPrefs: call('setTrayPrefs', () => this.tray()),
       rescan: call('rescan', () => undefined),

@@ -1,6 +1,8 @@
 // adapted from ICTTJ src/renderer/app/TopBar.tsx @ 84a8339
 import { useData } from '../store/data'
-import { setPalette, useUi } from '../store/ui'
+import { setPalette, toast, useUi } from '../store/ui'
+import { api, errorMessage } from '../lib/api'
+import { KEYS } from '../components/shortcuts'
 import { IconSearch } from '../components/icons'
 import { Kbd } from '../components/ui'
 import { SaveIndicator } from './SaveIndicator'
@@ -35,16 +37,22 @@ export function PageBar() {
   const wizard = useUi((s) => s.route.page === 'wizard')
   return (
     <header className="flex h-[34px] shrink-0 items-center gap-4 border-b border-line bg-panel px-3">
-      <span className="num min-w-0 truncate text-[11px] text-dim" title={status?.dataDir} data-testid="data-dir">
+      {/* UX-83: the folder opens in the file manager. */}
+      <button
+        className="num min-w-0 truncate text-left text-[11px] text-dim hover:text-fg hover:underline"
+        title={status?.dataDir ? `${status.dataDir} – kliknij, żeby pokazać folder w Eksploratorze` : undefined}
+        onClick={() => void api.showInFolder(null).catch((e) => toast(errorMessage(e), 'error'))}
+        data-testid="data-dir"
+      >
         {status?.dataDir}
-      </span>
+      </button>
       <div className="ml-auto flex items-center gap-4">
         <HiddenAmounts />
         <RemoteChangesChip />
         <SaveIndicator />
         {!wizard && <LayoutMenu />}
-        <button className="btn h-[22px] shrink-0 gap-2 text-[11.5px] text-muted" onClick={() => setPalette(true)} title="Komendy (Ctrl+K)" data-testid="open-palette">
-          <IconSearch size={13} /> <span className="max-[1180px]:hidden">Komendy</span> <Kbd>Ctrl K</Kbd>
+        <button className="btn h-[22px] shrink-0 gap-2 text-[11.5px] text-muted" onClick={() => setPalette(true)} title={`Komendy (${KEYS.palette})`} data-testid="open-palette">
+          <IconSearch size={13} /> <span className="max-[1180px]:hidden">Komendy</span> <Kbd>{KEYS.palette}</Kbd>
         </button>
       </div>
     </header>

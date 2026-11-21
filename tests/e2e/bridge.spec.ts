@@ -6,6 +6,7 @@ import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
+import { pickCategory } from './forms'
 
 const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
@@ -59,7 +60,7 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     let quick = await quickWindow(app, page)
     await quick.getByTestId('quick-amount').fill('12,50')
     await quick.getByTestId('quick-counterparty').fill('Biedronka')
-    await expect(quick.getByTestId('quick-category')).toHaveValue(GROCERIES)
+    await expect(quick.getByTestId('quick-category')).toHaveAttribute('data-value', GROCERIES)
     await quick.getByTestId('quick-time').fill('12:00')
     await quick.getByTestId('quick-time').press('Tab')
     await expect(quick.getByTestId('quick-preview-energy')).toContainText('→')
@@ -120,7 +121,8 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     await quick.getByRole('radio', { name: 'przychód' }).click()
     await quick.getByTestId('quick-save').click()
     await expect.poll(async () => (await operations(dir)).filter((t) => t.kind === 'income').map((t) => [t.amount, t.memberId, t.repaid])).toEqual([[20000, HOUSE, 0]])
-    await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')
+    // Nothing owed any more and nobody but „Dom” (D106 pkt 4, 1.21.0): the panel hides itself until a balance comes.
+    await expect(page.getByTestId('bridge-receivables')).toHaveCount(0)
 
     // Esc closes without saving.
     quick = await quickWindow(app, page)
@@ -131,10 +133,10 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
 
     // Ctrl+$: the amounts hidden on this computer (config.json), shown again.
     await page.keyboard.press('Control+Shift+Digit4')
-    await expect(page.getByTestId('bridge-house')).toHaveText('••• zł')
+    await expect(page.getByTestId('state-shields')).toContainText('••• zł')
     await expect.poll(async () => (await json(join(userData, 'config.json'))).prefs?.hideAmounts).toBe(true)
     await page.keyboard.press('Control+Shift+Digit4')
-    await expect(page.getByTestId('bridge-house')).toHaveText('0,00 zł')
+    await expect(page.getByTestId('state-shields')).not.toContainText('•••')
 
     // „Stan okrętu” in its own window (a second monitor, D45): the hidden amounts there too, a click leads the main window.
     const state = page.locator('section:not([hidden])[data-panel="bridge:Stan okrętu"]')
@@ -155,7 +157,7 @@ test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawie
     quick = await quickWindow(app, page)
     await quick.getByTestId('quick-amount').fill('70')
     await quick.getByTestId('quick-counterparty').fill('Biedronka')
-    await expect(quick.getByTestId('quick-category')).toHaveValue(GROCERIES)
+    await expect(quick.getByTestId('quick-category')).toHaveAttribute('data-value', GROCERIES)
     // A daytime hour: the default one (now) falls in the quiet hours when the suite runs at night.
     await quick.getByTestId('quick-time').fill('12:00')
     await quick.getByTestId('quick-time').press('Tab')

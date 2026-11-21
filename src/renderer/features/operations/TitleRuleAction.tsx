@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
-import { dm, formatPln, plural } from '@shared/format'
+import { dm, plural } from '@shared/format'
+import { plnText } from '../../components/fields'
 import { TX_KIND_LABEL, type Transaction, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { Popover } from '../../components/Popover'
 import { Field, Segmented, TextField, cx } from '../../components/ui'
-import { CategorySelect, useAccounts } from './pickers'
+import { CategoryField, useAccounts } from './pickers'
 import { FinancerSelect } from '../household/MemberPickers'
 import { useMembers } from '../household/actions'
-import { applyTitleRule, findMatchingByTitle, type TitleRuleInput } from './titleRules'
+import { NO_CATEGORY_REFUSAL } from '../import/rules'
+import { applyTitleRule, findMatchingByTitle, titleKeyword, titleRulePlan, type TitleRuleInput } from './titleRules'
 
 const TYPE_OPTIONS = [
   { value: 'refund', label: 'Zwrot / kategoria' },
@@ -52,10 +54,16 @@ function TitleRulePopover({
   patch: (p: Partial<Transaction>) => void
 }) {
   const transactions = useData((s) => s.records.transactions)
+  // Read by the count's plan (`titleRulePlan`): a draft or a docking changed – counted again.
+  const drafts = useData((s) => s.drafts)
+  const dockings = useData((s) => s.records.dockings)
   const members = useMembers()
   const accounts = useAccounts()
 
-  const [keyword, setKeyword] = useState(title)
+  // The longest word of the title, not the whole (T535, UX-1): a title is rarely repeated word for word.
+  const [keyword, setKeyword] = useState(() => titleKeyword(title))
+  // Why the rule was not saved (UX-2): at its field – never a window that „does not react”.
+  const [error, setError] = useState<string | null>(null)
   const [onlyCounterparty, setOnlyCounterparty] = useState(!!t.counterparty?.trim())
   const initialType =
     t.kind === 'expense' && t.amount > 0
@@ -76,7 +84,8 @@ function TitleRulePopover({
   const [gift, setGift] = useState<boolean | undefined>(t.gift)
   const [inflowKind, setInflowKind] = useState<'repay' | 'income' | 'advance'>(t.inflowKind ?? 'repay')
   const [counterAccountId, setCounterAccountId] = useState<string | null>(t.counterAccountId)
-  const [updateHistory, setUpdateHistory] = useState(true)
+  // The history only when asked (D106 pkt 3) – then through the bulk changes' preview.
+  const [updateHistory, setUpdateHistory] = useState(false)
 
   const activeKind: TxKind =
     selectedType === 'refund' || selectedType === 'expense'
@@ -94,25 +103,34 @@ function TitleRulePopover({
     [transactions, keyword, title, t.id, targetCounterparty]
   )
 
-  const handleApply = (close: () => void) => {
-    const input: TitleRuleInput = {
-      keyword: keyword.trim() || title,
-      kind: activeKind,
-      direction: selectedType === 'refund' ? 'in' : activeKind === 'expense' ? 'out' : activeKind === 'income' ? 'in' : null,
-      categoryId: activeKind === 'expense' ? categoryId : null,
-      counterparty: targetCounterparty,
-      refundable: activeKind === 'expense' && refundable,
-      household: activeKind === 'income' && !!memberId,
-      memberId: (activeKind === 'expense' && refundable) || (activeKind === 'income' && !!memberId) ? memberId : null,
-      gift: activeKind === 'expense' && refundable && gift ? true : undefined,
-      counterAccountId: activeKind === 'transfer' ? counterAccountId : null,
-      inflowKind: activeKind === 'income' && !!memberId ? inflowKind : undefined,
-      updateHistory
-    }
+  const inputOf = (): TitleRuleInput => ({
+    keyword: keyword.trim() || title,
+    kind: activeKind,
+    direction: selectedType === 'refund' ? 'in' : activeKind === 'expense' ? 'out' : activeKind === 'income' ? 'in' : null,
+    categoryId: activeKind === 'expense' ? categoryId : null,
+    counterparty: targetCounterparty,
+    refundable: activeKind === 'expense' && refundable,
+    household: activeKind === 'income' && !!memberId,
+    memberId: (activeKind === 'expense' && refundable) || (activeKind === 'income' && !!memberId) ? memberId : null,
+    gift: activeKind === 'expense' && refundable && gift ? true : undefined,
+    counterAccountId: activeKind === 'transfer' ? counterAccountId : null,
+    inflowKind: activeKind === 'income' && !!memberId ? inflowKind : undefined,
+    // Ticked while another keyword found some: none now – the rule only.
+    updateHistory: updateHistory && matching.length > 0
+  })
+  // The ones the rule changes (T549) – the preview's own plan: of its direction, not already so, the open operation
+  // with them, no drafts and none of a newer version. Computed again only when what it reads changes.
+  const changes = useMemo(
+    () => (updateHistory && matching.length > 0 ? titleRulePlan(inputOf(), t).plan.before.length : 0),
+    // `inputOf` reads exactly the state listed.
+    [updateHistory, matching, drafts, dockings, t, keyword, title, activeKind, selectedType, categoryId, targetCounterparty, refundable, memberId, gift, counterAccountId, inflowKind]
+  )
 
-    const res = applyTitleRule(input, t)
-    if (res.ok) {
-      // Also update currently open transaction in editor
+  const handleApply = (close: () => void) => {
+    const input = inputOf()
+
+    // The open operation as the rule decides – the editor's own edit (without the history, or a draft – T535).
+    const patchCurrent = () => {
       if (activeKind === 'expense') {
         const isRefund = selectedType === 'refund'
         patch({
@@ -152,9 +170,21 @@ function TitleRulePopover({
           memberId: null
         })
       }
-      close()
     }
+
+    const res = applyTitleRule(input, t, patchCurrent)
+    if (!res.ok) return setError(res.error ?? null)
+    // Saved, or the preview of the history opened (written once it is confirmed).
+    setError(null)
+    close()
   }
+  const keywordError = error && error !== NO_CATEGORY_REFUSAL ? error : null
+  const categoryError = error === NO_CATEGORY_REFUSAL ? error : null
+  const errorText = (text: string) => (
+    <span className="text-[11px] text-down" role="alert" data-testid="title-rule-error">
+      {text}
+    </span>
+  )
 
   const shortTitle = title.length > 25 ? `${title.slice(0, 24)}…` : title
 
@@ -180,19 +210,25 @@ function TitleRulePopover({
           <div>
             <div className="font-medium text-fg-strong">Reguła dla tytułu operacji</div>
             <div className="text-[11px] text-muted">
-              Ustaw typ operacji dla tego tytułu dla kolejnych importów oraz zaktualizuj pasujące operacje w historii (zarówno z przeszłości, jak i przyszłości).
+              Ustaw typ operacji dla tego tytułu dla kolejnych importów; po zaznaczeniu poniżej – także pasujące operacje w historii (z przeszłości i przyszłości), z podglądem zmian przed zapisem.
             </div>
           </div>
 
           <Field label="Tytuł / fraza">
-            <TextField
-              commit
-              value={keyword}
-              onChange={setKeyword}
-              placeholder="słowo kluczowe w tytule…"
-              maxLength={200}
-              data-testid="title-rule-keyword"
-            />
+            <div className="flex flex-col gap-1">
+              <TextField
+                commit
+                value={keyword}
+                onChange={(v) => {
+                  setKeyword(v)
+                  setError(null)
+                }}
+                placeholder="słowo kluczowe w tytule…"
+                maxLength={200}
+                data-testid="title-rule-keyword"
+              />
+              {keywordError && errorText(keywordError)}
+            </div>
           </Field>
 
           {t.counterparty?.trim() && (
@@ -201,7 +237,7 @@ function TitleRulePopover({
                 type="checkbox"
                 checked={onlyCounterparty}
                 onChange={(e) => setOnlyCounterparty(e.currentTarget.checked)}
-                className="rounded border-border text-accent focus:ring-accent"
+                className="rounded border-line text-accent focus:ring-accent"
                 data-testid="title-rule-only-counterparty"
               />
               <span>Tylko dla operacji od/do: <strong className="text-fg-strong">{t.counterparty.trim()}</strong></span>
@@ -213,7 +249,10 @@ function TitleRulePopover({
               <Segmented
                 size="sm"
                 value={selectedType}
-                onChange={setSelectedType}
+                onChange={(v) => {
+                  setSelectedType(v)
+                  setError(null)
+                }}
                 options={[...TYPE_OPTIONS]}
                 aria-label="Typ transakcji"
               />
@@ -240,12 +279,16 @@ function TitleRulePopover({
           {(selectedType === 'expense' || selectedType === 'refund') && (
             <Field label="Kategoria">
               <div className="flex flex-col gap-1.5">
-                <CategorySelect
+                <CategoryField
                   className="min-w-0 flex-1"
                   value={categoryId}
-                  onChange={setCategoryId}
+                  onChange={(c) => {
+                    setCategoryId(c)
+                    setError(null)
+                  }}
                   data-testid="title-rule-category"
                 />
+                {categoryError && errorText(categoryError)}
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-muted">Finansuje:</span>
                   <FinancerSelect
@@ -339,12 +382,13 @@ function TitleRulePopover({
                 {matching.slice(0, 5).map((m) => (
                   <div key={m.id} className="flex items-center justify-between text-[10.5px] text-dim">
                     <span>{dm(m.date)} · {m.counterparty || m.title || TX_KIND_LABEL[m.kind]}</span>
-                    <span className="num">{formatPln(m.amount)} zł</span>
+                    <span className="num">{plnText(m.amount)} zł</span>
                   </div>
                 ))}
                 {matching.length > 5 && <div className="text-[10px] text-dim italic">+ {matching.length - 5} więcej</div>}
               </div>
             )}
+            {matching.length > 0 && updateHistory && <div className="text-dim">Przed zapisem – podgląd zmian: energia, koperty, salda, potwierdzone salda.</div>}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-1 border-t border-line">
@@ -357,7 +401,7 @@ function TitleRulePopover({
               onClick={() => handleApply(close)}
               data-testid="title-rule-apply-btn"
             >
-              {updateHistory && matching.length > 0 ? `Zapisz i zaktualizuj (${matching.length})` : 'Zapisz regułę'}
+              {changes > 0 ? `Zapisz i zaktualizuj (${changes})…` : 'Zapisz regułę'}
             </button>
           </div>
         </div>

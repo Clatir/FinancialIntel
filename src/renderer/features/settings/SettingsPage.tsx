@@ -7,6 +7,7 @@ import { api, errorMessage } from '../../lib/api'
 import { countLabel, fmtBytes, plDateTime } from '../../lib/format'
 import { saveFirst, switchFolder, unsavedReport, updateSettings, useData, useFolderLocked } from '../../store/data'
 import { OpenProgressPanel, useOpenProgress } from '../setup/OpenProgress'
+import { rescanWithToast } from '../sync/rescan'
 import { navigate, toast, useUi, type SettingsTab } from '../../store/ui'
 import { autostartOf, refreshTrayPrefs, setTrayPrefs, useTray } from '../../store/tray'
 import { openExternalSafe, UpdatesTab } from './UpdatesTab'
@@ -14,7 +15,7 @@ import { FOLDER_FORMAT_PAGE } from '@shared/update'
 import { AccountsTab } from './AccountsTab'
 import { CategoriesTab } from './CategoriesTab'
 import { ImportTab } from './ImportTab'
-import { LayersTab, NotifyTab, ViewTab } from './MachineTabs'
+import { LayersTab, NotifyTab, QuickEntryPanel, ViewTab } from './MachineTabs'
 import { IctjTab } from './IctjTab'
 import { HouseholdTab } from './HouseholdTab'
 import { RecoverDialog } from './RecoverDialog'
@@ -23,30 +24,18 @@ import { Field, NameInput, Panel, Segmented, Toggle, cx } from '../../components
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { MachineOnly } from './MachineOnly'
 import { openMachineSetup } from './MachineSetup'
+import { SETTINGS_GROUPS, SETTINGS_TABS, readSettingsTab, rememberSettingsTab } from './settingsNav'
 
-/**
- * Tabs of the settings: the foundation's and the budget's (accounts, categories, layers and orders, the import's rules)
- * and this computer's (notifications, sounds, the quick entry's shortcut, the ICTTJ folder and program – E5).
- */
-export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
-  { id: 'general', label: 'Okręt' },
-  { id: 'accounts', label: 'Konta' },
-  { id: 'categories', label: 'Kategorie' },
-  { id: 'layers', label: 'Warstwy i rozkazy' },
-  { id: 'household', label: 'Domownicy' },
-  { id: 'import', label: 'Import z banku' },
-  { id: 'ictj', label: 'ICTTJ' },
-  { id: 'notify', label: 'Powiadomienia i dźwięki' },
-  { id: 'view', label: 'Wygląd i prywatność' },
-  { id: 'folder', label: 'Folder i kopie' },
-  { id: 'system', label: 'Zasobnik i start' },
-  { id: 'updates', label: 'Aktualizacje' }
-]
+export { SETTINGS_TABS }
 
 export function SettingsPage() {
   const nav = usePaneWidth('menu', 190, 150, 320)
   const route = useUi((s) => s.route)
-  const tab = (route.page === 'settings' && route.tab) || 'general'
+  // No tab named (Ctrl+, the menu): the one shown last on this computer (UX-78).
+  const tab = (route.page === 'settings' && route.tab) || readSettingsTab()
+  useEffect(() => {
+    rememberSettingsTab(tab)
+  }, [tab])
   const fi = useData((s) => s.fi)
   const readOnly = useFolderLocked()
   const switching = useData((s) => s.switching)
@@ -58,18 +47,27 @@ export function SettingsPage() {
     <div className="flex h-full min-h-0">
       <nav className="flex shrink-0 flex-col border-r border-line bg-panel py-1" style={{ width: nav.width }}>
         <div className="label px-3 py-2">Ustawienia</div>
-        {SETTINGS_TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => navigate({ page: 'settings', tab: t.id })}
-            className={cx(
-              'h-[28px] border-l-2 px-3 text-left transition-colors duration-150',
-              tab === t.id ? 'border-accent bg-accent-soft text-fg-strong' : 'border-transparent text-muted hover:bg-hover hover:text-fg-strong'
-            )}
-            data-testid={`settings-tab-${t.id}`}
-          >
-            {t.label}
-          </button>
+        {/* UX-68: where the changes are saved – the fields keep a draft until they are left, the switches act at once. */}
+        <p className="px-3 pb-1 text-[11px] leading-snug text-dim" data-testid="settings-autosave">
+          Zmiany zapisują się od razu – po wyjściu z pola, puszczeniu suwaka albo kliknięciu.
+        </p>
+        {SETTINGS_GROUPS.map((g) => (
+          <div key={g.id} className="flex flex-col" data-testid={`settings-group-${g.id}`}>
+            <div className="label mt-2 px-3 py-1">{g.label}</div>
+            {g.tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => navigate({ page: 'settings', tab: t.id })}
+                className={cx(
+                  'h-[28px] border-l-2 px-3 text-left transition-colors duration-150',
+                  tab === t.id ? 'border-accent bg-accent-soft text-fg-strong' : 'border-transparent text-muted hover:bg-hover hover:text-fg-strong'
+                )}
+                data-testid={`settings-tab-${t.id}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
       <PaneEdge pane={nav} side="left" />
@@ -128,7 +126,6 @@ function GeneralTab() {
           <p className="text-[11.5px] text-muted">Widać ją w menu bocznym i na mostku. Wspólna dla wszystkich Twoich komputerów (zapisana w fi.json).</p>
         </div>
       </Panel>
-      <TwoComputersPanel />
     </>
   )
 }
@@ -137,9 +134,10 @@ function GeneralTab() {
 function TwoComputersPanel() {
   const mode = useData((s) => s.fi?.settings.sync.remoteChanges ?? 'merge')
   const others = useData((s) => s.status?.otherMachines ?? [])
+  const readOnly = useFolderLocked()
   return (
-    <Panel title="Praca na kilku komputerach">
-      <div className="flex flex-col gap-2 text-[12px]">
+    <Panel title="Praca na kilku komputerach" testId="settings-two-computers">
+      <fieldset disabled={readOnly} className="flex flex-col gap-2 text-[12px]">
         <Segmented
           size="sm"
           value={mode}
@@ -162,7 +160,7 @@ function TwoComputersPanel() {
             nic w tle (dni gry, cele z ICTTJ) i zostawia powiadomienia komputerowi w użyciu.
           </div>
         )}
-      </div>
+      </fieldset>
     </Panel>
   )
 }
@@ -303,7 +301,7 @@ function FolderTab() {
             <button className="btn" disabled={switching} onClick={() => switchTo(() => api.pickDataDir('create'))}>
               <IconPlus size={13} /> Nowe dane w innym folderze…
             </button>
-            <button className="btn" onClick={() => api.rescan().then(() => toast('Przeskanowano folder.', 'success'), (e) => toast(errorMessage(e), 'error'))}>
+            <button className="btn" onClick={() => void rescanWithToast()}>
               <IconSync size={13} /> Przeskanuj
             </button>
           </div>
@@ -321,6 +319,7 @@ function FolderTab() {
           </p>
         </div>
       </Panel>
+      <TwoComputersPanel />
       <Panel title="Informacje">
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[12px]">
           <Field label="Format danych">
@@ -489,35 +488,44 @@ function SystemTab() {
     void refreshTrayPrefs()
   }, [])
   const change = (patch: Partial<Pick<TrayPrefs, 'closeToTray' | 'launchAtLogin'>>) => setTrayPrefs(patch).catch((e: unknown) => toast(`Nie udało się zapisać: ${errorMessage(e)}`, 'error'))
-  if (!prefs) return <Panel title="Zasobnik i start z Windows">Wczytywanie…</Panel>
+  if (!prefs)
+    return (
+      <>
+        <Panel title="Zasobnik i start z Windows">Wczytywanie…</Panel>
+        <QuickEntryPanel />
+      </>
+    )
   const autostart = autostartOf(prefs)
   return (
-    <Panel title="Zasobnik i start z Windows" name="Zasobnik i start z Windows (ten komputer)" actions={<MachineOnly />}>
-      <div className="flex flex-col gap-2.5 text-[12px]">
-        <Toggle
-          checked={prefs.closeToTray}
-          onChange={(closeToTray) => void change({ closeToTray })}
-          label="Zamykaj do zasobnika – przypomnienia i powiadomienia działają dalej; „Zakończ” w menu ikony przy zegarze"
-          data-testid="tray-close"
-        />
-        <Toggle
-          checked={autostart.on}
-          disabled={!prefs.loginSupported}
-          onChange={(launchAtLogin) => void change({ launchAtLogin })}
-          label="Uruchamiaj z Windows (ukryta w zasobniku)"
-          data-testid="tray-login"
-        />
-        {autostart.note && (
-          <p className="text-[11.5px] text-accent" data-testid="tray-login-note">
-            {autostart.note}
+    <>
+      <Panel title="Zasobnik i start z Windows" name="Zasobnik i start z Windows (ten komputer)" actions={<MachineOnly />}>
+        <div className="flex flex-col gap-2.5 text-[12px]">
+          <Toggle
+            checked={prefs.closeToTray}
+            onChange={(closeToTray) => void change({ closeToTray })}
+            label="Zamykaj do zasobnika – przypomnienia i powiadomienia działają dalej; „Zakończ” w menu ikony przy zegarze"
+            data-testid="tray-close"
+          />
+          <Toggle
+            checked={autostart.on}
+            disabled={!prefs.loginSupported}
+            onChange={(launchAtLogin) => void change({ launchAtLogin })}
+            label="Uruchamiaj z Windows (ukryta w zasobniku)"
+            data-testid="tray-login"
+          />
+          {autostart.note && (
+            <p className="text-[11.5px] text-accent" data-testid="tray-login-note">
+              {autostart.note}
+            </p>
+          )}
+          {!prefs.loginSupported && <p className="text-[11.5px] text-dim">Start z systemem działa w zainstalowanej albo przenośnej wersji dla Windows.</p>}
+          <p className="text-[11.5px] text-muted">
+            Te ustawienia są zapisane na tym komputerze (nie w folderze danych). Start z Windows włączysz też w kreatorze startu. Ikona pokazuje w
+            dymku „energię dziś”, a jej menu – szybki wpis.
           </p>
-        )}
-        {!prefs.loginSupported && <p className="text-[11.5px] text-dim">Start z systemem działa w zainstalowanej albo przenośnej wersji dla Windows.</p>}
-        <p className="text-[11.5px] text-muted">
-          Te ustawienia są zapisane na tym komputerze (nie w folderze danych). Start z Windows włączysz też w kreatorze startu. Ikona pokazuje w
-          dymku „energię dziś”, a jej menu – szybki wpis.
-        </p>
-      </div>
-    </Panel>
+        </div>
+      </Panel>
+      <QuickEntryPanel />
+    </>
   )
 }

@@ -3,7 +3,7 @@
  * one first) with „Wykonaj teraz” / „Odhacz”, the days the bank's operations did (with „to nie ta”), the buoys further
  * than the radar's 90 days, and the form of a new one (kept while another screen is looked at).
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { LAPSE_DAYS, nextDayOf, pastStates, type ScheduledDay } from '@shared/calc/scheduled'
 import { dm } from '@shared/calc/briefing'
 import type { Scheduled } from '@shared/schema'
@@ -42,7 +42,7 @@ function formOf(s: Scheduled): NewScheduled & { kind: Direction } {
   }
 }
 
-export function BuoysPanel({ days, today, readOnly }: { days: readonly ScheduledDay[]; today: string; readOnly: boolean }) {
+export function BuoysPanel({ days, today, readOnly, actions }: { days: readonly ScheduledDay[]; today: string; readOnly: boolean; actions?: ReactNode }) {
   const list = useRecordList('scheduled')
   const transactions = useRecordList('transactions')
   const [editing, setEditing] = useState<string | null>(null)
@@ -54,11 +54,11 @@ export function BuoysPanel({ days, today, readOnly }: { days: readonly Scheduled
   // What became of the one-offs long past (RA sp. 4): once per buoys, operations and day – never per row (przegląd 2 N3).
   const pastOf = pastStates(list, transactions, today)
   return (
-    <Panel title={open.length ? `Boje nawigacyjne (${open.length})` : 'Boje nawigacyjne'} name="Boje nawigacyjne" testId="radar-buoys">
+    <Panel title={open.length ? `Boje nawigacyjne (${open.length})` : 'Boje nawigacyjne'} name="Boje nawigacyjne" testId="radar-buoys" actions={actions}>
       <div className="flex flex-col text-[12px]">
         {!open.length && <Empty>Żadnej boi w najbliższych 90 dniach – dodaj zaplanowany wydatek, wpływ albo termin.</Empty>}
         {open.map((d) => (
-          <div key={`${d.scheduled.id}:${d.date}`} className="flex flex-col border-b border-line/60 py-1 last:border-b-0" data-testid="buoy-day" data-name={d.scheduled.name} data-state={d.state}>
+          <div key={`${d.scheduled.id}:${d.date}`} className="flex flex-col border-b border-line/60 py-1 last:border-b-0" data-testid="buoy-day" data-name={d.scheduled.name} data-state={d.state} data-focus={`buoy:${d.scheduled.id}`}>
             <div className="flex items-baseline gap-2">
               <span className="num w-[44px] shrink-0 text-[11px] text-muted">{dm(d.date)}</span>
               <span className="min-w-0 flex-1 truncate text-fg-strong">{d.scheduled.name}</span>
@@ -114,7 +114,7 @@ export function BuoysPanel({ days, today, readOnly }: { days: readonly Scheduled
               // A one-off long past says what became of it (RA sp. 4): never read as a day ahead.
               const past = next ? null : (pastOf.get(s.id) ?? null)
               return (
-                <div key={s.id} className="flex flex-col py-0.5" data-testid="buoy-later" data-name={s.name} data-state={past ?? 'ahead'}>
+                <div key={s.id} className="flex flex-col py-0.5" data-testid="buoy-later" data-name={s.name} data-state={past ?? 'ahead'} data-focus={`buoy:${s.id}`}>
                   <div className="flex items-baseline gap-2">
                     <span className="num w-[70px] shrink-0 text-dim">{next ? plDate(next) : plDate(s.date)}</span>
                     <span className="min-w-0 flex-1 truncate">{s.name}</span>
@@ -244,7 +244,7 @@ function BuoyFields({ o, set }: { o: Form; set: (p: Partial<Form>) => void }) {
   )
 }
 
-export function NewBuoyPanel({ today: day }: { today: string }) {
+export function NewBuoyPanel({ today: day, onDone }: { today: string; onDone: () => void }) {
   const blank = (): Form => ({ name: '', date: day, amount: null, direction: 'out', kind: 'out', yearly: false, accountId: null, categoryId: null, counterparty: '', remind: [14, 3], note: '' })
   // Kept while another screen is looked at (N36).
   const [o, setO, clear] = useDraft<Form>('radar:newBuoy', blank)
@@ -252,7 +252,10 @@ export function NewBuoyPanel({ today: day }: { today: string }) {
     if (!o.name.trim()) return toast('Nazwij boję (np. „Wesele Kasi”).', 'error')
     if (o.kind !== 'term' && !o.amount) return toast('Podaj kwotę albo wybierz „Termin bez kwoty”.', 'error')
     const made = addScheduled({ ...o, amount: o.kind === 'term' ? null : o.amount, direction: o.kind === 'in' ? 'in' : 'out', categoryId: o.kind === 'out' ? o.categoryId : null })
-    if (made) clear()
+    if (made) {
+      clear()
+      onDone()
+    }
   }
   return (
     <Panel title="Nowa boja" testId="radar-new-buoy">

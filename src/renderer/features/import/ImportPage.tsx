@@ -6,6 +6,7 @@ import { TX_KIND_LABEL, type Account, type HouseholdMember, type Share, type TxK
 import { shareComplete, startShare } from '@shared/calc/share'
 import { memberName } from '@shared/calc/household'
 import { keywordMatcher } from '@shared/import/brands'
+import { isUncategorized, noNarrowing } from '@shared/operationsView'
 import { useData, useFolderLocked } from '../../store/data'
 import { useRecordList } from '../../store/records'
 import { noteImportTrace, useWizard } from '../wizard/state'
@@ -21,6 +22,8 @@ import { AccountSelect, CategorySelect, useAccounts, useCategories } from '../op
 import { accountNumberOf, accountNumberText } from '@shared/import/mbank'
 import { DecisionFields, IMPORT_SHARE_MODES, RowLoanPart, RowShares, rowPartsOf } from './DecisionFields'
 import { DuplicatesNote, DuplicatesPanel } from './DuplicatesPanel'
+import { previewCounts, uncategorizedIn } from './counts'
+import { JOIN_LABEL, REMEMBER_NOTE, THEMES_INTRO } from './notes'
 import { useLatestImport } from './batches'
 import { BankTelemetry } from './BankTelemetry'
 import { UndoImportButton } from './RecentImports'
@@ -28,8 +31,9 @@ import { KeywordRules } from './KeywordRules'
 import { mergeSelectedNames, namesToMerge, RuleProposal, SimilarPanel } from './Learning'
 import { keywordOfSearch, saveKeywordRule } from './rules'
 import { bulkOptions, bulkResultText, fits, hasCategory, MEMBER_MONEY_TEXT, memberMoneyOf, offersNewMember, type LoanPick, type Option } from './options'
-import { countLabel, plDateTime } from '../../lib/format'
+import { countLabel, plDateTime, plural } from '../../lib/format'
 import { addMemberFromBank, useMembers } from '../household/actions'
+import { showFilter } from '../operations/state'
 import { CashOffer } from './cash'
 import { CsvSetupPanel } from './CsvSetup'
 import { ShareEditor, shareNames } from '../household/ShareEditor'
@@ -231,29 +235,13 @@ function FilePanel() {
 
 function Summary() {
   // What it counts (W17): not the ticks, the search or the proposals.
-  const { plan, choices, busy } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices, busy: s.busy })))
-  const readOnly = useFolderLocked()
+  const { plan, choices } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices })))
   if (!plan) return null
-  const n = (status: RowPlan['status']) => plan.rows.filter((p) => p.status === status).length
-  const merges = plan.rows.filter((p) => p.status === 'merge')
-  const joined = merges.filter((p) => joins(p, choices))
-  // The other sides of transfers between the budget's accounts (F10): joined to their transfer, not „wpisy ręczne”.
-  const sides = joined.filter((p) => p.side).length
-  const merged = joined.length - sides
+  const { created, merged, sides, removed, moved, known, settle, settledFlags, restored, excluded, copies, nothing } = previewCounts(plan, choices)
   const deleted = plan.rows.filter((p) => p.status === 'deleted')
-  const restored = deleted.filter((p) => choices.restoreDeleted[p.key]).length
-  const excluded = plan.rows.filter((p) => (p.status === 'new' || (p.status === 'deleted' && choices.restoreDeleted[p.key])) && choices.skip[p.key]).length
-  const created = n('new') + merges.length - merged - sides + restored - excluded
-  const removed = plan.vanished.filter((t) => choices.removeVanished[t.id]).length
   const elsewhere = plan.rows.filter((p): p is Extract<RowPlan, { status: 'elsewhere' }> => p.status === 'elsewhere')
-  const moved = elsewhere.filter((p) => movesHere(p, choices)).length
-  const known = n('known') + elsewhere.length - moved
-  const settledFlags = plan.rows.filter((p) => p.status === 'known' && p.settled).length
   const otherFormat = plan.rows.filter((p) => p.status === 'known' && p.other).length
-  // Copies of the rows on another account (AF-9): removed as duplicates – the import changes them.
   const withCopy = plan.rows.filter((p): p is Extract<RowPlan, { status: 'known' }> => p.status === 'known' && !!p.copy)
-  const copies = withCopy.filter((p) => removesCopy(p, choices)).length
-  const nothing = created + merged + sides + n('settle') + removed + settledFlags + moved + copies === 0
   return (
     <Panel title="Podgląd">
       <div className="flex flex-col gap-2 text-[12px]" data-testid="import-summary">
@@ -283,7 +271,7 @@ function Summary() {
           )}
           <span className="text-muted">nierozliczone → rozliczone</span>
           <span className="num text-right" data-testid="import-count-settle">
-            {n('settle') + settledFlags}
+            {settle}
           </span>
           <span className="text-muted">już zaimportowane (bez zmian)</span>
           <span className="num text-right text-muted" data-testid="import-count-known">
@@ -342,20 +330,6 @@ function Summary() {
             </>
           )}
         </div>
-        <button
-          className="btn btn-accent h-[30px] justify-center"
-          disabled={busy || readOnly}
-          onClick={() => {
-            // An import made while the start wizard runs stays when it is broken off (AP-25): the wizard says so.
-            const before = useImport.getState().done?.batchId ?? null
-            void runImport().then(() => noteImportTrace(before, useImport.getState().done?.batchId ?? null))
-          }}
-          // A file with nothing new is imported too (N13): the time of the import and what the file covers are saved.
-          title={nothing ? 'W pliku nie ma nic nowego – zapis zapamięta czas importu i okres pliku (odprawa, Portfel XTB, misja „Łączność z bazą”)' : undefined}
-          data-testid="import-run"
-        >
-          {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : nothing ? 'Zapisz import (bez zmian)' : `Importuj (${created + merged + n('settle') + settledFlags + removed + moved + copies})`}
-        </button>
         <p className="text-[11px] text-dim">
           Rozpoznane (sieci, słowa kluczowe, reguły) wejdą z pokazaną decyzją; tematy bez decyzji – jako wydatki / wpływy bez kategorii, skategoryzujesz je później w
           Operacjach.
@@ -407,7 +381,10 @@ function MatchesPanel() {
             </p>
             {merges.slice(0, limits.merges).map((p) => (
               <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-merge">
-                <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-merge-join" />
+                <span className="flex items-center gap-1 text-[11px] text-muted">
+                  <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-merge-join" />
+                  {JOIN_LABEL}
+                </span>
                 <span className="min-w-0 truncate">
                   <span className="text-fg-strong">{p.tx.counterparty || '(bez kontrahenta)'}</span>
                   <span className="text-muted">
@@ -439,14 +416,17 @@ function MatchesPanel() {
             <span className="label">Druga strona przelewu między kontami ({sides.length})</span>
             <p className="text-[11px] text-dim">
               Przelew między kontami budżetu jest jedną operacją z obiema stronami: wiersz tego konta (ta sama kwota, ±3 dni) dołącza do przelewu, który już
-              jest – nic nie wchodzi drugi raz. Przelew zapisany przed 1.7.0 jako jedna strona staje się przy tym jedną operacją.
+              jest – nic nie wchodzi drugi raz. Przelew zapisany dawniej jako jedna strona staje się przy tym jedną operacją z obiema stronami.
             </p>
             {sides.slice(0, limits.sides).map((p) => {
               const from = p.row.amount < 0 ? plan.accountId : p.tx.counterAccountId
               const to = p.row.amount < 0 ? p.tx.counterAccountId : plan.accountId
               return (
                 <label key={p.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/60 py-1 last:border-b-0" data-testid="import-side">
+                  <span className="flex items-center gap-1 text-[11px] text-muted">
                   <input type="checkbox" checked={joins(p, choices)} onChange={(e) => setNoMerge(p.key, !e.currentTarget.checked)} data-testid="import-side-join" />
+                  {JOIN_LABEL}
+                </span>
                   <span className="min-w-0 truncate">
                     <span className="text-fg-strong">
                       {accountName(from ?? '')} → {accountName(to ?? '')}
@@ -795,14 +775,14 @@ const GroupRow = memo(function GroupRow({ g, inherited, themeDecided, found }: {
           {badge}
         </Badge>
         {own && !g.byTitle && learnable(own, g.direction) && (
-          <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają tę markę same">
+          <label className="flex items-center gap-1 text-[11px] text-muted" title={REMEMBER_NOTE}>
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(g.group, e.currentTarget.checked)} data-testid="import-group-remember" />
             zapamiętaj
           </label>
         )}
         {own && (
           <button type="button" className="text-[11px] text-muted hover:text-fg-strong hover:underline" onClick={() => clearGroup(g.group)} data-testid="import-group-reset">
-            jak temat
+            cofnij do decyzji tematu
           </button>
         )}
         {!own && !themeDecided && g.source !== 'rule' && <span className="truncate text-[11px] text-dim">{g.reason}</span>}
@@ -904,7 +884,7 @@ const ThemeRow = memo(function ThemeRow({ t, label, status, found, searching }: 
               : THEME_SOURCE[t.source]}
         </Badge>
         {decided && !byTitle && learnable(decided, t.direction) && (
-          <label className="flex items-center gap-1 text-[11px] text-muted" title="Kolejne importy rozpoznają marki tego tematu same">
+          <label className="flex items-center gap-1 text-[11px] text-muted" title={REMEMBER_NOTE}>
             <input type="checkbox" checked={remember} onChange={(e) => setRememberTheme(t.theme, e.currentTarget.checked)} data-testid="import-theme-remember" />
             zapamiętaj
           </label>
@@ -1123,8 +1103,13 @@ function ThemesPanel() {
       <p className="mb-1.5 text-[11.5px] text-muted" data-testid="import-themes-summary">
         {groups.length === 0
           ? 'Brak nowych operacji do kategoryzacji.'
-          : `Nowe operacje: ${count(groups.length, 'grupa', 'grupy', 'grup')} w ${count(themes.length, 'temacie', 'tematach', 'tematach')} – do decyzji ${counts.todo}, do sprawdzenia ${counts.check}, gotowe ${counts.done}. Decyzja tematu obejmuje wszystkie jego marki; marka i operacja mogą mieć własną. Kategorie mBanku są tylko podpowiedzią.`}
+          : `Nowe operacje: ${count(groups.length, 'grupa', 'grupy', 'grup')} w ${count(themes.length, 'temacie', 'tematach', 'tematach')} – do decyzji ${counts.todo}, do sprawdzenia ${counts.check}, gotowe ${counts.done}. Kategorie mBanku są tylko podpowiedzią.`}
       </p>
+      {groups.length > 0 && (
+        <p className="mb-1.5 text-[11px] text-dim" data-testid="import-themes-intro">
+          {THEMES_INTRO} „zapamiętaj” – {REMEMBER_NOTE}
+        </p>
+      )}
       {groups.length > 0 && (
         <div className="mb-1.5 flex flex-wrap items-center gap-2">
           <div className="relative w-[260px]">
@@ -1155,7 +1140,7 @@ function ThemesPanel() {
           const isClosed = closed[st] && !searching
           return (
             <div key={st} className="mb-1" data-testid={`import-section-${st}`}>
-              <button type="button" className="flex w-full items-center gap-1 border-b border-line py-1 text-left text-[11px] uppercase tracking-wide text-muted hover:text-fg-strong" onClick={() => setClosed({ ...closed, [st]: !closed[st] })}>
+              <button type="button" className="flex w-full items-center gap-1 border-b border-line py-1 text-left text-[11px] uppercase tracking-wide text-muted hover:text-fg-strong" onClick={() => setClosed({ ...closed, [st]: !closed[st] })} aria-expanded={!isClosed} data-testid={`import-section-${st}-toggle`}>
                 {isClosed ? <IconChevronRight size={11} /> : <IconChevronDown size={11} />}
                 {STATUS_LABEL[st]} · {list.length}
               </button>
@@ -1277,7 +1262,16 @@ function TrashFile() {
 function DonePanel() {
   const done = useImport((s) => s.done)
   const batch = useData((s) => (done?.batchId ? s.records.imports[done.batchId]?.record : undefined))
+  const operationsMap = useData((s) => s.records.transactions)
   const latest = useLatestImport()
+  // What the import made and is still an expense without a category (UX-39): from the operations as they are now.
+  const rest = useMemo(() => {
+    if (!batch || batch.undoneAt) return []
+    return batch.created.flatMap((id) => {
+      const t = operationsMap[id]?.record
+      return t && isUncategorized(t) ? [t.date] : []
+    })
+  }, [batch, operationsMap])
   if (!done) return null
   return (
     <Panel title="Import zakończony">
@@ -1301,6 +1295,19 @@ function DonePanel() {
           <button className="btn h-[24px]" onClick={() => navigate({ page: 'operations' })} data-testid="import-to-operations">
             Zobacz w Operacjach
           </button>
+          {rest.length > 0 && (
+            <button
+              className="btn h-[24px]"
+              onClick={() => {
+                // From the earliest of them (the file's period) – the operations still without a category, one after another.
+                showFilter({ period: { kind: 'range', from: [...rest].sort()[0]!, to: null }, ...noNarrowing(), marks: ['uncategorized'] })
+                navigate({ page: 'operations' })
+              }}
+              data-testid="import-categorize-rest"
+            >
+              Skategoryzuj pozostałe ({rest.length})
+            </button>
+          )}
           {/* F4: the whole file taken back at once (the latest import that stands). */}
           {batch && !batch.undoneAt && latest?.id === batch.id && <UndoImportButton batch={batch} />}
           {batch?.undoneAt && (
@@ -1312,6 +1319,57 @@ function DonePanel() {
         {batch && !batch.undoneAt && <TrashFile />}
       </div>
     </Panel>
+  )
+}
+
+/** The bar at the bottom of the screen (UX-39): the import button and what comes in without a category stay in sight while the right column is worked on. */
+function ImportBar() {
+  const { plan, choices, busy } = useImport(useShallow((s) => ({ plan: s.plan, choices: s.choices, busy: s.busy })))
+  const readOnly = useFolderLocked()
+  const groups = useImportGroups()
+  const counts = useMemo(() => (plan ? previewCounts(plan, choices) : null), [plan, choices])
+  const left = useMemo(() => (plan ? uncategorizedIn(plan, choices, groups) : 0), [plan, choices, groups])
+  if (!plan || !counts) return null
+  // The first list of themes still to decide: opened if it is closed, the search cleared (it may hide them).
+  const show = () => {
+    setImportQuery('')
+    setTimeout(() => {
+      const toggle = document.querySelector<HTMLElement>('[data-testid="import-section-todo-toggle"]')
+      if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click()
+      const target = document.querySelector<HTMLElement>('[data-testid="import-section-todo"]') ?? document.querySelector<HTMLElement>('[data-testid="import-groups"]')
+      target?.scrollIntoView({ block: 'start' })
+    }, 0)
+  }
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-line bg-raised px-4 py-2 text-[12px]" data-testid="import-bar" data-undecided={left}>
+      <button
+        className="btn btn-accent h-[30px] justify-center"
+        disabled={busy || readOnly}
+        onClick={() => {
+          // An import made while the start wizard runs stays when it is broken off (AP-25): the wizard says so.
+          const before = useImport.getState().done?.batchId ?? null
+          void runImport().then(() => noteImportTrace(before, useImport.getState().done?.batchId ?? null))
+        }}
+        // A file with nothing new is imported too (N13): the time of the import and what the file covers are saved.
+        title={counts.nothing ? 'W pliku nie ma nic nowego – zapis zapamięta czas importu i okres pliku (odprawa, Portfel XTB, misja „Łączność z bazą”)' : undefined}
+        data-testid="import-run"
+      >
+        {busy ? 'Importuję…' : readOnly ? 'Folder tylko do odczytu' : counts.nothing ? 'Zapisz import (bez zmian)' : `Importuj (${counts.total})`}
+      </button>
+      <span className={left > 0 ? 'text-accent' : 'text-muted'} data-testid="import-bar-undecided">
+        bez decyzji: <b className="num">{left}</b>
+      </span>
+      {left > 0 && (
+        <>
+          <span className="text-muted" data-testid="import-bar-warning">
+            {left} {plural(left, 'operacja wejdzie', 'operacje wejdą', 'operacji wejdzie')} bez kategorii
+          </span>
+          <button type="button" className="text-accent hover:underline" onClick={show} data-testid="import-bar-show">
+            Pokaż
+          </button>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -1380,6 +1438,7 @@ export function ImportPage() {
           </fieldset>
         </Columns>
       </div>
+      <ImportBar />
     </div>
   )
 }

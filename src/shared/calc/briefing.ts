@@ -19,7 +19,7 @@ import { lastPaymentOf, pit38Deadline } from './radar'
 import { activeIn, amountIn, monthlyWeight, nextPaymentOf, type Alarm, type FleetState } from './fleet'
 import type { AccountAhead } from './ahead'
 import { remindStep, type ScheduledDay } from './scheduled'
-import { cycleText, deadText, priceText, type DeadContainer, type PriceChange } from './cargoWatch'
+import { cycleText, deadText, priceText, SHORT_MONTHS, type DeadContainer, type PriceChange } from './cargoWatch'
 import { anomalyText, type Anomaly } from './anomalies'
 import { lateReturnText, type AwaitedReturn } from './returns'
 import type { RecurringPayment } from './plan'
@@ -79,6 +79,11 @@ export interface BriefingItem {
   since?: string
   /** The category the matter is about (an envelope's alarm, an unknown signal): one line per matter (AP-16, MO sp. 2). */
   ref?: string
+  /**
+   * A fee's due overdue (UX-30, D106 pkt 5): its container and the line of all its dues overdue (`lateFeeText`) – the
+   * bridge says them in that one line (`arrangeBriefing`), the notifications each due once (its own key).
+   */
+  fee?: { containerId: string; line: string }
 }
 
 const zlotych = (grosze: number) => `${formatPln(grosze)} zł`
@@ -252,6 +257,66 @@ export const END_DAYS = 14
 
 const inDays = (days: number) => (days === 0 ? 'dziś' : `za ${days} ${days === 1 ? 'dzień' : 'dni'}`)
 
+/** A container's fees overdue (UX-30, D106 pkt 5): its dues the state says overdue, oldest first, and their sum. */
+export interface LateFee {
+  containerId: string
+  name: string
+  dues: readonly CargoStatus[]
+  amount: number
+}
+
+/**
+ * A due overdue as the briefing has always said it (F1, D86): 3 days after it without a payment – an earlier month's
+ * until paid (D99 pkt 3); one a payment written ahead pays on its day (T398) is none (Ładownia shows it planned).
+ */
+const overdue = (s: CargoStatus): boolean => s.state === 'overdue' && !s.planned
+
+/**
+ * The fees overdue by container (UX-30, UX-31, T540): the dues of the fees' state (`cargoStatuses` – `feeDuesOf`, T375),
+ * never a rule of their own – only grouped, in the order of each container's oldest due.
+ */
+export function lateFees(cargo: readonly CargoStatus[]): LateFee[] {
+  const by = new Map<string, { containerId: string; name: string; dues: CargoStatus[]; amount: number }>()
+  for (const s of cargo) {
+    if (!overdue(s)) continue
+    const f = by.get(s.containerId)
+    if (f) {
+      f.dues.push(s)
+      f.amount += s.amount
+    } else by.set(s.containerId, { containerId: s.containerId, name: s.name, dues: [s], amount: s.amount })
+  }
+  for (const f of by.values()) f.dues.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0))
+  return [...by.values()]
+}
+
+/** A due's month in short („sie”, „lis 2025” – with its year when not this year's, or the dues span two). */
+const shortMonth = (date: string, year: boolean) => `${SHORT_MONTHS[Number(date.slice(5, 7)) - 1]}${year ? ` ${date.slice(0, 4)}` : ''}`
+
+/**
+ * A container's dues overdue without its name and sum: „4 terminy bez płatności (sie–lis)” – the line of `lateFeeText`,
+ * the Radar's row of them (UX-30, T548 – its sum in the amount's column).
+ */
+export function lateFeeSpan(f: LateFee, today: string): string {
+  const first = f.dues[0]
+  const last = f.dues.at(-1)
+  if (!first || !last) return ''
+  const year = first.due.slice(0, 4) !== last.due.slice(0, 4) || last.due.slice(0, 4) !== today.slice(0, 4)
+  const n = f.dues.length
+  const months = n === 1 ? shortMonth(first.due, year) : `${shortMonth(first.due, year)}–${shortMonth(last.due, year)}`
+  return `${n} ${plural(n, 'termin', 'terminy', 'terminów')} bez płatności (${months})`
+}
+
+/**
+ * A container's fees overdue in one line (UX-30): one due – as it has always been said; more – „Czynsz: 4 terminy bez
+ * płatności (sie–lis), razem 8 000,00 zł.” (the briefing's line, the inbox's report).
+ */
+export function lateFeeText(f: LateFee, zl: (grosze: number) => string, today: string): string {
+  const first = f.dues[0]
+  if (!first) return ''
+  if (f.dues.length === 1) return `${f.name} ${zl(first.amount)} – termin ${dm(first.due)} minął, brak płatności.`
+  return `${f.name}: ${lateFeeSpan(f, today)}, razem ${zl(f.amount)}.`
+}
+
 /** The line of a planned operation's day (F16) – null when it is not to be recalled today. */
 export function planItem(d: ScheduledDay, zl: (grosze: number) => string): BriefingItem | null {
   const s = d.scheduled
@@ -319,10 +384,15 @@ export function briefing(o: BriefingInput): BriefingItem[] {
     })
   }
   // A fixed fee 3 days after its due without a payment (F1, D86) – once per due; an earlier month's until paid (D99 pkt 3).
-  // One a payment written ahead pays on its day (T398) is no alert: Ładownia shows it planned.
+  // One a payment written ahead pays on its day (T398) is no alert: Ładownia shows it planned. The bridge says a
+  // container's dues in one line (UX-30 – `fee`), the notifications each due.
+  const late = new Map(lateFees(o.cargo ?? []).map((g) => [g.containerId, g]))
   for (const s of o.cargo ?? []) {
-    if (s.state !== 'overdue' || s.planned) continue
-    items.push({ level: 'yellow', kind: 'cargo', key: `cargo:${s.containerId}:${s.due}`, text: `Kontener niezaładowany: ${s.name} ${zl(s.amount)} – termin ${dm(s.due)} minął, brak płatności.` })
+    if (!overdue(s)) continue
+    const text = `Kontener niezaładowany: ${s.name} ${zl(s.amount)} – termin ${dm(s.due)} minął, brak płatności.`
+    const group = late.get(s.containerId)
+    const line = group && group.dues.length > 1 ? `Kontener niezaładowany – ${lateFeeText(group, zl, f.today)}` : text
+    items.push({ level: 'yellow', kind: 'cargo', key: `cargo:${s.containerId}:${s.due}`, text, fee: { containerId: s.containerId, line } })
   }
   for (const imp of o.imports) {
     // The import's Warsaw date (stored as an ISO time in UTC).
@@ -477,7 +547,8 @@ const TIER_RANK: Record<BriefingTier, number> = { alarm: 0, day: 1, rest: 2 }
 
 /**
  * The briefing in its order (AP-16, MO sp. 1, 2): the alarms first – red, then yellow – then the day's matters, the rest
- * folded; one line per matter (an unknown signal of a category whose envelope is over its limit is said with that alarm);
+ * folded; one line per matter (an unknown signal of a category whose envelope is over its limit is said with that alarm,
+ * a container's overdue dues in one line – UX-30);
  * a matter the inbox lists, older than 30 days, only there. Within a tier and a level – the briefing's order. Pure; the
  * bridge, its detached panel, the reports and the spoken briefing use it – the notifications keep every line (own keys).
  */
@@ -485,12 +556,18 @@ export function arrangeBriefing(items: readonly BriefingItem[], today: string): 
   let older = 0
   const rows: BriefingRow[] = []
   const byRef = new Map<string, BriefingRow>()
+  // A container's overdue dues (UX-30): one line – its oldest due's place, the line of them all.
+  const fees = new Set<string>()
   for (const i of items) {
     if (i.since && daysBetween(i.since, today) > BRIEFING_OLD_DAYS) {
       older++
       continue
     }
-    const row: BriefingRow = { ...i, tier: 'rest', also: [] }
+    if (i.fee) {
+      if (fees.has(i.fee.containerId)) continue
+      fees.add(i.fee.containerId)
+    }
+    const row: BriefingRow = { ...i, ...(i.fee ? { text: i.fee.line } : {}), tier: 'rest', also: [] }
     if (i.kind === 'alarm' && i.ref && !byRef.has(i.ref)) byRef.set(i.ref, row)
     rows.push(row)
   }

@@ -3,7 +3,7 @@
  * The intelligence's charts (E8): the wealth week by week with BOS / CHoCH marks and the drawdown pane
  * (lightweight-charts), the killzones of spending (weekday × hour, SVG).
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { ColorType, createChart, createSeriesMarkers, CrosshairMode, HistogramSeries, LineSeries, LineStyle, type IChartApi, type Time } from 'lightweight-charts'
 import type { KillzoneCell, StructureMark, WealthPoint } from '@shared/calc/intel'
 import { amountsHidden, plnText } from '../../components/fields'
@@ -18,7 +18,8 @@ export function WealthChart({
   marks,
   net,
   height = 280,
-  testId = 'intel-wealth-chart'
+  testId = 'intel-wealth-chart',
+  legend
 }: {
   /** The line the structure and the drawdown are of (the accounts' money, or the net worth – F24). */
   points: readonly WealthPoint[]
@@ -27,6 +28,8 @@ export function WealthChart({
   net?: readonly WealthPoint[]
   height?: number
   testId?: string
+  /** Names of the two lines for the legend under the chart (UX-42); none – no legend (the bridge's small chart). */
+  legend?: { main: string; second: string }
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -81,7 +84,28 @@ export function WealthChart({
   return (
     <div className={cx(fill ? 'flex min-h-0 w-full flex-1 flex-col' : 'w-full')}>
       <div ref={ref} style={fill ? { minHeight: 200 } : { height }} className={cx(fill ? 'w-full flex-1' : 'w-full')} data-testid={testId} data-points={points.length} data-marks={marks.length} data-second={net?.length ?? 0} />
+      {legend && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-1 text-[11px] text-muted" data-testid="intel-wealth-legend">
+          <LegendItem swatch={<line x1="0" y1="3" x2="22" y2="3" stroke="#e8edf2" strokeWidth="2" />} label={`${legend.main} (ciągła)`} />
+          {!!net?.length && <LegendItem swatch={<line x1="0" y1="3" x2="22" y2="3" stroke="#7a838e" strokeWidth="1" strokeDasharray="4 3" />} label={`${legend.second} (przerywana)`} />}
+          <LegendItem swatch={<rect x="0" y="0" width="22" height="6" fill="rgba(246,70,93,0.55)" />} label="drawdown od szczytu (słupki pod wykresem)" />
+          <span>
+            <span className="text-accent">▲▼</span> BOS / CHoCH – przebicie struktury
+          </span>
+        </div>
+      )}
     </div>
+  )
+}
+
+function LegendItem({ swatch, label }: { swatch: ReactNode; label: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <svg width="22" height="6" aria-hidden="true">
+        {swatch}
+      </svg>
+      {label}
+    </span>
   )
 }
 
@@ -92,7 +116,17 @@ const LEFT = 30
 const TOP = 16
 
 /** Weekday × hour of the purchases with a time: the costs in the accent's intensity, details on hover. */
-export function KillzoneMap({ cells }: { cells: ReadonlyMap<string, KillzoneCell> }) {
+export function KillzoneMap({
+  cells,
+  selected,
+  onCell
+}: {
+  cells: ReadonlyMap<string, KillzoneCell>
+  /** The chosen cell's key (`weekday:hour`), outlined. */
+  selected?: string | null
+  /** A cell with purchases opened (UX-74): its operations are listed beside the map. */
+  onCell?: (weekday: number, hour: number) => void
+}) {
   const list = [...cells.values()]
   const lo = list.length ? Math.min(6, ...list.map((c) => c.hour)) : 6
   const hi = list.length ? Math.max(22, ...list.map((c) => c.hour)) : 22
@@ -103,39 +137,68 @@ export function KillzoneMap({ cells }: { cells: ReadonlyMap<string, KillzoneCell
   const H = TOP + 7 * CELL_H
   const hidden = amountsHidden()
   return (
-    <div className="overflow-x-auto">
-      <svg width={W} height={H} role="img" aria-label="Killzones wydatków" data-testid="intel-killzones">
-        {hours.map((h, i) => (
-          <text key={h} x={LEFT + i * CELL_W + CELL_W / 2} y={10} fontSize="9" fill="#7a838e" textAnchor="middle" fontFamily="JetBrains Mono, monospace">
-            {String(h).padStart(2, '0')}
-          </text>
-        ))}
-        {DAYS.map((d, di) => (
-          <g key={d}>
-            <text x={0} y={TOP + di * CELL_H + CELL_H / 2 + 3} fontSize="9.5" fill="#7a838e" fontFamily="Inter, sans-serif">
-              {d}
+    <>
+      <div className="overflow-x-auto">
+        <svg width={W} height={H} role="img" aria-label="Killzones wydatków" data-testid="intel-killzones">
+          {hours.map((h, i) => (
+            <text key={h} x={LEFT + i * CELL_W + CELL_W / 2} y={10} fontSize="9" fill="#7a838e" textAnchor="middle" fontFamily="JetBrains Mono, monospace">
+              {String(h).padStart(2, '0')}
             </text>
-            {hours.map((h, i) => {
-              const c = cells.get(`${di + 1}:${h}`)
-              const k = c ? 0.2 + 0.8 * (c.cost / max) : 0
-              return (
-                <rect
-                  key={h}
-                  x={LEFT + i * CELL_W}
-                  y={TOP + di * CELL_H}
-                  width={CELL_W - 2}
-                  height={CELL_H - 2}
-                  fill={c ? `rgba(232,163,61,${k.toFixed(2)})` : '#12161b'}
-                  stroke={c && top && c === top ? '#e8edf2' : c ? 'none' : '#1e232a'}
-                  data-testid={c ? 'killzone-cell' : undefined}
-                >
-                  <title>{c ? `${d} ${String(h).padStart(2, '0')}:00–${String(h + 1).padStart(2, '0')}:00 · ${c.count} zak. · ${hidden ? '•••' : zl(c.cost)}` : `${d} ${String(h).padStart(2, '0')}:00 · bez zakupów`}</title>
-                </rect>
-              )
-            })}
-          </g>
-        ))}
-      </svg>
-    </div>
+          ))}
+          {DAYS.map((d, di) => (
+            <g key={d}>
+              <text x={0} y={TOP + di * CELL_H + CELL_H / 2 + 3} fontSize="9.5" fill="#7a838e" fontFamily="Inter, sans-serif">
+                {d}
+              </text>
+              {hours.map((h, i) => {
+                const c = cells.get(`${di + 1}:${h}`)
+                const k = c ? 0.2 + 0.8 * (c.cost / max) : 0
+                return (
+                  <rect
+                    key={h}
+                    x={LEFT + i * CELL_W}
+                    y={TOP + di * CELL_H}
+                    width={CELL_W - 2}
+                    height={CELL_H - 2}
+                    fill={c ? `rgba(232,163,61,${k.toFixed(2)})` : '#12161b'}
+                    stroke={selected === `${di + 1}:${h}` ? '#e8a33d' : c && top && c === top ? '#e8edf2' : c ? 'none' : '#1e232a'}
+                    strokeWidth={selected === `${di + 1}:${h}` ? 2 : 1}
+                    data-testid={c ? 'killzone-cell' : undefined}
+                    data-weekday={c ? di + 1 : undefined}
+                    data-hour={c ? h : undefined}
+                    className={c && onCell ? 'cursor-pointer' : undefined}
+                    role={c && onCell ? 'button' : undefined}
+                    tabIndex={c && onCell ? 0 : undefined}
+                    onClick={c && onCell ? () => onCell(di + 1, h) : undefined}
+                    onKeyDown={
+                      c && onCell
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onCell(di + 1, h)
+                            }
+                          }
+                        : undefined
+                    }
+                  >
+                    <title>{c ? `${d} ${String(h).padStart(2, '0')}:00–${String(h + 1).padStart(2, '0')}:00 · ${c.count} zak. · ${hidden ? '•••' : zl(c.cost)}` : `${d} ${String(h).padStart(2, '0')}:00 · bez zakupów`}</title>
+                  </rect>
+                )
+              })}
+            </g>
+          ))}
+        </svg>
+      </div>
+      {/* The scale (UX-42): the intensity is the cost of the cell, the outline marks the dearest. */}
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted" data-testid="intel-killzones-legend">
+        <span>mniej</span>
+        <svg width="60" height="8" aria-hidden="true">
+          {[0.2, 0.4, 0.6, 0.8, 1].map((k, i) => (
+            <rect key={k} x={i * 12} y={0} width={11} height={8} fill={`rgba(232,163,61,${k})`} />
+          ))}
+        </svg>
+        <span>więcej – do {hidden ? '•••' : zl(list.length ? max : 0)} w komórce; biały obrys – najdroższa</span>
+      </div>
+    </>
   )
 }

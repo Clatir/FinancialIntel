@@ -18,6 +18,7 @@ import { rememberInflows, sureCoversOf } from '../features/household/actions'
 import { api } from '../lib/api'
 import { playSound } from '../lib/sounds'
 import { addRecord, listOf, unsavedOf, useData, writeNow } from './data'
+import { recentCategoryIds } from '../features/operations/pick'
 import { officerNow } from './officer'
 import { fleetNow } from './fleet'
 import { useMachine } from './machine'
@@ -71,6 +72,7 @@ export function quickData(): QuickData | null {
     impulseThreshold: fi.settings.orders.impulseThreshold,
     lastByBrand,
     counterparties,
+    recentCategories: recentCategoryIds(listOf(s.records.transactions)).slice(0, 20),
     rules: fi.settings.import.rules,
     aliases: fi.settings.import.aliases,
     members: fi.settings.household.members

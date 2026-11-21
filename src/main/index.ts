@@ -10,7 +10,7 @@ import { IMPORT_MAX_BYTES } from '@shared/import/text'
 import { plainError } from '@shared/plainError'
 import { OPEN_ABORTED_MESSAGE, SLOW_FILE_MS, type AppInfo, type BackupInfo, type ChangeSet, type FlushResult, type GhostFolder, type HistoryKind, type HistoryReason, type OpenFolderResult, type OpenProgress, type OpenStep, type TrayPrefs } from '@shared/api'
 import { SAVED, unsavedQuestion } from '@shared/unsaved'
-import { COLLECTIONS, type Collection } from '@shared/paths'
+import { COLLECTIONS, SETTINGS_FILE, type Collection } from '@shared/paths'
 import type { AnyRecord } from '@shared/records'
 import type { SettingsFile } from '@shared/schema'
 import { APP_TITLE, GITHUB_API, detectInstallMode, validUpdateToken, type UpdatePrefs, type UpdateTokenState } from '@shared/update'
@@ -201,14 +201,19 @@ function trayView(): TrayPrefs & { loginSupported: boolean; loginEntry: boolean 
 
 /**
  * The proposed folder for new data (decision D62): `OneDrive\FinancialIntel` when OneDrive is set up on this
- * computer, otherwise `Dokumenty\FinancialIntel`. FI_DEFAULT_DATA_DIR in test runs.
+ * computer, otherwise `Dokumenty\FinancialIntel`. FI_DEFAULT_DATA_DIR in test runs. `exists` – the folder already holds
+ * a budget (its fi.json is there, e.g. brought by OneDrive from another computer): only looked at, nothing written (UX-47).
  */
-function defaultDataDir(): { dir: string; oneDrive: boolean } {
-  const preset = process.env.FI_DEFAULT_DATA_DIR
-  if (preset) return { dir: preset, oneDrive: true }
-  const oneDrive = process.env.OneDrive || process.env.OneDriveConsumer || process.env.OneDriveCommercial
-  if (oneDrive && existsSync(oneDrive)) return { dir: join(oneDrive, DATA_FOLDER_NAME), oneDrive: true }
-  return { dir: join(app.getPath('documents'), DATA_FOLDER_NAME), oneDrive: false }
+function defaultDataDir(): { dir: string; oneDrive: boolean; exists: boolean } {
+  const pick = (): { dir: string; oneDrive: boolean } => {
+    const preset = process.env.FI_DEFAULT_DATA_DIR
+    if (preset) return { dir: preset, oneDrive: true }
+    const oneDrive = process.env.OneDrive || process.env.OneDriveConsumer || process.env.OneDriveCommercial
+    if (oneDrive && existsSync(oneDrive)) return { dir: join(oneDrive, DATA_FOLDER_NAME), oneDrive: true }
+    return { dir: join(app.getPath('documents'), DATA_FOLDER_NAME), oneDrive: false }
+  }
+  const p = pick()
+  return { ...p, exists: existsSync(join(p.dir, SETTINGS_FILE)) }
 }
 
 /** The GitHub token of this computer (only needed for a private repository); FI_UPDATE_TOKEN in tests. */
@@ -957,7 +962,9 @@ function registerIpc(): void {
       machineName,
       platform: process.platform,
       userDataDir: app.getPath('userData'),
-      freeze: { afterOpenMs: envMs('FI_FREEZE_AFTER_OPEN_MS', 3 * 60_000), quietMs: envMs('FI_FREEZE_QUIET_MS', 60_000) }
+      freeze: { afterOpenMs: envMs('FI_FREEZE_AFTER_OPEN_MS', 3 * 60_000), quietMs: envMs('FI_FREEZE_QUIET_MS', 60_000) },
+      // The wizard by itself in a new empty folder (UX-79): off only in the test runs that do not test it.
+      wizardAuto: process.env.FI_WIZARD_AUTO !== '0'
     })
   )
   handle('reportActivity', () => noteActivity())
@@ -1123,6 +1130,10 @@ function registerIpc(): void {
     await fs.mkdir(dir, { recursive: true })
     const err = await shell.openPath(dir)
     if (err) throw new Error(err)
+  })
+  // The same quit as the tray's „Zakończ”: the window's close path flushes the writes first.
+  handle('quitApp', () => {
+    quitApp()
   })
   handle('openExternal', async (url: string) => {
     if (!/^https:\/\//i.test(url)) throw new Error('Można otwierać tylko adresy https://')

@@ -12,11 +12,12 @@ import { ChangeList, HistoryButton, useDictNames } from '../history/HistoryDialo
 import { restoreVersion } from '../history/actions'
 import { api, errorMessage } from '../../lib/api'
 import { saveFirst, unsavedOf, useData, useFolderLocked } from '../../store/data'
-import { toast } from '../../store/ui'
+import { navigate, toast } from '../../store/ui'
 import { IconFolder, IconSync, IconTrash } from '../../components/icons'
 import { ConfirmButton } from '../../components/ConfirmButton'
 import { Badge, Panel, cx } from '../../components/ui'
 import { ChangeLogPanel } from './ChangeLog'
+import { rescanWithToast } from './rescan'
 
 const KIND_LABEL: Record<string, string> = {
   transactions: 'Operacja',
@@ -232,7 +233,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
       <div className="flex items-center gap-2">
         <span className="label">{label}</span>
         <span className="truncate text-[11px] text-muted" title={`Plik: ${s.relPath}`} data-testid={`conflict-by-${keep}`}>
-          {by(s) ? `zapisał komputer ${by(s)}` : ''}
+          {by(s) ? `wersja z komputera ${by(s)}` : ''}
         </span>
         {newer === keep && (
           <Badge tone="accent" title="Zmieniona później (czas zapisu w pliku, inaczej czas pliku)" data-testid={`newer-${keep}`}>
@@ -262,7 +263,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
               {subject}
             </span>
           )}
-          <Badge>{c.type === 'copy' ? c.source : 'duplikat identyfikatora'}</Badge>
+          <Badge>{c.type === 'copy' ? c.source : 'ten sam wpis w dwóch plikach'}</Badge>
         </span>
       }
       actions={
@@ -304,7 +305,7 @@ function ConflictCard({ c, selected, onSelect, busy, setBusy }: { c: ConflictEnt
 function ProblemAction({ p, locked }: { p: Problem; locked: boolean }) {
   if (p.unreadable)
     return (
-      <button className="btn h-[22px]" onClick={() => api.rescan().then(() => toast('Folder przeczytany ponownie.', 'success'), (e) => toast(errorMessage(e), 'error'))} data-testid="problem-reread">
+      <button className="btn h-[22px]" onClick={() => void rescanWithToast('Folder przeczytany ponownie.')} data-testid="problem-reread">
         <IconSync size={12} /> Wczytaj ponownie
       </button>
     )
@@ -495,7 +496,7 @@ export function SyncPage() {
       <div className="mx-auto flex max-w-[1080px] flex-col gap-3">
         <div className="flex items-center gap-2">
           <h1 className="text-[14px] font-medium text-fg-strong">Synchronizacja i problemy</h1>
-          <button className="btn ml-auto" onClick={() => api.rescan().then(() => toast('Przeskanowano folder.', 'success'))}>
+          <button className="btn ml-auto" onClick={() => void rescanWithToast()} data-testid="sync-rescan">
             <IconSync size={13} /> Przeskanuj teraz
           </button>
         </div>
@@ -503,6 +504,14 @@ export function SyncPage() {
           Gdy ten sam plik zmieni się na dwóch komputerach, usługa synchronizacji (OneDrive, Dropbox, Google Drive) tworzy jego kopię zamiast
           nadpisywać. Aplikacja pokazuje takie kopie tutaj – wybierz, którą wersję zachować; druga trafia do historii wpisu (widać ją na każdym komputerze) i do Kosza.
         </p>
+        {fi && (
+          <p className="text-[11.5px] text-muted" data-testid="sync-mode">
+            Tryb pracy na kilku komputerach:{' '}
+            <button type="button" className="text-accent hover:underline" onClick={() => navigate({ page: 'settings', tab: 'folder' })} data-testid="sync-mode-link" data-mode={fi.settings.sync.remoteChanges}>
+              {fi.settings.sync.remoteChanges === 'ask' ? 'zawsze pytaj przed przyjęciem zmian' : 'scalaj zmiany, pytaj tylko przy konflikcie'} ›
+            </button>
+          </p>
+        )}
         {(status?.readOnlyFiles ?? 0) > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border border-warn/50 bg-raised px-3 py-2 text-[12px]" data-testid="sync-readonly-files">
             <div>
@@ -533,29 +542,6 @@ export function SyncPage() {
             >
               {unlocking ? 'Zdejmuję…' : 'Zdejmij blokadę'}
             </button>
-          </div>
-        )}
-        {((status && status.otherMachines.length > 0) || lastRemote) && (
-          <Panel title="Inne komputery">
-            {status?.otherMachines.map((m) => (
-              <div key={m.machine} className="num text-[12px]" data-testid="sync-machine" data-in-use={m.inUse !== false ? 'yes' : 'no'}>
-                {m.machine} – {m.inUse !== false ? 'w użyciu' : 'w zasobniku'}, sygnał {clock(m.lastSeen)}
-                {m.activeAt ? `, ostatni ruch w oknie ${clock(m.activeAt)}` : ''}
-              </div>
-            ))}
-            {lastRemote && (
-              <div className="text-[12px] text-muted" data-testid="sync-last-remote">
-                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {plDateTime(lastRemote.at)}
-              </div>
-            )}
-          </Panel>
-        )}
-        <ChangeLogPanel />
-        <DeletedRecords />
-        {fi && (
-          <div className="flex items-center gap-2 text-[12px] text-muted">
-            Ustawienia (fi.json) też mają historię:
-            <HistoryButton kind="fi" id={fi.id} current={fi} small />
           </div>
         )}
         <h2 className="label mt-1">Konflikty ({conflicts.length})</h2>
@@ -598,6 +584,29 @@ export function SyncPage() {
           Uszkodzone pliki są pomijane i nigdy nie są nadpisywane – możesz je naprawić w edytorze tekstu (to zwykły JSON) albo odzyskać z kopii
           zapasowej (Ustawienia → Folder i kopie{backupsDir ? `: ${backupsDir}` : ''}).
         </p>
+        {((status && status.otherMachines.length > 0) || lastRemote) && (
+          <Panel title="Inne komputery">
+            {status?.otherMachines.map((m) => (
+              <div key={m.machine} className="num text-[12px]" data-testid="sync-machine" data-in-use={m.inUse !== false ? 'yes' : 'no'}>
+                {m.machine} – {m.inUse !== false ? 'w użyciu' : 'w zasobniku'}, sygnał {clock(m.lastSeen)}
+                {m.activeAt ? `, ostatni ruch w oknie ${clock(m.activeAt)}` : ''}
+              </div>
+            ))}
+            {lastRemote && (
+              <div className="text-[12px] text-muted" data-testid="sync-last-remote">
+                Ostatnia zmiana z innego komputera: {lastRemote.machine}, {plDateTime(lastRemote.at)}
+              </div>
+            )}
+          </Panel>
+        )}
+        <ChangeLogPanel />
+        <DeletedRecords />
+        {fi && (
+          <div className="flex items-center gap-2 text-[12px] text-muted">
+            Ustawienia (fi.json) też mają historię:
+            <HistoryButton kind="fi" id={fi.id} current={fi} small />
+          </div>
+        )}
       </div>
     </div>
   )

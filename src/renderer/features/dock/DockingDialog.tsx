@@ -18,7 +18,8 @@ import { AmountField, plnText } from '../../components/fields'
 import { Badge, cx } from '../../components/ui'
 import { plDate } from '../../lib/format'
 import { closeDocking, useDeliveries, useDocking } from './state'
-import { dockDelivery, dockingOf, removeExtraDockings, skipEntry, undockDelivery, walletOperation, type SplitDraft } from './actions'
+import { dockEffectText } from './effect'
+import { dockDelivery, dockingOf, removeExtraDockings, skipDelivery, undockDelivery, walletOperation, type SplitDraft } from './actions'
 import { HistoryButton } from '../history/HistoryDialog'
 
 const zl = (g: number) => `${plnText(g)} zł`
@@ -103,8 +104,32 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
   const waitText = waitingText(d, until)
   const showTax = e?.pool === 'tax' || split.taxHold > 0
   const edit = (patch: Partial<SplitDraft>) => setDraft({ ...split, ...patch })
+  // The effect in one line (UX-52): the layers before this docking are the preview's less its own moves; a split typed here
+  // changes only what the engine's proposal split – the sum of the delivery stays.
+  const effect = useMemo(() => {
+    if (!preview) return null
+    const typedGoals = Object.values(split.goals).reduce((a, b) => a + b, 0)
+    const change =
+      d.direction === 'in' && draft
+        ? { shields, hull: split.hull, goals: typedGoals, taxHold: split.taxHold }
+        : { shields: moves.shields ?? 0, hull: moves.hull ?? 0, goals: Object.values(moves.goals ?? {}).reduce((a, b) => a + b, 0), taxHold: moves.taxHold ?? 0 }
+    const shieldsAfter = preview.shields.amount - (moves.shields ?? 0) + change.shields
+    const hullAfter = preview.hull.amount - (moves.hull ?? 0) + change.hull
+    return dockEffectText(
+      { shields: { before: preview.shields.amount - (moves.shields ?? 0), after: shieldsAfter }, hull: { before: preview.hull.amount - (moves.hull ?? 0), after: hullAfter }, goals: change.goals, taxHold: change.taxHold },
+      zl
+    )
+  }, [preview, moves, draft, split, shields, d.direction])
   // „Wycofaj dokowanie” (AP-9): what it would remove – a docked delivery only.
   const undo = undockingOf(d)
+  const noteCount = [
+    !e && d.entryGone,
+    d.walletTyped && d.transaction,
+    !e && d.missingEntry && !d.entryGone,
+    e && d.near && d.transaction,
+    e && d.poolChanged && d.docking,
+    stored && storedTotal !== docked
+  ].filter(Boolean).length
 
   const dock = () => {
     if (over) return
@@ -119,13 +144,13 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
       testId="docking-dialog"
       footer={
         <>
+          {/* At the footer's left, away from „Anuluj” and „Zadokuj”; „Cofnij” in the toast brings the entry back (UX-9). */}
           {e && d.state !== 'docked' && (
             <button
               className="btn h-[26px]"
               disabled={readOnly}
               onClick={() => {
-                skipEntry(e.id, true)
-                closeDocking()
+                if (skipDelivery(d)) closeDocking()
               }}
               title={
                 d.transaction
@@ -178,27 +203,6 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
           </span>
           <span className={cx('num text-[14px]', d.direction === 'in' ? 'text-up' : 'text-fg-strong')}>{d.direction === 'in' ? '+' : '−'}{zl(d.amount)}</span>
         </section>
-        {!e && d.entryGone && (
-          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-entry-gone">
-            Wpis tej wypłaty usunięto w ICTTJ – pula, z którą ją zadokowano, już nie obowiązuje. Zadokuj ponownie (zwykłą kolejnością) albo dopisz wpis w ICTTJ: FI połączy go sama.
-          </p>
-        )}
-        {d.walletTyped && d.transaction && (
-          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-wallet-typed">
-            Na Portfelu XTB jest już wpływ {zl(d.transaction.amount)} z {plDate(d.transaction.date)} – „Zadokuj” zrobi z niego tę wypłatę (bez drugiej operacji).
-          </p>
-        )}
-        {!e && d.missingEntry && !d.entryGone && <p className="border-l-2 border-accent pl-2 text-muted">Bez wpisu w ICTTJ – dokuje zwykłą kolejnością. Dopisz tę wypłatę w ICTTJ (z pulą): FI połączy ją sama.</p>}
-        {e && d.near && d.transaction && (
-          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-near">
-            W banku jest wpływ z XTB z {plDate(d.transaction.date)} na {zl(Math.abs(d.transaction.amount))} – różni się od wpisu o {zl(Math.abs(Math.abs(d.transaction.amount) - d.amount))} (przewalutowanie, prowizja, literówka?). „Zadokuj” połączy je: liczy się kwota z banku.
-          </p>
-        )}
-        {e && d.poolChanged && d.docking && (
-          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-pool-changed">
-            Pula wpisu zmieniła się w ICTTJ po dokowaniu (było: {d.docking.pool ? ICTJ_POOL_LABEL[d.docking.pool] : 'bez puli'}) – „Zapisz podział” zadokuje z obecną pulą.
-          </p>
-        )}
         {d.extra.length > 0 && (
           <p className="flex flex-wrap items-baseline gap-2 border-l-2 border-down pl-2 text-muted" data-testid="docking-extra">
             Ten wpis zadokowano {d.extra.length + 1} razy (np. na dwóch komputerach przed synchronizacją) – pieniądze liczą się podwójnie.
@@ -234,11 +238,6 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
           )}
         </section>
 
-        {stored && storedTotal !== docked && (
-          <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-split-fitted">
-            Kwota operacji zmieniła się po dokowaniu (było {zl(storedTotal)}, jest {zl(docked)}) – podział dopasowany do niej: podatek, kadłub, cele, reszta do osłon. „Zapisz podział” go utrwali.
-          </p>
-        )}
         {d.direction === 'in' ? (
           <section className="flex flex-col gap-1" data-testid="docking-split">
             <div className="flex items-baseline">
@@ -286,6 +285,47 @@ function DockingWindow({ d, onDocked }: { d: Delivery; onDocked: () => void }) {
                 ? 'Firewall: dopłata do konta tradingowego, gdy osłony albo kadłub nie są pełne – wbrew rozkazowi (czerwony alarm).'
                 : 'Dopłata z „wolnego do decyzji” przy pełnych osłonach i kadłubie – zgodnie z rozkazem.'}
           </section>
+        )}
+        {/* What the docking does to the layers, in one line – the engine's preview (UX-52). */}
+        {effect && (
+          <p className="border-t border-line pt-1.5 text-fg-strong" data-testid="docking-effect">
+            Skutek: {effect}.
+          </p>
+        )}
+        {noteCount > 0 && (
+          <details className="text-[12px]" data-testid="docking-notes">
+            <summary className="cursor-pointer select-none text-[11.5px] text-accent" data-testid="docking-notes-toggle">
+              Uwagi do tej dostawy ({noteCount})
+            </summary>
+            <div className="mt-1.5 flex flex-col gap-2">
+              {!e && d.entryGone && (
+                <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-entry-gone">
+                  Wpis tej wypłaty usunięto w ICTTJ – pula, z którą ją zadokowano, już nie obowiązuje. Zadokuj ponownie (zwykłą kolejnością) albo dopisz wpis w ICTTJ: FI połączy go sama.
+                </p>
+              )}
+              {d.walletTyped && d.transaction && (
+                <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-wallet-typed">
+                  Na Portfelu XTB jest już wpływ {zl(d.transaction.amount)} z {plDate(d.transaction.date)} – „Zadokuj” zrobi z niego tę wypłatę (bez drugiej operacji).
+                </p>
+              )}
+              {!e && d.missingEntry && !d.entryGone && <p className="border-l-2 border-accent pl-2 text-muted">Bez wpisu w ICTTJ – dokuje zwykłą kolejnością. Dopisz tę wypłatę w ICTTJ (z pulą): FI połączy ją sama.</p>}
+              {e && d.near && d.transaction && (
+                <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-near">
+                  W banku jest wpływ z XTB z {plDate(d.transaction.date)} na {zl(Math.abs(d.transaction.amount))} – różni się od wpisu o {zl(Math.abs(Math.abs(d.transaction.amount) - d.amount))} (przewalutowanie, prowizja, literówka?). „Zadokuj” połączy je: liczy się kwota z banku.
+                </p>
+              )}
+              {e && d.poolChanged && d.docking && (
+                <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-pool-changed">
+                  Pula wpisu zmieniła się w ICTTJ po dokowaniu (było: {d.docking.pool ? ICTJ_POOL_LABEL[d.docking.pool] : 'bez puli'}) – „Zapisz podział” zadokuje z obecną pulą.
+                </p>
+              )}
+              {stored && storedTotal !== docked && (
+                <p className="border-l-2 border-accent pl-2 text-muted" data-testid="docking-split-fitted">
+                  Kwota operacji zmieniła się po dokowaniu (było {zl(storedTotal)}, jest {zl(docked)}) – podział dopasowany do niej: podatek, kadłub, cele, reszta do osłon. „Zapisz podział” go utrwali.
+                </p>
+              )}
+            </div>
+          </details>
         )}
       </div>
     </Modal>

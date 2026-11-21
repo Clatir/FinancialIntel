@@ -13,24 +13,28 @@ import { keepReturned, readDeletedBank } from '../import/returned'
 import { useData } from '../../store/data'
 import { keepAdvances } from '../household/actions'
 import { TransferPairs } from './TransferPairs'
+import { settleDue } from '../cargo/actions'
+import { openSettlements } from '../radar/settlements'
 
 const zl = (g: number) => `${plnText(g)} zł`
 
 /** Why a report matters, under its section. */
 const HINT: Partial<Record<InboxKind, string>> = {
+  fees:
+    'Opłata stała 3 dni po terminie bez płatności. Zaległa zostaje, aż przyjdzie płatność – płatność przed dniem następnego terminu zamyka najpierw zaległą. „Zapłacone poza budżetem” – gotówką albo z konta spoza budżetu, bez operacji tutaj (terminy wcześniejszych miesięcy, z „Cofnij”).',
   uncategorized: 'Wydatek bez kategorii liczy się do energii dnia jako codzienny i nie trafia do żadnej koperty.',
   duplicates: 'Ta sama operacja wpisana ręcznie i z banku albo z dwóch komputerów – scalanie z jednym „Cofnij”.',
   // AP-27 (SA sp. 3): the rule said where it is used – a repeat only from two computers.
   corrections:
     'To samo saldo potwierdzone na dwóch komputerach przed synchronizacją daje dwie korekty o tej samej kwocie. Zgłaszamy tylko pary z dwóch różnych komputerów – dwie korekty z jednego komputera to dwie Twoje decyzje.',
   returned:
-    'Operacje z banku, które usunąłeś, a import pliku w drugim formacie (lista operacji ↔ historia rachunku) wpisał je znowu jako nowe (przed wersją 1.15.5). „Usuń” usuwa je znowu (z „Cofnij”), „zostaw” – zostają i nie będą zgłaszane.',
+    'Operacje z banku, które usunąłeś, a import pliku w drugim formacie (lista operacji ↔ historia rachunku) wpisał je znowu jako nowe (we wcześniejszych wersjach aplikacji). „Usuń” usuwa je znowu (z „Cofnij”), „zostaw” – zostają i nie będą zgłaszane.',
   transfers:
-    'Od 1.7.0 przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane wcześniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
+    'Przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane dawniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
   firewall:
     'Dopłata do konta tradingowego, gdy osłony albo kadłub nie są pełne, łamie rozkaz firewall – czerwony alarm i poważne naruszenie w grze. „Potwierdź” mówi, że to Twoja decyzja (z „Cofnij”); naruszenie zostaje.',
   advances:
-    'Wpłaty zapisane jako zaliczka na przyszłość idą w całości do depozytu i nie spłacają długu – do wersji 1.15.5 tak zapisywał się też wybór „reszta jako zaliczka” w imporcie. „Spłać” – najpierw wyrównają to, co osoba ma oddać, reszta zostanie zaliczką (z „Cofnij”); „zostaw” – zostają zaliczką i nie będą zgłaszane.',
+    'Wpłaty zapisane jako zaliczka na przyszłość idą w całości do depozytu i nie spłacają długu – dawniej tak zapisywał się też wybór „reszta jako zaliczka” w imporcie. „Spłać” – najpierw wyrównają to, co osoba ma oddać, reszta zostanie zaliczką (z „Cofnij”); „zostaw” – zostają zaliczką i nie będą zgłaszane.',
   refunds: 'Zakupy finansowane pieniędzmi osłon, których domownik jeszcze nie oddał (Ustawienia → Domownicy).',
   balances: 'Salda potwierdzone z bankiem ponad 30 dni temu – potwierdzenie pokazuje, czy operacje zgadzają się z kontem.'
 }
@@ -123,6 +127,24 @@ function Report({ item, onOpen, onPreview }: { item: InboxItem; onOpen: () => vo
           zostaw
         </button>
       )}
+      {/* A container's fees overdue (UX-31): Ładownia's „Zapłacone poza budżetem” – the earlier months' dues, „Cofnij” in its toast. */}
+      {item.kind === 'fees' && item.ref && item.due && (
+        <button
+          type="button"
+          className="btn btn-ghost h-[22px] shrink-0"
+          onClick={() => settleFees(item.ref!, item.due!)}
+          title="Zapłacone gotówką albo z konta poza budżetem – bez operacji tutaj; zaległe terminy wcześniejszych miesięcy znikają (termin tego miesiąca zostaje do zapłaty)"
+          data-testid="inbox-fees-settle"
+        >
+          Zapłacone poza budżetem
+        </button>
+      )}
+      {/* A member's purchases still owed (UX-82): their settlements in Radar – the purchases, the money to assign, „Oddał(a)…”. */}
+      {item.kind === 'refunds' && item.ref && (
+        <button type="button" className="btn btn-ghost h-[22px] shrink-0" onClick={() => openSettlements(item.ref)} data-testid="inbox-settle">
+          Rozlicz
+        </button>
+      )}
       {/* A transfer's report (F10): its operation, and „zostaw tak” (two moves, a side outside the budget). */}
       {item.kind === 'transfers' && item.ref && <TransferButtons item={item} onPreview={onPreview} />}
       <button type="button" className="btn h-[22px] shrink-0" onClick={onOpen} data-testid="inbox-open">
@@ -130,6 +152,12 @@ function Report({ item, onOpen, onPreview }: { item: InboxItem; onOpen: () => vo
       </button>
     </div>
   )
+}
+
+/** „Zapłacone poza budżetem” of a container's fees overdue (UX-31): Ładownia's own action on its latest earlier due. */
+function settleFees(containerId: string, due: string): void {
+  const c = useData.getState().records.containers[containerId]?.record
+  if (c) settleDue(c, due)
 }
 
 /** An operation of a report (come back after its deletion – AF-1, a top-up against the firewall) in Operacje. */

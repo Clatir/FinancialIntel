@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { MBANK_ACCOUNT_ID } from '../../src/shared/schema/budget'
 import { launch } from './app'
+import { openForm } from './forms'
 import { records } from './files'
 import { seedFolder, seedId, zl } from './seed'
 
@@ -136,6 +137,7 @@ test('Plan spłaty pożyczek: harmonogram, lawina i kula śnieżna z nadpłatą,
     await expect(cells('radar-payoff-interest')).toHaveText(['Odsetki (zł)', '17,82', '14,83', '15,83'])
 
     // A new taken loan with its interest typed – 9,505 % is 9,51 % with the same word: in the plan with it.
+    await openForm(page, 'loan')
     await page.getByRole('radio', { name: 'Biorę pożyczkę' }).click()
     await page.getByTestId('loan-name').fill('Kredyt na rower')
     await page.getByTestId('loan-amount').fill('1200')

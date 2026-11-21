@@ -100,7 +100,13 @@ export function Banners() {
     void loadTrayPrefs()
   }, [])
   const items: BannerItem[] = []
-  if (status?.readOnlyReason) items.push({ key: 'ro', text: status.readOnlyReason })
+  // The reason is a newer version's file (UX-18): the way out is an update – the banner leads to it.
+  if (status?.readOnlyReason)
+    items.push({
+      key: 'ro',
+      text: status.readOnlyReason,
+      ...(/nowsza wersja aplikacji/i.test(status.readOnlyReason) ? { actions: [{ label: 'Aktualizacje', onClick: showUpdates, accent: true, testId: 'banner-ro-updates' }] } : {})
+    })
   // Only a computer in use (a move in its window within 10 min – D86): one in the tray writes nothing in the background.
   const others = (status?.otherMachines ?? []).filter((m) => m.inUse !== false)
   if (others.length)

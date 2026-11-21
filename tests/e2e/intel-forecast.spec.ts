@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, monthRange, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, openIntel } from './app'
 import { json } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -36,7 +36,7 @@ test('AP-44: prognoza wieloletnia – scenariusze, założenia zapisane w fi.jso
   const { app, page, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     const panel = page.getByTestId('intel-forecast')
     await expect(panel).toBeVisible()
     const rows = panel.getByTestId('intel-forecast-year')
@@ -129,7 +129,7 @@ test('R2 przegląd: scenariusz nieczytelny zostaje w pliku i jest nazwany; „do
   const saved = async () => (await json(join(dataDir, 'fi.json'))).settings.intel.forecast
   try {
     await expect(page.getByTestId('page-bridge')).toBeVisible()
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     const panel = page.getByTestId('intel-forecast')
     // 500 % – unreadable: named, counted by its defaults, never dropped.
     await expect(panel.getByTestId('intel-forecast-unreadable')).toContainText('Scenariusz ostrożny: zapis w folderze danych nieczytelny')

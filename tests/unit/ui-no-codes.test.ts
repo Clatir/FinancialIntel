@@ -12,6 +12,19 @@ const ROOTS = ['src/renderer', 'src/mobile/app', 'src/shared', 'src/main']
 const ALLOWED_FILES = [join('src', 'shared', 'ids.ts')]
 const CODE = /\b[TDBNW]\d{1,3}\b|\bF(?!1\b|11\b|12\b)\d{1,3}\b|\bA[FP]-\d+|\(spec[,)]/
 
+/**
+ * UX-67: a version number („1.2.3”, „przed 1.3.0”) says nothing to the user – the text says what changed instead. SVG
+ * paths (their numbers look alike) are not texts.
+ */
+const VERSION = /(?<![\w.\-/])v?\d+\.\d+\.\d+(?![\w.])/
+const isSvgLine = (line: string) => /<path\b|\bd="/.test(line)
+// Files whose version-like text is not a version of this app (1.21.0: every screen's text rewritten – the list only
+// shrinks).
+const VERSION_PENDING = [
+  // An example of the format in an error about a release tag (not a version of this app).
+  join('src', 'shared', 'update.ts')
+]
+
 function sources(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name)
@@ -48,6 +61,30 @@ describe('AP-23: kody decyzji i teksty robocze nie trafiają do interfejsu', () 
           .split('\n')
           .forEach((line, i) => {
             if (CODE.test(line)) found.push(`${file}:${i + 1}: ${line.trim().slice(0, 120)}`)
+          })
+      }
+    }
+    expect(found).toEqual([])
+  })
+
+  it('skaner numerów wersji wyłapuje „1.2.3” w tekście, a ścieżkę SVG i zwykłe liczby przepuszcza', () => {
+    expect(VERSION.test('title="Połączenia z 1.2.2 zrobione na nazwach"')).toBe(true)
+    expect(VERSION.test('Zakupy oznaczone przed 1.3.0 („do zwrotu”)')).toBe(true)
+    expect(VERSION.test('Wydanie v1.15.5 nie ma')).toBe(true)
+    expect(VERSION.test('Stopa 12,5 % i 3.5 punktu')).toBe(false)
+    expect(isSvgLine('<path d="M2.5 3.2c2-.8 3.8-.6 5.5.6" />')).toBe(true)
+    expect(VERSION.test(withoutComments('const v = 1 // przed 1.3.0'))).toBe(false)
+  })
+
+  it('żaden tekst dla użytkownika nie zawiera numeru wersji (poza listą ekranów, które dopiero je opiszą)', () => {
+    const found: string[] = []
+    for (const root of ROOTS) {
+      for (const file of sources(root)) {
+        if (VERSION_PENDING.includes(file) || ALLOWED_FILES.includes(file)) continue
+        withoutComments(readFileSync(file, 'utf8'))
+          .split('\n')
+          .forEach((line, i) => {
+            if (!isSvgLine(line) && VERSION.test(line)) found.push(`${file}:${i + 1}: ${line.trim().slice(0, 120)}`)
           })
       }
     }

@@ -3940,3 +3940,51 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
 - **T534** „Cofnij” zmiany tagu cofa tylko ten tag (`tagUndone`, po `tagKey`; zdjęty wraca na dawne miejsce), reszta
   zmian – zmienione pola (`setFields`); przełączniki menu zostawiają zaznaczenie (`applyBulk` `keepTicked`), ukryte przez
   zmianę filtrem odpadają; jeden podgląd skutku na ekranie dla paska i menu (`bulkPreview.ts`).
+- **T535** (1.21.0 Z1, UX-1, 2, 24) Reguła dla tytułu zmienia operacje spoza zaznaczenia tym samym podglądem co zmiany
+  zbiorcze (`bulkPlanOf`, `openBulkPreview(…, { apply })`, jeden `BulkPreviewHost` na ekranie); „Zapamiętaj” i „Dodaj”
+  reguły mają toast „Cofnij” (`undoRules` – zmieniona od tego czasu zostaje ze słowem).
+- **T536** (Z2, UX-6–9) „Cofnij” i podsumowania: koperty ze średnich, łupy, pominięcie wpisu ICTTJ (toast z „Cofnij”
+  przez `undoKept`); kreator – wybory „albo – albo”.
+- **T537** (Z3) Powłoka okna: `toastMs` (czas z długości tekstu, `ms` = minimum, pauza pod myszą), historia ekranów
+  Alt+← / → (`history` / `forward` w `store/ui.ts`, 20 wstecz), skróty nad oknami, F1 i paleta z jednym formatem
+  skrótów (`components/shortcuts.ts`), menu boczne z grupami.
+- **T538** (Z4) Lista Operacji: klawiatura (Ctrl+Enter w edytorze = zapis i nowy wpis, UX-73), pusty wynik z wyjściem,
+  kolejka „bez kategorii”, edytor schowany, gdy nic nie wybrano.
+- **T539** (Z5) Wywiad w zakładkach (`intel/tabs.ts`, pamięć `fi.intel.tab`), legendy wykresów, przejścia z wykresów do
+  Operacji z filtrem, symulator na szkicu (`useDraft`).
+- **T540** (Z6) Mostek i Meldunki: zaległe opłaty grupowane po kontenerze (`lateFees` / `lateFeeText`,
+  `calc/briefing.ts` – jedna reguła dla Odprawy, Mostka i Meldunków), pasek miesiąca z kopert codziennych („wydano X z
+  Y”), licznik meldunków, puste panele schowane, koperty z tempem i przejściem do Operacji.
+- **T541** (Z7) Edytor: `CategoryField` / `CategoryCombobox` z szukaniem i „Ostatnie” (czyste `operations/pick.ts`),
+  `CounterpartyField` z historii (maks. 8, Enter tylko po strzałce), etykiety finansowania, jeden „Podziel…”
+  (`SplitMenu`: na kategorie / na osoby); import, Ładownia i boje zostają przy `CategorySelect` (W17).
+- **T542** (Z8) Import: pasek z licznikami, „Skategoryzuj pozostałe”, wstęp temat / marka, scalanie duplikatów;
+  eksport z „Pokaż w folderze”.
+- **T543** (Z9) Ustawienia w grupach (`settingsNav.ts`, `SETTINGS_GROUPS`, pamięć `fi.settings.tab`), powiadomienia
+  w grupach, Synchronizacja – konflikty na górze, pierwszy start ze znalezionymi danymi; teksty bez numerów wersji.
+- **T544** (Z10) Radar, Mapa gwiezdna, Ładownia: nagłówki sekcji (słownik bez zmian – D106 pkt 1), przejścia z osi do
+  Operacji, formularze za przyciskiem, propozycje Ładowni zbiorczo.
+- **T545** (Z11) Plan miesiąca – kroki początku miesiąca; plan odziedziczony liczy krok „Pensja i koperty” jako zrobiony;
+  Dowództwo – pasek dnia; skutek dokowania; kreator pokazuje braki kroków.
+- **T547** (Z13, UX-82) Rozliczenia z domownikami – panel w Radarze i przejścia z Mostka / Meldunków; liczby tylko z
+  `calc/` (bez zmian silnika); „Oddał(a) gotówką” otwiera szkic wpływu (`newOperation`) w edytorze, nie zapisuje wprost;
+  panel znika, gdy nie ma sald ani osób poza „Dom”.
+- **T546** (Z12, UX-79, D106 pkt 11) Kreator startu otwiera się sam raz w nowym pustym folderze (bez `budget.start`,
+  bez rekordów, plików z błędami i konfliktów, zapisywalnym) – znacznik `fi.wizard.auto:<folder>` w `localStorage`
+  zapisywany w chwili otwarcia, per komputer; bez działającego `localStorage` nie otwiera się sam wcale. E2E wyłączają
+  to `FI_WIZARD_AUTO=0` w `launch()` (`AppInfo.wizardAuto`). „Szybki start” to tryb `quick` tego samego kreatora (salda,
+  pensja, koperty codzienne; reszta z jego wyliczeń, opisana na ekranie, start z Windows domyślnie włączony – potwierdzone
+  21.11.2026), zapis tym samym `finishWizard` / `writeStart` (T446).
+- **T548** (Z6b, UX-30) Kilka zaległych terminów jednego kontenera (`lateFees`, > 1) to jeden wiersz listy „Na radarze”
+  w miejscu najstarszego terminu: tekst `lateFeeSpan` w miejscu nazwy i uwag, kwota – suma, dymek – `lateFeeText`
+  (`features/radar/rows.ts`, czyste). Pozycje `radar()`, kalendarz i salda kont naprzód bez zmian; bez akcji „Zapłacone
+  poza budżetem” przy wierszu (zostaje w Meldunkach – potwierdzone 21.11.2026).
+- **T549** (Z14, zamknięcie 1.21.0) Teksty okna bez numerów wersji („zapisany dawniej …”, `VERSION_PENDING` tylko
+  `update.ts`); potwierdzone 21.11.2026: panel Rozliczeń znika bez sald i osób poza „Dom” (T547), pasek miesiąca
+  z kopert codziennych (T540), krok „Pensja i koperty” przy planie odziedziczonym zrobiony (T545). Poprawki przeglądu:
+  reguła tytułu z historią zmienia tylko operacje swojego kierunku (`direction`, jak import; otwarta – `openId` – bierze
+  ją jak w edytorze), znak przy przelewie / pożyczce zostaje; licznik „Zapisz i zaktualizuj (N)” = `titleRulePlan` (plan podglądu:
+  kierunek, nie „już takie”, z otwartą, bez szkiców); `applyBulk` nie nadpisuje operacji zmienionych od podglądu (zostają ze
+  słowem; nic zapisanego – reguła też nie); „Cofnij” samej reguły (`rulesUndo`). Kreator otwiera się sam także po
+  zmianie folderu z Ustawień i po zdjęciu „tylko do odczytu”; „Cofnij” „Koperty ze średnich” usuwa nietkniętą kopię
+  planu; link „rozlicz na Radarze” tylko przy `settlementsShown`; „Wyłącz / Włącz wszystkie” z „Cofnij”.

@@ -10,7 +10,8 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addMonths, daysBetween, warsawNow } from '../../src/shared/calc/dates'
 import { dm } from '../../src/shared/format'
-import { launch } from './app'
+import { SHORT_MONTHS } from '../../src/shared/calc/cargoWatch'
+import { launch, openIntel } from './app'
 import { seedFolder, zl } from './seed'
 
 const ACC = '01KDEFACC00000000000000001'
@@ -52,7 +53,13 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
     await expect(page.getByTestId('state-range')).toHaveText('0,5 mies.')
     // The briefing: the partial salary and last month's rent – once.
     await expect(page.locator('[data-testid="briefing-item"][data-kind="alarm"]').filter({ hasText: 'Pensja częściowa: brakuje 4 000,00 zł' })).toHaveCount(1)
-    await expect(page.locator('[data-testid="briefing-item"][data-kind="cargo"]').filter({ hasText: `termin ${dm(lateDue)} minął` })).toHaveText(`Kontener niezaładowany: Czynsz 800,00 zł – termin ${dm(lateDue)} minął, brak płatności.`)
+    // From the 13th this month's due is overdue too (3 days of grace): the container's dues in one line (UX-30).
+    const both = today > `${month}-12`
+    const years = prev.slice(0, 4) !== month.slice(0, 4)
+    const mon = (m: string) => `${SHORT_MONTHS[Number(m.slice(5, 7)) - 1]}${years ? ` ${m.slice(0, 4)}` : ''}`
+    await expect(page.locator('[data-testid="briefing-item"][data-kind="cargo"]')).toHaveText(
+      both ? `Kontener niezaładowany – Czynsz: 2 terminy bez płatności (${mon(prev)}–${mon(month)}), razem 1 600,00 zł.` : `Kontener niezaładowany: Czynsz 800,00 zł – termin ${dm(lateDue)} minął, brak płatności.`
+    )
 
     // Plan miesiąca: the same energy today.
     await page.getByTestId('nav-month').click()
@@ -66,11 +73,15 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
     await expect(row).toHaveAttribute('data-due', lateDue)
     await expect(row).toHaveAttribute('data-carried', 'yes')
 
-    // Radar: the same due on its day.
+    // Radar: the same due on its day – with this month's overdue too, both in one row there, as in the briefing (UX-30).
     await page.keyboard.press('Control+7')
     const late = page.locator('[data-testid="radar-item"][data-kind="fixed"]').filter({ hasText: 'Czynsz' }).filter({ hasText: dm(lateDue) })
     await expect(late).toHaveAttribute('data-overdue', 'yes')
-    await expect(late).toContainText(`po terminie ${daysBetween(lateDue, today)} dni`)
+    if (both) {
+      await expect(late).toHaveAttribute('data-dues', '2')
+      await expect(late.getByTestId('radar-item-open')).toHaveText(`Czynsz: 2 terminy bez płatności (${mon(prev)}–${mon(month)})`)
+      await expect(page.locator('[data-testid="radar-item"][data-kind="fixed"][data-overdue="yes"]')).toHaveCount(1)
+    } else await expect(late).toContainText(`po terminie ${daysBetween(lateDue, today)} dni`)
 
     // Dowództwo: the order says what today's energy is – capped by the month's – and what breaks it (the allowance).
     await page.keyboard.press('Control+8')
@@ -79,7 +90,7 @@ test('N3: pensja częściowa i zaległy czynsz – Mostek, Plan, odprawa, Ładow
 
     // Wywiad: „teraz” = Mostek; the month's rest – the envelopes 3 500 zł and the two rents 1 600 zł over the month's
     // energy (0 zł): 2 000 zł from the shields, 3 100 zł lacking; the course starts from it.
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     await expect(page.getByTestId('intel-course-rest')).toHaveText('Resztka miesiąca: koperty i opłaty 5 100,00 zł ponad energię miesiąca (pensja częściowa) – z osłon, brakuje 3 100,00 zł.')
     const sim = page.getByTestId('intel-maneuver')
     await expect(sim.getByTestId('maneuver-range').locator('td').nth(1)).toHaveText('0,5 mies. · Zwiadowca')
@@ -111,7 +122,7 @@ test('N3: kadłub 99,4 % celu – „liczy się jako pełny” na Mostku i „Ka
   const { app, page, errors } = await launch({ dataDir })
   try {
     await expect(page.getByTestId('state-hull-tolerance')).toHaveText('brakuje 100,00 zł – do 1% celu liczy się jako pełny (firewall, wolne do decyzji)')
-    await page.keyboard.press('Control+9')
+    await openIntel(page, 'forecasts')
     // Before: „Kadłub pełny —” – no income in the course fills the last 100 zł.
     const hull = page.getByTestId('intel-course-hull-full').locator('td')
     for (const i of [1, 2, 3]) await expect(hull.nth(i)).toHaveText('teraz')

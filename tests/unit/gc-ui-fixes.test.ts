@@ -171,7 +171,8 @@ describe('GC (T512–T518): interfejs, telefon, eksport i drobne', () => {
 
   it('T516–T518: skrót Synchronizacji (IN sp. 1), strażnik salda (OP.20), blokada + Nowa (OP.42), + Zapisz widok (OP.10), podgląd przelewów (ME sp. 4)', () => {
     const app = read('src/renderer/app/App.tsx')
-    expect(app).toContain('keys="Ctrl Shift Y"')
+    // UX-43: the bottom rows have the shortcut in the tooltip only.
+    expect(app).toContain('hint={KEYS.sync}')
     expect(app).not.toContain('badge ? (')
 
     const editor = read('src/renderer/features/operations/OperationEditor.tsx')

@@ -20,11 +20,16 @@ paths:
   `app.evaluate`; okno szybkiego wpisu – `page.evaluate('window.fi.quickOpen()')`; pole kwoty z wartością – najpierw
   klik, potem wpisanie. Testy z należnościami sprzed dziś ustawiają `household.since`. Kod współdzielony E2E importują
   względnie (bez aliasów).
+- Pole kategorii (`operation-category`, `quick-category`, `operations-bulk-category`, `title-rule-category`) to combobox:
+  wybór `pickCategory(scope, testId, nazwa | id)` z `tests/e2e/forms.ts` (lista jest w portalu – szukana na stronie),
+  odczyt `toHaveAttribute('data-value', id)`; „Podziel…” – `splitOperation`.
 - Zmienne testowe: `FI_USER_DATA`, `FI_DATA_DIR`, `FI_MACHINE_NAME`, `FI_DEFAULT_DATA_DIR`, `FI_UPDATE_URL`,
   `FI_UPDATE_CHECK_DELAY_MS`, `FI_UPDATE_TOKEN`, `FI_E2E_EXECUTABLE`, `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` /
   `FI_ICTJ_LAUNCH`, `FI_SYSTEM_IDLE`, `FI_IDLE_CHECK_MS`, `FI_CONFIG_RETRY_MS`, `FI_CONFIG_WRITE_DELAY_MS`,
   `FI_DOWNLOADS_DIR`, `FI_BANK_FILES_POLL_MS`, `FI_OPEN_DELAY_MS`, `FI_OPEN_SLOW_MS`, `FI_FOLDER_CHECK_MS`,
-  `FI_FREEZE_AFTER_OPEN_MS`, `FI_FREEZE_QUIET_MS`, `FI_VERIFY_VIEWS`, `FI_PHONE_BROWSER`, `FI_CHROMIUM`; Windows CI:
+  `FI_FREEZE_AFTER_OPEN_MS`, `FI_FREEZE_QUIET_MS`, `FI_VERIFY_VIEWS`, `FI_PHONE_BROWSER`, `FI_CHROMIUM`,
+  `FI_WIZARD_AUTO` (`'0'` – kreator nie otwiera się sam w nowym pustym folderze; `launch()` i test aktualizacji ustawiają
+  to domyślnie, test kreatora `wizard-z12.spec.ts` podaje `'1'`); Windows CI:
   `FI_UPDATE_FROM` / `FI_UPDATE_TO` / `FI_UPDATE_TO_VERSION`. Hak E2E `window.__FI_SAVE_DELAY__` (opóźnienie autozapisu).
 - Dane: `tests/fixtures/` tylko zanonimizowane albo syntetyczne, nigdy dane użytkownika.
 - **Pułapka (03.11.2026):** spakowana aplikacja (`FI_E2E_EXECUTABLE`) przy każdym starcie zapisuje autostart z

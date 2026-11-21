@@ -12,7 +12,7 @@ import type { BrandAliases } from '@shared/import/aliases'
 import { shareOf, withShare } from '@shared/calc/share'
 import { stripDeletedCovers } from '@shared/calc/repayments'
 import { deepEqual, sameContentAs } from '@shared/merge'
-import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KIND_LABEL, TX_KINDS, transactionSchema, type ImportRule, type OperationView, type Share, type Transaction, type TxKind } from '@shared/schema'
+import { MBANK_ACCOUNT_ID, SCHEMA_VERSION, TX_KIND_LABEL, TX_KINDS, transactionSchema, type OperationView, type Share, type Transaction, type TxKind } from '@shared/schema'
 import { addRecord, canWrite, deleteRecords, discardDraft, listOf, replaceRecords, updateRecord, updateSettings, useData } from '../../store/data'
 import { askGuard } from '../../store/guard'
 import { fleetInputNow, fleetNow } from '../../store/fleet'
@@ -21,7 +21,7 @@ import { useIctj } from '../../store/ictj'
 import { plural } from '../../lib/format'
 import { commitActiveField, navigate, toast } from '../../store/ui'
 import { deleteManyWithUndo, deleteWithUndo, restoreDeleted } from '../history/actions'
-import { rememberBrands, saveKeywordRule } from '../import/rules'
+import { rememberBrands, saveKeywordRule, undoRules } from '../import/rules'
 import { clickTick, extendTick, pruneTicked, tickAll, type Modifiers } from './rangeSelect'
 import { changedBy, tagUndone, type BulkChange } from './bulkModel'
 
@@ -164,6 +164,11 @@ export const clearTicked = () => useOperationsUi.setState({ ticked: {}, tickAnch
 export function tickRow(id: string, on: boolean): void {
   tickOperations([id], on)
   useOperationsUi.setState({ tickAnchor: id })
+}
+
+/** A row outside the ticked ones becomes the only one ticked (as under the right button and for Delete, UX-71). */
+export function tickOnly(id: string): void {
+  if (!useOperationsUi.getState().ticked[id]) useOperationsUi.setState({ ticked: { [id]: true }, tickAnchor: id })
 }
 
 /** A plain click on a row: the anchor moves, the ticked set stays as it is (D105). */
@@ -338,26 +343,6 @@ export function financeTicked(visibleIds: readonly string[], choice: FinanceChoi
     7000,
     before.length ? { label: 'Cofnij', run: undo } : undefined
   )
-}
-
-/**
- * The rules an action wrote taken back (B66): each rule it added or changed – while it is still that one (by content:
- * the settings read again after a save are other objects) – goes or is the one before again; the rules written
- * meanwhile stay.
- */
-function undoRules(before: readonly ImportRule[], after: readonly ImportRule[]): void {
-  const was = new Map(before.map((r) => [r.id, r]))
-  const set = new Map(after.filter((r) => !deepEqual(was.get(r.id), r)).map((r) => [r.id, r]))
-  if (!set.size) return
-  updateSettings((f) => {
-    const rules = f.settings.import.rules.flatMap((r) => {
-      const wrote = set.get(r.id)
-      if (!wrote || !deepEqual(wrote, r)) return [r]
-      const old = was.get(r.id)
-      return old ? [old] : []
-    })
-    return { ...f, settings: { ...f.settings, import: { ...f.settings.import, rules } } }
-  })
 }
 
 /** Select an operation; an untouched new entry left behind is dropped (it was never written). */
@@ -608,7 +593,22 @@ export function bulkTargets(visibleIds: readonly string[]): { records: Transacti
 
 /** The ticked operations shown that a change takes (F11) and what it makes of them – nothing written yet. */
 export function bulkPlan(visibleIds: readonly string[], change: BulkChange): BulkPlan {
-  const entries = tickedEntries(visibleIds)
+  return planOf(tickedEntries(visibleIds), change)
+}
+
+/**
+ * A change of these operations (no drafts), ticked or not – „Ustaw regułę dla tytułu” takes the ones its title fits
+ * (T535); the same plan, preview and „Cofnij” as of the ticked ones.
+ */
+export function bulkPlanOf(ids: readonly string[], change: BulkChange): BulkPlan {
+  const data = useData.getState()
+  return planOf(
+    ids.flatMap((id) => (data.records.transactions[id] && !data.drafts[id] ? [data.records.transactions[id]!] : [])),
+    change
+  )
+}
+
+function planOf(entries: ReadonlyArray<{ record: Transaction; readOnly: boolean }>, change: BulkChange): BulkPlan {
   const docked = dockedIds()
   const plan: BulkPlan = { change, before: [], after: [], skipped: 0, newer: entries.filter((e) => e.readOnly).length }
   for (const e of entries) {
@@ -686,7 +686,8 @@ const BULK_LABEL: Record<BulkChange['kind'], string> = {
   explained: 'Oznaczono korekty jako wyjaśnione',
   container: 'Przypisano do ładowni',
   goal: 'Rozliczono z celu',
-  loan: 'Przypisano do pożyczki'
+  loan: 'Przypisano do pożyczki',
+  titleRule: 'Zastosowano regułę dla tytułu'
 }
 
 /** The toast's words of a change applied: the ones taking a field off say so. */
@@ -700,14 +701,56 @@ function bulkLabel(c: BulkChange): string {
   return BULK_LABEL[c.kind]
 }
 
+export interface BulkApplyOptions {
+  /**
+   * The ticked operations stay ticked: the menu's toggles, which stay open on the same ones (D105), and a change of
+   * operations not ticked (the title rule – T535); a deletion clears them anyway.
+   */
+  keepTicked?: boolean
+  /** Words of the toast after the count (the title rule: its rule remembered). */
+  note?: string
+  /** Taken back by the same „Cofnij”, after the operations (the title rule's rule – T535); not for a deletion. */
+  undoMore?: () => void
+}
+
+/**
+ * The plan's operations still as it read them (T549): the preview stays open while a sync, the autosave or another window
+ * may change them – one changed since (or deleted, or rewritten by a newer version) is left as it is, never written over
+ * with what the preview showed; `changed` – how many, said by the toast (`undoKept`'s words).
+ */
+function stillAsRead(plan: BulkPlan): { plan: BulkPlan; changed: number } {
+  const now = useData.getState().records.transactions
+  const keep = plan.before.map((b) => {
+    const cur = now[b.id]
+    return !!cur && !cur.readOnly && sameContentAs(cur.record, b)
+  })
+  const changed = keep.filter((k) => !k).length
+  if (!changed) return { plan, changed }
+  return {
+    plan: { ...plan, before: plan.before.filter((_, i) => keep[i]), after: plan.after.filter((_, i) => keep[i]) },
+    changed
+  }
+}
+
+/** Nothing of the plan written: every one of its operations changed since the preview read them (T549). */
+function allChangedNote(n: number): void {
+  toast(n === 1 ? 'Nic nie zapisano – operacja zmieniła się od podglądu i zostaje, jak jest.' : `Nic nie zapisano – operacje zmieniły się od podglądu i zostają, jak są (${n}).`, 'info', 7000)
+}
+
 /**
  * The change applied (F11), with one „Cofnij”: the deleted come back (with their dockings), the rest gets back its fields.
- * `keepTicked` – the menu's toggles, which stay open on the same ticked operations (D105); a deletion clears them anyway.
+ * The operations changed since the plan was read stay as they are (`stillAsRead`). false – nothing written (a read-only
+ * folder, nothing to change, all of them changed since).
  */
-export async function applyBulk(plan: BulkPlan, what = '', opts: { keepTicked?: boolean } = {}): Promise<void> {
-  if (!plan.before.length || !canWrite()) return
+export async function applyBulk(read: BulkPlan, what = '', opts: BulkApplyOptions = {}): Promise<boolean> {
+  if (!read.before.length || !canWrite()) return false
+  const { plan, changed } = stillAsRead(read)
+  if (!plan.before.length) {
+    allChangedNote(changed)
+    return false
+  }
   const n = plan.before.length
-  const tail = `${plan.skipped ? `, pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : ''}${newerNote(plan.newer)}`
+  const tail = `${plan.skipped ? `, pominięte (zmiana do nich nie pasuje): ${plan.skipped}` : ''}${changed ? `, zmienione od podglądu zostają, jak są: ${changed}` : ''}${newerNote(plan.newer)}`
   if (!opts.keepTicked || plan.change.kind === 'delete') clearTicked()
   if (plan.change.kind === 'delete') {
     const ids = plan.before.map((t) => t.id)
@@ -735,9 +778,9 @@ export async function applyBulk(plan: BulkPlan, what = '', opts: { keepTicked?: 
     if (dockings.length) await deleteRecords('dockings', dockings)
     stripped = stripDeletedCovers(allTxs, deleted)
     if (stripped.length) replaceRecords('transactions', stripped.map((s) => s.after))
-    return
+    return deleted.size > 0
   }
-  if (!replaceRecords('transactions', plan.after)) return
+  if (!replaceRecords('transactions', plan.after)) return false
   const pairs = plan.before.map((b, i) => ({ before: b, after: plan.after[i]!, fields: setFields(b, plan.after[i]!) }))
   const change = plan.change
   const undo = () => {
@@ -764,6 +807,8 @@ export async function applyBulk(plan: BulkPlan, what = '', opts: { keepTicked?: 
     })
     replaceRecords('transactions', back)
     undoneNote(back.length, pairs.length)
+    opts.undoMore?.()
   }
-  toast(`${bulkLabel(plan.change)}${what ? ` ${what}` : ''}: ${n} ${plural(n, 'operacja', 'operacje', 'operacji')}${tail}.`, 'success', 8000, { label: 'Cofnij', run: undo })
+  toast(`${bulkLabel(plan.change)}${what ? ` ${what}` : ''}: ${n} ${plural(n, 'operacja', 'operacje', 'operacji')}${tail}${opts.note ?? ''}.`, 'success', 8000, { label: 'Cofnij', run: undo })
+  return true
 }

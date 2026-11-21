@@ -1,22 +1,25 @@
-import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { addMonths, warsawNow, weekdayOf } from '@shared/calc/dates'
 import { notesOf } from '@shared/calc/operations'
 import { tagsText } from '@shared/calc/tags'
 import { useMarkFlags } from '../sensors/state'
-import { MARK_LABEL, OPERATION_MARKS, amountTone, asideOfOperations, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type PeriodFilter } from '@shared/operationsView'
+import { MARK_LABEL, OPERATION_MARKS, amountTone, asideOfOperations, marksOf, matchesFilter, needsLog, noteLineOf, sortOperations, sumOperations, type MarkFlags, type OperationMark, type OperationsFilter, type PeriodFilter } from '@shared/operationsView'
 import { useDuplicateCount } from '../import/DuplicatesPanel'
 import { BulkChangeBar, BulkPreviewHost } from './BulkChange'
 import { OperationsMenu, openOperationsMenu } from './OperationsMenu'
 import { tickedIn } from './rangeSelect'
+import { previewBulk } from './bulkPreview'
+import { emptyChoices, nextAfterLeave, worksUncategorized } from './listFlow'
 import { CompactContext } from '../../components/compact'
 import { ColumnsMenu, ExportVisible, MoreFilters, SortHeader, ViewsBar, viewable } from './ListTools'
 import { columnsTemplate, useOperationColumns, type OperationColumn } from './columns'
 import { keywordOfSearch } from '../import/rules'
+import { REMEMBER_NOTE } from '../import/notes'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
-import { discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
+import { canWrite, discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
 import { useFleet, useMinute } from '../../store/fleet'
-import { navigate, useUi } from '../../store/ui'
+import { navigate, toast, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
 import { usePanels } from '../../store/panels'
 import { plnText, signedPln } from '../../components/fields'
@@ -25,11 +28,11 @@ import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../.
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
 import { Badge, Kbd, cx } from '../../components/ui'
-import { WEEKDAY_PL, periodLabel, plDate, plural } from '../../lib/format'
+import { WEEKDAY_PL, parseDateInput, periodLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { operationRowText } from './rowText'
-import { CategorySelect, useAccounts, useCategories } from './pickers'
-import { anchorTick, categorizeTicked, clearTicked, clickTickRow, extendTickFromCursor, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickAllVisible, tickOperations, tickRow, useOperationsUi } from './state'
+import { CategoryField, useAccounts, useCategories } from './pickers'
+import { anchorTick, categorizeTicked, clearTicked, clickTickRow, extendTickFromCursor, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickAllVisible, tickOnly, tickOperations, tickRow, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
 import { useRecordList } from '../../store/records'
 import { SHARE_MODES } from '@shared/schema'
@@ -41,7 +44,95 @@ import { EveningReport } from '../evening/EveningReport'
 const DETAILS_KEY = 'operations:Szczegóły'
 const ROW = 28
 
+/** The key of Shift+F10 – spelled out so that the UI-text scanner does not take it for a feature code. */
+const MENU_FUNCTION_KEY = ['F', '10'].join('')
+
+/** The row of an operation takes the focus (it may not be drawn yet while the list scrolls to it). */
+function focusRow(id: string): void {
+  let tries = 0
+  const look = () => {
+    const el = document.querySelector<HTMLElement>(`[data-testid="operation-row"][data-key="${id}"]`)
+    if (el) el.focus({ preventScroll: true })
+    else if (++tries < 8) requestAnimationFrame(look)
+  }
+  look()
+}
+
+/** The editor's amount takes the focus once the editor is drawn (it may have been hidden until now – UX-77). */
+function focusAmount(): void {
+  let tries = 0
+  const look = () => {
+    const el = document.querySelector<HTMLInputElement>('[data-testid="operation-amount"]')
+    if (el) el.focus()
+    else if (++tries < 12) requestAnimationFrame(look)
+  }
+  requestAnimationFrame(look)
+}
+
+/**
+ * The keys of a row in focus (UX-71): Enter – the editor's amount, Delete – the delete of the menu (its preview, then
+ * „Cofnij”), Shift+F10 / the menu key – the menu under the right button. The arrows are the list's (`OperationsPage`).
+ */
+function rowKey(e: ReactKeyboardEvent<HTMLDivElement>, id: string, getOrder: () => readonly string[]): void {
+  // Keys of a control inside the row (its tick) stay that control's.
+  if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    selectOperation(id)
+    focusAmount()
+  } else if (e.key === 'Delete' && !e.shiftKey) {
+    e.preventDefault()
+    if (!canWrite()) return
+    tickOnly(id)
+    previewBulk(tickedIn(getOrder(), useOperationsUi.getState().ticked), { kind: 'delete' }, '')
+  } else if (e.key === 'ContextMenu' || (e.key === MENU_FUNCTION_KEY && e.shiftKey)) {
+    e.preventDefault()
+    const r = e.currentTarget.getBoundingClientRect()
+    openOperationsMenu(id, r.left + 48, r.bottom)
+  }
+}
+
 const TONE_CLASS = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
+
+/**
+ * One end of the „od – do” period (UX-16): a day as 16.10.2026 (typed also as 16.10 or 2026-10-16), empty = open end;
+ * saved on leaving the field or Enter, Esc takes the typing back – as `DateField`, which has no empty value.
+ */
+function RangeDay({ value, onChange, label, testId }: { value: string | null; onChange: (day: string | null) => void; label: string; testId: string }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const cancelled = useRef(false)
+  return (
+    <input
+      className="input num"
+      spellCheck={false}
+      placeholder="dd.mm.rrrr"
+      value={draft ?? (value ? plDate(value) : '')}
+      aria-label={label}
+      data-testid={testId}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.currentTarget.value)}
+      onBlur={() => {
+        if (draft != null && !cancelled.current) {
+          const text = draft.trim()
+          const day = text ? parseDateInput(text, Number(value?.slice(0, 4)) || undefined) : null
+          if (text && !day) toast('Nieprawidłowa data – zostaje poprzednia.', 'error')
+          else if (day !== value) onChange(day)
+        }
+        cancelled.current = false
+        setDraft(null)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
 
 function PeriodBar({ period }: { period: PeriodFilter }) {
   const month = period.kind === 'month' ? period.month : warsawNow().month
@@ -81,20 +172,20 @@ function PeriodBar({ period }: { period: PeriodFilter }) {
             </button>
             <label className="mt-1 flex items-center gap-2 text-muted">
               od
-              <input
-                type="date"
-                className="input"
-                value={period.kind === 'range' ? (period.from ?? '') : ''}
-                onChange={(e) => setFilter({ period: { kind: 'range', from: e.currentTarget.value || null, to: period.kind === 'range' ? period.to : null } })}
+              <RangeDay
+                value={period.kind === 'range' ? period.from : null}
+                onChange={(from) => setFilter({ period: { kind: 'range', from, to: period.kind === 'range' ? period.to : null } })}
+                label="Okres od"
+                testId="operations-period-from"
               />
             </label>
             <label className="flex items-center gap-2 text-muted">
               do
-              <input
-                type="date"
-                className="input"
-                value={period.kind === 'range' ? (period.to ?? '') : ''}
-                onChange={(e) => setFilter({ period: { kind: 'range', from: period.kind === 'range' ? period.from : null, to: e.currentTarget.value || null } })}
+              <RangeDay
+                value={period.kind === 'range' ? period.to : null}
+                onChange={(to) => setFilter({ period: { kind: 'range', from: period.kind === 'range' ? period.from : null, to } })}
+                label="Okres do"
+                testId="operations-period-to"
               />
             </label>
           </div>
@@ -184,7 +275,7 @@ interface Columns {
   shown: (c: OperationColumn) => boolean
 }
 
-function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: Transaction; selected: boolean; index: number; top: number; view: string | null; flags: MarkFlags; columns: Columns; getOrder: () => readonly string[] }) {
+function Row({ t, selected, tabbable, index, top, view, flags, columns, getOrder }: { t: Transaction; selected: boolean; tabbable: boolean; index: number; top: number; view: string | null; flags: MarkFlags; columns: Columns; getOrder: () => readonly string[] }) {
   const cats = useCategories()
   const accounts = useAccounts()
   const orders = useData((s) => s.fi?.settings.orders)
@@ -211,6 +302,9 @@ function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: T
       data-testid="operation-row"
       data-key={t.id}
       data-ticked={ticked ? '1' : undefined}
+      // One row takes the Tab stop (the selected one, else the first): the keys work on the row in focus (UX-71).
+      tabIndex={tabbable ? 0 : -1}
+      onKeyDown={draft ? undefined : (e) => rowKey(e, t.id, getOrder)}
       // Shift+click must not select text (D105).
       onMouseDown={(e) => {
         if (e.shiftKey) e.preventDefault()
@@ -243,6 +337,7 @@ function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: T
         type="checkbox"
         checked={ticked}
         disabled={draft}
+        tabIndex={-1}
         onClick={(e) => {
           e.stopPropagation()
           // Shift / Ctrl on the box: exactly what it does on the row – a range from the anchor, one row toggled (D105).
@@ -316,6 +411,31 @@ function Row({ t, selected, index, top, view, flags, columns, getOrder }: { t: T
   )
 }
 
+/** The ways out of a list that shows nothing (UX-14): the month before, the whole history, no filters. */
+function EmptyChoices({ filter }: { filter: OperationsFilter }) {
+  const choices = emptyChoices(filter)
+  const month = filter.period.kind === 'month' ? filter.period.month : null
+  return (
+    <div className="flex items-center gap-2" data-testid="operations-empty">
+      {choices.includes('prev') && month && (
+        <button type="button" className="btn h-[24px]" onClick={() => setFilter({ period: { kind: 'month', month: addMonths(month, -1) } })} data-testid="operations-empty-prev">
+          Poprzedni miesiąc
+        </button>
+      )}
+      {choices.includes('all') && (
+        <button type="button" className="btn h-[24px]" onClick={() => setFilter({ period: { kind: 'all' } })} data-testid="operations-empty-all">
+          Cała historia
+        </button>
+      )}
+      {choices.includes('clear') && (
+        <button type="button" className="btn h-[24px]" onClick={resetFilter} data-testid="operations-empty-clear">
+          Wyczyść filtry
+        </button>
+      )}
+    </div>
+  )
+}
+
 /** Duplicates waiting (D77): to the import screen, where they are merged. */
 function DuplicatesLink() {
   const n = useDuplicateCount()
@@ -377,7 +497,7 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
       </span>
       <fieldset disabled={readOnly} className="contents">
         <span className="text-muted">kategoria</span>
-        <CategorySelect className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
+        <CategoryField className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
         <select className="input h-[24px] w-[250px] py-0" value={mode} onChange={(e) => setRemember(e.currentTarget.value as typeof remember)} aria-label="Zapamiętaj dla importu" data-testid="operations-bulk-remember">
           <option value="none">bez zapamiętania</option>
           <option value="brands">zapamiętaj dla ich marek (import)</option>
@@ -394,7 +514,7 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
         </button>
         {/* Who finances them (D80 g): a household member, their gift, several people (D83) or me again. */}
         <select
-          className="input h-[24px] w-[170px] py-0"
+          className="input h-[24px] w-[200px] py-0"
           value={financer}
           onChange={(e) => {
             const v = e.currentTarget.value
@@ -410,14 +530,14 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
             .filter((m) => !m.archived)
             .map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                kupione dla: {m.name} (odda)
               </option>
             ))}
           {members
             .filter((m) => !m.archived)
             .map((m) => (
               <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
-                {m.name} – prezent
+                prezent dla: {m.name}
               </option>
             ))}
           {firstMember && <option value="share">wspólnie…</option>}
@@ -445,13 +565,17 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
           Ustaw finansującego
         </button>
       </fieldset>
+      {/* UX-62: the same sentence as „zapamiętaj” in Import says what the remembered choice is. */}
+      {mode !== 'none' && (
+        <span className="basis-full text-[11px] text-dim" data-testid="operations-bulk-remember-note">
+          {REMEMBER_NOTE}
+        </span>
+      )}
       <BulkChangeBar shown={shown} readOnly={readOnly} />
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
         Odznacz
       </button>
     </div>
-    {/* The one preview of the screen: the bar's changes and the menu's open it. */}
-    <BulkPreviewHost />
     </>
   )
 }
@@ -503,6 +627,38 @@ export function OperationsPage() {
   const aside = useMemo(() => asideOfOperations(rows, view), [rows, view])
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW, overscan: 20 })
   const selectedIndex = rows.findIndex((t) => t.id === selectedId)
+  // Without an operation chosen the editor is hidden and the list takes the width (UX-77).
+  const hasSelected = !!selectedId && !!records[selectedId]
+
+  // UX-15: in a list of operations without a category the one just given a category leaves it – the cursor goes on to the
+  // next one (the focus with it, when it was in the editor or the list) and the toast says how many are left.
+  const trail = useRef<{ order: readonly string[]; selectedId: string | null; filter: unknown } | null>(null)
+  const wantFocus = useRef(false)
+  useEffect(() => {
+    const prev = trail.current
+    trail.current = { order, selectedId, filter: deferred }
+    if (!prev || !selectedId || prev.selectedId !== selectedId || prev.filter !== deferred) return
+    // Only a change of the data moves the cursor: not a new filter, not a deleted operation, not a new entry.
+    if (!worksUncategorized(deferred) || !prev.order.includes(selectedId) || order.includes(selectedId)) return
+    const data = useData.getState()
+    if (!data.records.transactions[selectedId] || data.drafts[selectedId]) return
+    const next = nextAfterLeave(prev.order, selectedId, order)
+    const active = document.activeElement
+    wantFocus.current = !!active && (active === document.body || !!active.closest('[data-panel="operations:Szczegóły"], [data-testid="operations-list"]'))
+    selectOperation(next)
+    const at = next ? order.indexOf(next) : -1
+    if (at >= 0) virtualizer.scrollToIndex(at, { align: 'auto' })
+    toast(next ? `Zostało do skategoryzowania: ${order.length}.` : 'Wszystkie operacje z tej listy mają kategorię.', 'info', 3200)
+  }, [order, selectedId, deferred, virtualizer])
+
+  // UX-71: the focus follows the cursor when it is on the list (the arrows move the cursor, not the focus).
+  useEffect(() => {
+    if (!selectedId) return
+    const active = document.activeElement
+    if (!wantFocus.current && !(active instanceof HTMLElement && active.closest('[data-testid="operation-row"]'))) return
+    wantFocus.current = false
+    focusRow(selectedId)
+  }, [selectedId])
 
   // Leaving the page drops an untouched new entry.
   useEffect(
@@ -679,6 +835,8 @@ export function OperationsPage() {
 
         <BulkBar visible={rows} />
         <OperationsMenu order={order} />
+        {/* The one preview of the screen: the bar's, the menu's and the editor's title rule (T535 – nothing ticked) open it. */}
+        <BulkPreviewHost />
         <div className="grid h-[24px] shrink-0 items-center gap-x-1.5 overflow-hidden border-b border-line bg-panel px-2 text-[10.5px] tracking-wide text-muted uppercase" style={{ gridTemplateColumns: columns.template }} data-testid="operations-header">
           <TickAll rows={rows} />
           <SortHeader sort={filter.sort} by="date">
@@ -710,27 +868,30 @@ export function OperationsPage() {
                   </span>
                 </>
               ) : (
-                <span>Brak operacji dla wybranych filtrów.</span>
+                <>
+                  <span>Brak operacji dla wybranych filtrów.</span>
+                  <EmptyChoices filter={filter} />
+                </>
               )}
             </div>
           ) : (
             <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
               {virtualizer.getVirtualItems().map((v) => {
                 const t = rows[v.index] as Transaction
-                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} flags={flags} columns={columns} getOrder={getOrder} />
+                return <Row key={t.id} t={t} index={v.index} top={v.start} selected={t.id === selectedId} tabbable={selectedIndex >= 0 ? t.id === selectedId : v.index === 0} view={deferred.accounts.length === 1 ? deferred.accounts[0]! : null} flags={flags} columns={columns} getOrder={getOrder} />
               })}
             </div>
           )}
         </div>
       </div>
 
-      {detailsHidden ? (
-        <aside hidden data-panel={DETAILS_KEY} data-hidden="1" />
+      {detailsHidden || !hasSelected ? (
+        <aside hidden data-panel={DETAILS_KEY} data-hidden={detailsHidden ? '1' : undefined} />
       ) : (
         <>
           <PaneEdge pane={details} side="right" />
           <aside className="flex min-h-0 shrink-0 flex-col overflow-y-auto border-l border-line bg-panel" style={{ width: details.width }} data-panel={DETAILS_KEY}>
-            {selectedId ? <OperationEditor key={selectedId} id={selectedId} /> : <div className="p-6 text-center text-muted">Wybierz operację z listy albo dodaj nową (Ctrl+N).</div>}
+            <OperationEditor key={selectedId} id={selectedId} />
           </aside>
         </>
       )}

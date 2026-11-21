@@ -218,7 +218,7 @@ const LABELS: Record<string, string> = {
   title: 'Tytuł',
   impulse: 'Plan czy impuls',
   logNote: 'Dziennik kapitański',
-  repaid: 'Zwrot należności (przed 1.3.0)',
+  repaid: 'Zwrot należności (dawny zapis)',
   counterAccountId: 'Konto docelowe',
   bothSides: 'Przelew dla obu kont',
   counterBank: 'Dane z banku drugiego konta',

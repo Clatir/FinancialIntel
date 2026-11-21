@@ -1,7 +1,8 @@
 // adapted from ICTTJ src/renderer/app/App.tsx @ 84a8339
 import { useEffect, type ReactNode } from 'react'
 import { boot, saveNow, useData } from '../store/data'
-import { goBack, navigate, setPalette, useUi, type Route } from '../store/ui'
+import { goBack, goForward, navigate, setPalette, useUi, type Route } from '../store/ui'
+import { KEYS, pageKeys } from '../components/shortcuts'
 import { initUpdates } from '../store/update'
 import { initBankFiles } from '../store/bankFiles'
 import { FolderSetup } from '../features/setup/FolderSetup'
@@ -18,6 +19,7 @@ import { ImportPage } from '../features/import/ImportPage'
 import { MonthPage } from '../features/month/MonthPage'
 import { CargoPage } from '../features/cargo/CargoPage'
 import { WizardPage } from '../features/wizard/WizardPage'
+import { initWizardAutoOpen } from '../features/wizard/state'
 import { BridgeDetachHost, BridgePage } from '../features/bridge/BridgePage'
 import { StarMapPage } from '../features/starmap/StarMapPage'
 import { RadarPage } from '../features/radar/RadarPage'
@@ -50,21 +52,33 @@ import { ShortcutsHelp } from './ShortcutsHelp'
 import { initPresence } from '../store/presence'
 
 /**
- * "Back": the mouse's back button on every page; Esc on the side trips (Ustawienia, Synchronizacja). Not while a
- * dialog, the palette, a menu or a text field has the key.
+ * "Back" and "forward" (UX-12): the mouse's back / forward buttons and Alt+← / Alt+→ on every page; Esc on the side
+ * trips (Ustawienia, Synchronizacja). Not while a dialog, the palette, a menu or a text field has the key.
  */
 function useBackNavigation(): void {
   useEffect(() => {
     const busy = () => !!document.querySelector('[role="dialog"], [aria-expanded="true"]') || useUi.getState().paletteOpen
+    const typing = () => {
+      const el = document.activeElement as HTMLElement | null
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+    }
     const onMouse = (e: MouseEvent) => {
-      if (e.button !== 3 || busy()) return
+      if ((e.button !== 3 && e.button !== 4) || busy()) return
       e.preventDefault()
-      goBack()
+      if (e.button === 3) goBack()
+      else goForward()
     }
     const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        // A field keeps Alt+arrows for itself; the screens only change from the page.
+        if (e.defaultPrevented || busy() || typing() || useData.getState().phase !== 'ready') return
+        e.preventDefault()
+        if (e.key === 'ArrowLeft') goBack()
+        else goForward()
+        return
+      }
       if (e.key !== 'Escape' || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || busy()) return
-      const el = document.activeElement as HTMLElement | null
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
+      if (typing()) return
       const route = useUi.getState().route
       if (route.page === 'settings' || route.page === 'sync' || route.page === 'inbox') goBack()
     }
@@ -83,14 +97,20 @@ function useGlobalHotkeys(): void {
       if (useData.getState().phase !== 'ready') return
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return
       const k = e.key.toLowerCase()
+      // Over an open dialog the screens, the palette and the side trips do not open (UX-11): a change of screen would
+      // close the dialog with what it holds. Ctrl+K still closes the palette (it is no dialog); Ctrl+N, $ and S as before.
+      const dialog = !!document.querySelector('[role="dialog"]')
+      const digit = /^Digit(\d)$/.exec(e.code)?.[1]
+      const def = !e.shiftKey && digit ? PAGES.find((p) => p.key === digit) : undefined
+      const overDialog = dialog && (def || (k === 'y' && e.shiftKey) || (k === 'm' && e.shiftKey) || e.key === ',')
+      if (overDialog) return
       if (k === 'k') {
+        if (dialog && !useUi.getState().paletteOpen) return
         e.preventDefault()
         setPalette(!useUi.getState().paletteOpen)
         return
       }
       // Ctrl+1…0: the screens in the menu's order (by key position, so Shift / the layout do not matter).
-      const digit = /^Digit(\d)$/.exec(e.code)?.[1]
-      const def = !e.shiftKey && digit ? PAGES.find((p) => p.key === digit) : undefined
       if (def) {
         e.preventDefault()
         navigate({ page: def.page })
@@ -131,6 +151,7 @@ function NavItem({
   label,
   sub,
   keys,
+  hint,
   badge,
   testId
 }: {
@@ -139,14 +160,18 @@ function NavItem({
   icon: ReactNode
   label: string
   sub?: string
+  /** The shortcut written in the row (the screens' Ctrl+digit). */
   keys?: string
+  /** The shortcut only in the tooltip (UX-43): the bottom rows have no room for it beside their names. */
+  hint?: string
   badge?: number
   testId?: string
 }) {
+  const shortcut = keys ?? hint
   return (
     <button
       onClick={onClick}
-      title={keys ? `${label} (${keys})` : label}
+      title={shortcut ? `${label} (${shortcut})` : label}
       data-testid={testId}
       data-badge={badge || undefined}
       aria-current={active ? 'page' : undefined}
@@ -189,7 +214,7 @@ function SideMenu({ route }: { route: Route }) {
             icon={p.icon(16)}
             label={p.label}
             sub={p.sub}
-            keys={`Ctrl ${p.key}`}
+            keys={pageKeys(p.key)}
             testId={`nav-${p.page}`}
           />
         ))}
@@ -202,7 +227,7 @@ function SideMenu({ route }: { route: Route }) {
           icon={<IconInbox size={16} />}
           label="Meldunki"
           sub="do rozpatrzenia"
-          keys="Ctrl Shift M"
+          hint={KEYS.inbox}
           badge={reports}
           testId="nav-inbox"
         />
@@ -214,11 +239,11 @@ function SideMenu({ route }: { route: Route }) {
           sub="ICT Trade Journal"
           testId="nav-open-ictj"
         />
-        <NavItem active={route.page === 'sync'} onClick={() => navigate({ page: 'sync' })} icon={<IconSync size={16} />} label="Synchronizacja" keys="Ctrl Shift Y" badge={issues} testId="nav-sync" />
-        <NavItem active={route.page === 'settings'} onClick={() => navigate({ page: 'settings' })} icon={<IconGear size={16} />} label="Ustawienia" keys="Ctrl ," testId="nav-settings" />
+        <NavItem active={route.page === 'sync'} onClick={() => navigate({ page: 'sync' })} icon={<IconSync size={16} />} label="Synchronizacja" hint={KEYS.sync} badge={issues} testId="nav-sync" />
+        <NavItem active={route.page === 'settings'} onClick={() => navigate({ page: 'settings' })} icon={<IconGear size={16} />} label="Ustawienia" hint={KEYS.settings} testId="nav-settings" />
         <button
           className="mx-3 my-1.5 flex h-[22px] items-center justify-center border border-line-strong text-[11px] text-muted hover:text-fg-strong"
-          title="Skróty klawiszowe (? / F1)"
+          title={`Skróty klawiszowe (${KEYS.help})`}
           onClick={() => window.dispatchEvent(new Event('fi:shortcuts'))}
           data-testid="nav-help"
         >
@@ -284,6 +309,8 @@ export function App() {
   useGlobalHotkeys()
   useBackNavigation()
   useEffect(() => {
+    // Before the first folder is shown (UX-79): a new empty one opens the start wizard by itself.
+    initWizardAutoOpen()
     void boot()
     initIctj()
     initBankFiles()
@@ -322,7 +349,7 @@ function Window({ route, hideAmounts }: { route: Route; hideAmounts: boolean }) 
         <Banners />
         {/* isolate: z-indexes inside a page (chart layers) stay under the bar's menus */}
         <main className="isolate min-h-0 flex-1 animate-fade-in" key={route.page}>
-          <ErrorBoundary onReset={() => navigate({ page: 'bridge' })}>
+          <ErrorBoundary onReset={() => navigate({ page: 'bridge' })} onBridge={route.page === 'bridge'}>
             <Page route={route} />
           </ErrorBoundary>
         </main>

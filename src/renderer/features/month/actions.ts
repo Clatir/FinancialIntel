@@ -2,11 +2,11 @@ import { useMemo } from 'react'
 import { addMonths, warsawNow } from '@shared/calc/dates'
 import { lootDecision, monthPlanId, planFor } from '@shared/calc/plan'
 import { copyOnMonths } from '@shared/calc/yearPlan'
-import { sameContentAs } from '@shared/merge'
+import { deepEqual, sameContentAs } from '@shared/merge'
 import { monthPlanSchema, SCHEMA_VERSION, type MonthPlan } from '@shared/schema'
 import { addRecord, canWrite, deleteOrSay, monthTooNew, tooNewMonths, updateRecord, useData } from '../../store/data'
 import { useRemote } from '../../store/remote'
-import { commitActiveField, toast } from '../../store/ui'
+import { commitActiveField, toast, undoKept } from '../../store/ui'
 import { newId } from '@shared/ids'
 import { plnText } from '../../components/fields'
 import { monthGenLabel } from '../../lib/format'
@@ -73,6 +73,56 @@ export function setEnvelope(month: string, categoryId: string, limit: number | n
 export const setEnvelopes = (month: string, envelopes: Record<string, number>) => editPlan(month, (p) => ({ ...p, envelopes: { ...p.envelopes, ...envelopes } }))
 
 /**
+ * „Koperty ze średnich” (UX-7): the proposed limits set in the month's plan – only those that differ (as `copyOnward`:
+ * nothing to change, nothing written); the toast's `text` with „Cofnij” setting back each envelope's limit from before
+ * (none – no envelope). A limit changed since stays, said (`undoKept`). A plan of its own the proposal made (a copy of the
+ * plan in force – T46) goes while it is still just that, as `decideLoot`'s; changed since – it stays, with the limits from
+ * before; gone meanwhile – never made anew. false = nothing written (said by the store).
+ */
+export function setProposedEnvelopes(month: string, limits: Record<string, number>, text: string): boolean {
+  if (!canWrite()) return false
+  const plans = allPlans()
+  const before = planFor(plans, month)?.envelopes ?? {}
+  const changed = Object.keys(limits).filter((id) => before[id] !== limits[id])
+  if (!changed.length) {
+    toast(`${text.replace(/\.$/, '')} – limity bez zmian.`, 'info', 4000)
+    return true
+  }
+  const made = !plans.some((p) => p.month === month)
+  if (!setEnvelopes(month, Object.fromEntries(changed.map((id) => [id, limits[id]!])))) return false
+  // The plan as the proposal made it (its own copy of the plan in force): the whole file goes back only while it is that.
+  const wrote = made ? allPlans().find((p) => p.month === month) : undefined
+  toast(text, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      if (!canWrite()) return
+      const own = allPlans().find((p) => p.month === month)
+      // The plan it made gone meanwhile (another computer): nothing to take back – never a plan made anew (T46 would pin
+      // the month to a copy).
+      if (made && !own) return
+      const now = planFor(allPlans(), month)?.envelopes ?? {}
+      const back = changed.filter((id) => now[id] === limits[id])
+      const entry = own && useData.getState().records.months[own.id]
+      // Gone, as it came – only when nothing changed it since, to the last field (as `decideLoot`, `topUpHull`).
+      const untouched = !!wrote && !!own && own.id === wrote.id && !!entry && !entry.readOnly && sameContentAs(own, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === own.id)
+      if (untouched) deleteOrSay('months', own.id)
+      else if (back.length)
+        editPlan(month, (p) => {
+          const envelopes = { ...p.envelopes }
+          for (const id of back) {
+            const was = before[id]
+            if (was == null) delete envelopes[id]
+            else envelopes[id] = was
+          }
+          return { ...p, envelopes }
+        })
+      undoKept(back.length, changed.length - back.length, 'koperty')
+    }
+  })
+  return true
+}
+
+/**
  * A category archived (N8): its envelope leaves the plan of this month and of the months after – it would still count
  * in the plan's sums and today's energy, unseen on the form. The months gone by keep it (their debriefing). Returns the
  * envelopes taken off (month → limit), to give back with „Cofnij”.
@@ -102,10 +152,55 @@ export function restoreEnvelope(categoryId: string, taken: ReadonlyMap<string, n
   for (const [month, limit] of taken) if (planFor(plans, month)?.envelopes[categoryId] == null) setEnvelope(month, categoryId, limit)
 }
 
-/** The loot split of `month` (D18): next month's daily envelopes and goals; the rest to the shields. */
-export function decideLoot(month: string, loot: number, choice: { nextMonth: number; goals: Record<string, number>; envelopes?: Record<string, number> }): void {
+/**
+ * The loot's split in one line (UX-8): in the engine's order – the goals, the planned envelopes kept, the next month –
+ * each only when it takes something; the rest to the shields always.
+ */
+export function lootSplitText(split: { goals: number; envelopes: number; nextMonth: number; shields: number }): string {
+  const parts: Array<[number, string]> = [
+    [split.goals, 'cele'],
+    [split.envelopes, 'zapas kopert'],
+    [split.nextMonth, 'następny miesiąc']
+  ]
+  return [...parts.filter(([v]) => v > 0), [split.shields, 'osłony'] as [number, string]].map(([v, what]) => `${plnText(v)} zł → ${what}`).join(' · ')
+}
+
+const sum = (r: Record<string, number> | undefined) => Object.values(r ?? {}).reduce((a, b) => a + b, 0)
+
+/**
+ * The loot split of `month` (D18): next month's daily envelopes and goals; the rest to the shields. „Cofnij” (UX-8) gives
+ * the month's plan back as it was before – its decision from before (none, or the one changed); a plan of its own the
+ * decision made (a copy of the plan in force – T46) goes while it is still just that (as „Dopełnij kadłub”). A decision
+ * changed since stays, said (`undoKept`). `onUndo` – after a decision taken back (the screen's draft of the split back).
+ * false = nothing written (no toast).
+ */
+export function decideLoot(month: string, loot: number, choice: { nextMonth: number; goals: Record<string, number>; envelopes?: Record<string, number> }, onUndo?: () => void): boolean {
+  if (!canWrite()) return false
   const decision = lootDecision(loot, choice, new Date().toISOString())
-  editPlan(month, (p) => ({ ...p, loot: decision }))
+  const before = allPlans().find((p) => p.month === month)
+  const was = before?.loot ?? null
+  if (!editPlan(month, (p) => ({ ...p, loot: decision }))) return false
+  // The plan as the decision made it (its own copy of the plan in force): the whole file goes back only while it is that.
+  const wrote = before ? undefined : allPlans().find((p) => p.month === month)
+  const text = lootSplitText({ goals: sum(decision.goals), envelopes: sum(decision.envelopes), nextMonth: decision.nextMonth, shields: decision.shields })
+  toast(`Podział łupów zatwierdzony: ${text}.`, 'success', 8000, {
+    label: 'Cofnij',
+    run: () => {
+      if (!canWrite()) return
+      const own = allPlans().find((p) => p.month === month)
+      // The plan gone meanwhile (another computer): nothing to take back – never a plan made anew (T46 would pin the
+      // month to a copy). Its decision as before already (taken back there) – nothing either; another one – it stays.
+      if (!own) return
+      if (!deepEqual(own.loot, decision)) return deepEqual(own.loot, was) ? undefined : undoKept(0, 1)
+      const entry = useData.getState().records.months[own.id]
+      // Gone, as it came – only when nothing changed it since, to the last field (as `topUpHull`, przegląd 2 N3).
+      const untouched = !!wrote && own.id === wrote.id && !!entry && !entry.readOnly && sameContentAs(own, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === own.id)
+      if (untouched) deleteOrSay('months', own.id)
+      else if (!editPlan(month, (p) => ({ ...p, loot: was }))) return
+      onUndo?.()
+    }
+  })
+  return true
 }
 
 /**

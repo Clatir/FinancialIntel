@@ -2,13 +2,17 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
+import { addDays, addMonths, daysBetween, warsawNow } from '../../src/shared/calc/dates'
+import { SHORT_MONTHS } from '../../src/shared/calc/cargoWatch'
+import { dm, formatPln } from '../../src/shared/format'
 import { launch } from './app'
+import { openForm } from './forms'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
 const AUTO = '01KDEFCAT00000000000000300'
+const RENT = '01K9Z6B00000000000000000C1'
 
 test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, pożyczka wzięta w ładowni i dług w zasięgu, należność domu', async () => {
   const { date: today, month } = warsawNow()
@@ -27,6 +31,8 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
   })
   const { app, page, dataDir: dir, errors } = await launch({ dataDir })
   try {
+    // The smallest window (its `minWidth`; the screen of Windows CI): the radar's rows must still show their names.
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1024, 768))
     await expect(page.locator('[data-testid="briefing-item"][data-kind="house"]')).toContainText('85,00 zł')
 
     await page.keyboard.press('Control+7')
@@ -34,9 +40,21 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
     const item = (kind: string) => page.locator(`[data-testid="radar-item"][data-kind="${kind}"]`)
     await expect(item('asteroid')).toContainText('OC auta')
     await expect(item('salary').first()).toContainText('Pensja od siebie')
+    // The name's column keeps its room – the notes' column gives way (T548): no name of 0 px.
+    const names = await page.getByTestId('radar-item-open').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))
+    expect(names.length).toBeGreaterThan(0)
+    expect(Math.min(...names)).toBeGreaterThanOrEqual(80)
     await expect(page.getByTestId('radar-house')).toHaveText('85,00 zł')
+    // The columns are named, a row opens its record (Z10, UX-35, UX-74): the container in Ładownia, marked there.
+    await expect(page.getByTestId('radar-columns')).toContainText('osłony po')
+    await item('asteroid').getByTestId('radar-item-open').click()
+    await expect(page.getByTestId('page-cargo')).toBeVisible()
+    await expect(page.locator('[data-testid="cargo-row"][data-name="OC auta"]')).toHaveClass(/bg-accent-soft/)
+    await page.keyboard.press('Control+7')
+    await expect(page.getByTestId('page-radar')).toBeVisible()
 
     // A loan given: 600 zł in two monthly installments, the money out of the shields now.
+    await openForm(page, 'loan')
     await page.getByTestId('loan-name').fill('Pożyczka dla Ani')
     await page.getByTestId('loan-counterparty').fill('Anna Nowak')
     await page.getByTestId('loan-amount').fill('600')
@@ -57,6 +75,7 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
     await expect(item('repayment')).toHaveCount(1)
 
     // A loan taken: 3 000 zł, 3 300 zł to pay back in 3 installments – a container of the cargo hold, the debt in the range.
+    await openForm(page, 'loan')
     await page.getByRole('radio', { name: 'Biorę pożyczkę' }).click()
     await page.getByTestId('loan-name').fill('Laptop')
     await page.getByTestId('loan-counterparty').fill('Bank XYZ')
@@ -87,6 +106,85 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
     await page.getByRole('status').filter({ hasText: 'Pożyczka „Laptop” zamknięta' }).getByTestId('toast-action').click()
     await expect(page.getByTestId('radar-debt')).toHaveText('3 300,00 zł')
     await expect.poll(async () => (await records(dir, 'containers')).filter((c) => c.loanId).map((c) => [c.archived, c.archivedAt])).toEqual([[false, null]])
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/**
+ * Z6b (1.21.0, D106 pkt 5 – UX-30 on the Radar): the rent unpaid three months – one row of „Na radarze” at its oldest due,
+ * said as the briefing says it, the sum in its amount; a fee late once keeps its own row; the row opens the container.
+ */
+test('Radar: zaległe terminy jednego kontenera jednym wierszem, jak w odprawie; pojedynczy zaległy termin bez zmian', async () => {
+  const { date: today, month } = warsawNow()
+  const start = `${addMonths(month, -3)}-01`
+  // The rent's life ended last month: its three dues unpaid – all of earlier months, whatever day the test runs.
+  const first = `${addMonths(month, -3)}-10`
+  const last = `${addMonths(month, -1)}-10`
+  const years = first.slice(0, 4) !== last.slice(0, 4) || last.slice(0, 4) !== today.slice(0, 4)
+  const mon = (d: string) => `${SHORT_MONTHS[Number(d.slice(5, 7)) - 1]}${years ? ` ${d.slice(0, 4)}` : ''}`
+  // Netflix only last month: its one due unpaid.
+  const netflixDue = `${addMonths(month, -1)}-12`
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-radar-z6b-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start } }),
+    records: {
+      balances: [{ date: start, accountId: MBANK, kind: 'opening', amount: zl(20000) }],
+      months: [{ month: start.slice(0, 7), salary: zl(6000), envelopes: {} }],
+      containers: [
+        { id: RENT, name: 'Czynsz', amount: zl(2000), cycleMonths: 1, dueMonth: start.slice(0, 7), dueDay: 10, until: addMonths(month, -1), accountId: MBANK, counterparty: 'Spółdzielnia' },
+        { name: 'Netflix', amount: zl(60), cycleMonths: 1, dueMonth: addMonths(month, -1), dueDay: 12, from: addMonths(month, -1), until: addMonths(month, -1), accountId: MBANK, counterparty: 'NETFLIX' }
+      ]
+    }
+  })
+  const { app, page, errors } = await launch({ dataDir })
+  try {
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1024, 768))
+    // The briefing's line of the rent – the Radar says the same.
+    await expect(page.locator('[data-testid="briefing-item"][data-kind="cargo"]').filter({ hasText: 'Czynsz' })).toHaveText(
+      `Kontener niezaładowany – Czynsz: 3 terminy bez płatności (${mon(first)}–${mon(last)}), razem 6 000,00 zł.`
+    )
+    await page.keyboard.press('Control+7')
+    await expect(page.getByTestId('page-radar')).toBeVisible()
+    const rent = page.locator('[data-testid="radar-item"][data-kind="fixed"]').filter({ hasText: 'Czynsz' })
+    await expect(rent).toHaveCount(1)
+    await expect(rent).toHaveAttribute('data-overdue', 'yes')
+    await expect(rent).toHaveAttribute('data-dues', '3')
+    await expect(rent.getByTestId('radar-item-open')).toHaveText(`Czynsz: 3 terminy bez płatności (${mon(first)}–${mon(last)})`)
+    await expect(rent).toContainText(dm(first))
+    await expect(rent).toContainText('−6 000,00 zł')
+    // Said in the notes' place – no „po terminie” of one of its dues beside it.
+    await expect(rent).not.toContainText('po terminie')
+    // Netflix late once: its own row, as before – its day and the days past it.
+    const netflix = page.locator('[data-testid="radar-item"][data-kind="fixed"]').filter({ hasText: 'Netflix' })
+    await expect(netflix).toHaveCount(1)
+    await expect(netflix).not.toHaveAttribute('data-dues', /.*/)
+    await expect(netflix.getByTestId('radar-item-open')).toHaveText('Netflix')
+    await expect(netflix).toContainText(`po terminie ${daysBetween(netflixDue, today)} dni`)
+    // The smallest window (T548): the rent's row says its dues in the name's and the notes' room – its numbers' column in
+    // line with the other rows.
+    const shieldsX = async (row: typeof rent) => (await row.getByTestId('radar-shields-after').boundingBox())!.x
+    expect(await shieldsX(rent)).toBe(await shieldsX(netflix))
+    expect((await rent.getByTestId('radar-item-open').boundingBox())!.width).toBeGreaterThanOrEqual(80)
+    // A row past its day: its day in the accent, its note in the day's hint – the notes' column is hidden here (T548).
+    const dayOf = (row: typeof rent) => row.getByTestId('radar-item-day')
+    await expect(dayOf(netflix)).toHaveClass(/\btext-accent\b/)
+    await expect(dayOf(netflix)).toHaveAttribute('title', `po terminie ${daysBetween(netflixDue, today)} dni`)
+    await expect(dayOf(rent)).toHaveClass(/\btext-accent\b/)
+    await expect(dayOf(rent)).toHaveAttribute('title', `3 terminy bez płatności (${mon(first)}–${mon(last)})`)
+    const salary = page.locator('[data-testid="radar-item"][data-kind="salary"]').first()
+    await expect(dayOf(salary)).toHaveClass(/\btext-muted\b/)
+    await expect(dayOf(salary)).not.toHaveAttribute('title', /.*/)
+    // The briefing's whole line in the row's hint; the row opens the container in Ładownia – with its late dues.
+    await expect(rent.getByTestId('radar-item-open')).toHaveAttribute('title', `Czynsz: 3 terminy bez płatności (${mon(first)}–${mon(last)}), razem ${formatPln(zl(6000))} zł.\nPokaż kontener w Ładowni`)
+    await rent.getByTestId('radar-item-open').click()
+    await expect(page.getByTestId('page-cargo')).toBeVisible()
+    await expect(page.getByTestId('container-late-due')).toHaveCount(3)
+    // The calendar is the same as before: each due on its own day (only the list groups them).
+    await page.keyboard.press('Control+7')
+    await page.getByRole('radio', { name: 'kalendarz' }).click()
+    await expect(page.getByTestId('radar-calendar')).toBeVisible()
     expect(errors).toEqual([])
   } finally {
     await app.close()

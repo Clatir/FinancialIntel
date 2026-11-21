@@ -36,6 +36,11 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await page.getByTestId('banner-wizard-start').click()
     await expect(page.getByTestId('page-wizard')).toBeVisible()
 
+    // A step passed with a balance missing is marked „!”, not ticked (UX-49).
+    await page.getByTestId('wizard-next').click()
+    await expect(page.getByTestId('wizard-step-0')).toHaveAttribute('data-state', 'blocked')
+    await expect(page.getByTestId('wizard-step-0')).toContainText('!')
+    await page.getByTestId('wizard-step-0').click()
     // 1. The balance now.
     await page.getByTestId('wizard-balance').first().fill('25000')
     await page.getByTestId('wizard-balance').first().press('Enter')
@@ -43,6 +48,7 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await page.getByTestId('wizard-balance').nth(1).fill('0')
     await page.getByTestId('wizard-balance').nth(1).press('Enter')
     await page.getByTestId('wizard-next').click()
+    await expect(page.getByTestId('wizard-step-0')).toHaveAttribute('data-state', 'passed')
     // 2. The history (imported before).
     await expect(page.getByTestId('wizard-history')).toContainText('42')
     await page.getByTestId('wizard-next').click()
@@ -51,6 +57,12 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await page.getByTestId('wizard-next').click()
     // 4. The rent as a container; the envelopes from the averages without it.
     await expect(page.getByTestId('wizard-cargo')).toHaveCount(4)
+    // The proposals start unchecked; one click takes them all (UX-49), the next gives them back.
+    await expect(page.locator('[data-testid="wizard-cargo"] input:checked')).toHaveCount(0)
+    await page.getByTestId('wizard-cargo-all').click()
+    await expect(page.locator('[data-testid="wizard-cargo"] input:checked')).toHaveCount(4)
+    await page.getByTestId('wizard-cargo-all').click()
+    await expect(page.locator('[data-testid="wizard-cargo"] input:checked')).toHaveCount(0)
     await page.locator('[data-testid="wizard-cargo"][data-name="WSPOLNOTA"] input').check()
     await expect(page.locator('[data-testid="wizard-envelope"][data-name="Jedzenie"] input')).toHaveValue('780,00')
     await expect(page.locator('[data-testid="wizard-envelope"][data-name="Rozrywka i hobby"] input')).toHaveValue('150,00')
@@ -86,7 +98,9 @@ test('Kreator startu: salda, historia, pensja ze średnich, ładownia i koperty,
     await expect(page.getByTestId('wizard-effect-shields')).toHaveText('6 620,06 zł')
     await expect(page.getByTestId('wizard-effect-below-min')).toHaveCount(0)
     await page.getByTestId('wizard-next').click()
-    // 7. The ship.
+    // 7. The ship – the quiet hours are fields (UX-49).
+    await expect(page.getByTestId('wizard-quiet-from')).toBeVisible()
+    await expect(page.getByTestId('wizard-quiet-to')).toBeVisible()
     await page.getByTestId('wizard-ship').fill('Sokół')
     await page.getByTestId('wizard-finish').click()
     await expect(page.getByTestId('page-bridge')).toBeVisible()
@@ -205,6 +219,10 @@ test('Plan miesiąca (1.4.2): zmiana minionego miesiąca nie zmienia bieżącego
     // Last month's salary changed: this month keeps the plan it lived on (its own copy now).
     await page.getByTestId('month-next').click()
     await expect(page.getByTestId('month-label')).toHaveText(monthLabel(m1))
+    // No plan of its own yet: said at the top, with the month it comes from (UX-48); the strip is only for this month.
+    await expect(page.getByTestId('month-inherited')).toContainText('Ten miesiąc korzysta z planu')
+    await expect(page.getByTestId('month-inherited')).toHaveAttribute('data-from', m2)
+    await expect(page.getByTestId('month-start-strip')).toHaveCount(0)
     const salary = page.getByTestId('month-salary')
     // Focused first: the field puts its draft in on focus (a fill racing it would type after it). Escape throws the
     // typed amount away.
@@ -220,6 +238,13 @@ test('Plan miesiąca (1.4.2): zmiana minionego miesiąca nie zmienia bieżącego
     await page.getByTestId('month-next').click()
     await expect(page.getByTestId('month-label')).toHaveText(monthLabel(month))
     await expect(salary).toHaveValue('4 000,00')
+    // „Na początek miesiąca” up to the 7th – in the order of the salary day (UX-48); later days it is gone.
+    if (dayOfMonth(warsawNow().date) <= 7) {
+      await expect(page.locator('[data-testid="month-start-step"]')).toHaveCount(4)
+      expect(await page.locator('[data-testid="month-start-step"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-step')))).toEqual(['debrief', 'loot', 'plan', 'dock'])
+    } else {
+      await expect(page.getByTestId('month-start-strip')).toHaveCount(0)
+    }
     // This month's page beside last month's debriefing (AP-24, PM sp. 4): said which month it is.
     await expect(page.getByTestId('month-debrief')).toContainText(`Debriefing – ${monthLabel(m1)} (ostatni zamknięty miesiąc)`)
     await expect(page.getByTestId('month-debrief-other')).toContainText('trwa')

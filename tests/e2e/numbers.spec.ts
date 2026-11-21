@@ -136,6 +136,10 @@ test('Dokowanie (1.5.2): wypłata z inną kwotą w banku dzieli kwotę z banku �
     await page.keyboard.press('Control+1')
     const row = page.locator('[data-testid="docking-row"]').filter({ hasText: '1 000,00' })
     await row.click()
+    // The warnings are folded (UX-52); the effect on the layers is one line above them.
+    await expect(page.getByTestId('docking-near')).toBeHidden()
+    await expect(page.getByTestId('docking-effect')).toContainText('osłony')
+    await page.getByTestId('docking-notes-toggle').click()
     await expect(page.getByTestId('docking-near')).toBeVisible()
     // The split of the bank's 995 zł: 100 zł to the hull, the rest to the shields.
     const hull = page.getByTestId('docking-hull')

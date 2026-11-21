@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { importDone, launch } from './app'
 import { records } from './files'
+import { pickCategory } from './forms'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 
@@ -36,7 +37,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.getByTestId('operation-date').press('Enter')
     await page.getByTestId('operation-time').fill('18:40')
     await page.getByTestId('operation-time').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await expect.poll(async () => (await operations(dataDir)).map((t) => [t.date, t.time, t.amount])).toEqual([['2025-10-02', '18:40', -1616]])
 
     // The file.
@@ -120,8 +121,20 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await search.fill('')
     await page.screenshot({ path: join('test-results', 'screens', '06-import.png') })
 
+    // The bar at the bottom (UX-39): the button and what comes in without a category; „Pokaż” goes to the themes to decide.
+    const bar = page.getByTestId('import-bar')
+    await expect(bar.getByTestId('import-run')).toHaveText(/^Importuj \(\d+\)$/)
+    const undecided = Number(await bar.getAttribute('data-undecided'))
+    expect(undecided).toBeGreaterThan(0)
+    await expect(bar.getByTestId('import-bar-undecided')).toContainText(`bez decyzji: ${undecided}`)
+    await expect(bar.getByTestId('import-bar-warning')).toContainText('bez kategorii')
+    await bar.getByTestId('import-bar-show').click()
+    await expect(page.getByTestId('import-section-todo')).toBeVisible()
+
     await page.getByTestId('import-run').click()
     await importDone(page, userData)
+    // The rest to categorize: Operacje with the filter „bez kategorii” (UX-39).
+    await expect(page.getByTestId('import-categorize-rest')).toContainText('Skategoryzuj pozostałe')
     await expect(page.getByTestId('import-done')).toContainText('Nowe: 265')
     await expect(page.getByTestId('import-done')).toContainText('połączone z wpisami: 1')
     await expect(page.getByTestId('import-done')).toContainText('nie importowane (Twój wybór): 3')
@@ -195,7 +208,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await expect(page.getByTestId('operation-bank')).toContainText('KOLEO')
     // Categorized by the starter rule: nothing to remember until the category changes.
     await expect(page.getByTestId('operation-remember')).toHaveCount(0)
-    await page.getByTestId('operation-category').selectOption({ label: 'Auto · parking i opłaty' })
+    await pickCategory(page, 'operation-category', 'Auto · parking i opłaty')
     await page.getByTestId('operation-remember').click()
     await expect(page.getByTestId('operation-remember')).toHaveCount(0)
     await expect
@@ -206,7 +219,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.getByTestId('operations-search').fill('allegro')
     await page.getByTestId('operations-tick-all').check()
     await expect(page.getByTestId('operations-bulk-count')).toContainText('9 operacji')
-    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Osobiste · ubrania' })
+    await pickCategory(page, 'operations-bulk-category', 'Osobiste · ubrania')
     await page.getByTestId('operations-bulk-remember').selectOption('brands')
     await page.getByTestId('operations-bulk-apply').click()
     const allegro = async () => new Set((await operations(dataDir)).filter((t) => /allegro/i.test(t.counterparty as string)).map((t) => t.categoryId))
@@ -214,7 +227,8 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await expect
       .poll(async () => JSON.parse(await fs.readFile(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules.find((r: { match: string }) => r.match === 'allegro')?.categoryId)
       .toBe('01KDEFCAT00000000000000801')
-    await page.getByRole('button', { name: 'Cofnij', exact: true }).click()
+    // „Zapamiętaj” above has its own „Cofnij” (1.21.0) – the bulk change's toast by its count.
+    await page.getByTestId('toast').filter({ hasText: '9 operacji' }).getByRole('button', { name: 'Cofnij', exact: true }).click()
     await expect.poll(allegro).toEqual(new Set(['01KDEFCAT00000000000000800']))
     // „Cofnij” takes the rule back too.
     await expect

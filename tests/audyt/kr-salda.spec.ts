@@ -70,12 +70,18 @@ test('KR – salda kroku 1, operacja po dziś, domownicy na start', async () => 
       await amount(lukasz.getByTestId('wizard-member-deposit'), '300')
       await page.waitForTimeout(300)
       log.line(`Ania: ma oddać ${await ania.getByTestId('wizard-member-owed').inputValue()}, zaliczka ${await ania.getByTestId('wizard-member-deposit').inputValue()}`)
-      await amount(ania.getByTestId('wizard-member-deposit'), '50')
-      await page.waitForTimeout(300)
-      log.line(`Ania po wpisaniu zaliczki 50: ma oddać „${await ania.getByTestId('wizard-member-owed').inputValue()}”, zaliczka „${await ania.getByTestId('wizard-member-deposit').inputValue()}”`)
-      await amount(ania.getByTestId('wizard-member-owed'), '240')
-      await page.waitForTimeout(300)
-      log.line(`Ania po ponownym 240: ma oddać „${await ania.getByTestId('wizard-member-owed').inputValue()}”, zaliczka „${await ania.getByTestId('wizard-member-deposit').inputValue()}”`)
+      // From 1.21.0 (UX-6) „zaliczka” is off while „ma oddać” has an amount – a click on it would wait forever (this
+      // config has no action timeout): its state logged instead, the deposit tried only where the field is open.
+      if (await ania.getByTestId('wizard-member-deposit').isDisabled()) {
+        log.line(`Ania – zaliczka przy „ma oddać” 240: pole wyłączone („${await ania.getByTestId('wizard-member-deposit-label').getAttribute('title')}”)`)
+      } else {
+        await amount(ania.getByTestId('wizard-member-deposit'), '50')
+        await page.waitForTimeout(300)
+        log.line(`Ania po wpisaniu zaliczki 50: ma oddać „${await ania.getByTestId('wizard-member-owed').inputValue()}”, zaliczka „${await ania.getByTestId('wizard-member-deposit').inputValue()}”`)
+        await amount(ania.getByTestId('wizard-member-owed'), '240')
+        await page.waitForTimeout(300)
+        log.line(`Ania po ponownym 240: ma oddać „${await ania.getByTestId('wizard-member-owed').inputValue()}”, zaliczka „${await ania.getByTestId('wizard-member-deposit').inputValue()}”`)
+      }
       log.line(`Łukasz: ma oddać „${await lukasz.getByTestId('wizard-member-owed').inputValue()}”, zaliczka „${await lukasz.getByTestId('wizard-member-deposit').inputValue()}”`)
       await log.screen(page, 'krok 1 z domownikami', WIZ)
       await log.shot(page, 'KR.11-krok1')

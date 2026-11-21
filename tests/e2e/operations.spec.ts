@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { launch } from './app'
 import { records } from './files'
+import { pickCategory, splitOperation } from './forms'
 
 /** Every operation file of the folder, parsed. */
 const operations = (dataDir: string) => records(dataDir, 'transactions')
@@ -30,7 +31,7 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
     await typeAmount(page, 'operation-amount', '45,99')
     await page.getByTestId('operation-counterparty').fill('Biedronka')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await expect.poll(async () => (await operations(dataDir)).map((t) => [t.amount, t.counterparty, t.kind])).toEqual([[-4599, 'Biedronka', 'expense']])
     const cell = page.getByTestId('operation-amount-cell').first()
     await expect(cell).toHaveText('−45,99')
@@ -47,7 +48,7 @@ test('Operacje: dodanie, kolory kwot, podział paragonu, wyszukiwanie, historia 
 
     // A split receipt: the own part and a household member's part (D80).
     await page.locator('[data-testid="operation-row"]', { hasText: 'Biedronka' }).click()
-    await page.getByTestId('operation-split').click()
+    await splitOperation(page, 'categories')
     await expect(page.getByTestId('split-line')).toHaveCount(2)
     await typeAmount(page, page.getByTestId('split-amount').nth(0), '35,99')
     await typeAmount(page, page.getByTestId('split-amount').nth(1), '10')

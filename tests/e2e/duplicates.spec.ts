@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { importDone, launch } from './app'
 import { records } from './files'
+import { pickCategory } from './forms'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 
@@ -44,7 +45,7 @@ test('Duplikaty (D77): wpis ręczny pod inną nazwą łączony przy imporcie, wp
 
     // Typed after the import: the same Lidl purchase twice – merged on the import screen, with „Cofnij”.
     await typeExpense(page, '163,55', 'Lidl', '03.10.2025')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await expect.poll(async () => (await operations()).length).toBe(270)
     await expect(page.getByTestId('operations-duplicates')).toHaveText('Możliwe duplikaty: 1')
     await page.getByTestId('operations-duplicates').click()
