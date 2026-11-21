@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { dm, formatPln, plural } from '@shared/format'
+import { dm, plural } from '@shared/format'
+import { plnText } from '../../components/fields'
 import { TX_KIND_LABEL, type Transaction, type TxKind } from '@shared/schema'
 import { useData } from '../../store/data'
 import { Popover } from '../../components/Popover'
@@ -224,7 +225,7 @@ function TitleRulePopover({
                 type="checkbox"
                 checked={onlyCounterparty}
                 onChange={(e) => setOnlyCounterparty(e.currentTarget.checked)}
-                className="rounded border-border text-accent focus:ring-accent"
+                className="rounded border-line text-accent focus:ring-accent"
                 data-testid="title-rule-only-counterparty"
               />
               <span>Tylko dla operacji od/do: <strong className="text-fg-strong">{t.counterparty.trim()}</strong></span>
@@ -369,7 +370,7 @@ function TitleRulePopover({
                 {matching.slice(0, 5).map((m) => (
                   <div key={m.id} className="flex items-center justify-between text-[10.5px] text-dim">
                     <span>{dm(m.date)} · {m.counterparty || m.title || TX_KIND_LABEL[m.kind]}</span>
-                    <span className="num">{formatPln(m.amount)} zł</span>
+                    <span className="num">{plnText(m.amount)} zł</span>
                   </div>
                 ))}
                 {matching.length > 5 && <div className="text-[10px] text-dim italic">+ {matching.length - 5} więcej</div>}
