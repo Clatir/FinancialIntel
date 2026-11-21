@@ -300,6 +300,18 @@ function openTarget(t: NonNullable<ReturnType<typeof radarTarget>>): void {
   focusRecord(t.focus, t.id, { page: t.focus === 'container' ? 'cargo' : 'radar' })
 }
 
+/**
+ * The list's columns (UX-35) in a narrow window (the smallest – 1024 px, T548): the name keeps its room and the numbers
+ * theirs, unbroken – only the notes give way (a list narrower than 480 px – none, not a sliver of them); never a row
+ * without its name. A row of a container's overdue dues (UX-30) says them in the name's and the notes' room (LATE_NAME –
+ * the notes' width and their gap), its numbers in line.
+ */
+const NAME_MIN = 'min-w-[96px]'
+const LATE_NAME = 'flex-[1_1_158px] @max-[480px]:flex-1'
+const NOTE_COL = 'w-[150px] min-w-0 truncate text-right @max-[480px]:hidden'
+const AMOUNT_COL = 'w-[110px] min-w-[88px] whitespace-nowrap text-right'
+const SHIELDS_COL = 'w-[96px] min-w-[76px] whitespace-nowrap text-right'
+
 function Timeline({ items, today }: { items: RadarItem[]; today: string }) {
   // The phone (T311): two lines – the day, the name and the amount; the kind, the note and the shields after it under them.
   const compact = useContext(CompactContext)
@@ -307,16 +319,16 @@ function Timeline({ items, today }: { items: RadarItem[]; today: string }) {
   const cargo = useCargoStatuses()
   const rows = useMemo(() => radarRows(items, cargo, today), [items, cargo, today])
   return (
-    <div className="flex flex-col text-[12px]">
+    <div className="@container flex flex-col text-[12px]">
       {/* The columns named (UX-35): the phone's two-line rows say it in the line itself. */}
       {!compact && (
         <div className="flex items-baseline gap-2 border-b border-line px-1 pb-1 text-[10.5px] text-dim" data-testid="radar-columns">
           <span className="w-[44px] shrink-0">dzień</span>
           <span className="w-[72px] shrink-0">rodzaj</span>
-          <span className="min-w-0 flex-1">pozycja</span>
-          <span className="w-[150px] text-right">uwagi</span>
-          <span className="w-[110px] text-right">kwota</span>
-          <span className="w-[96px] text-right" title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)">
+          <span className={cx(NAME_MIN, 'flex-1')}>pozycja</span>
+          <span className={NOTE_COL}>uwagi</span>
+          <span className={AMOUNT_COL}>kwota</span>
+          <span className={SHIELDS_COL} title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)">
             osłony po
           </span>
         </div>
@@ -324,7 +336,6 @@ function Timeline({ items, today }: { items: RadarItem[]; today: string }) {
       {rows.map(({ item: i, late, span }, n) => {
         const month = i.date.slice(0, 7)
         const newMonth = n === 0 || rows[n - 1]!.item.date.slice(0, 7) !== month
-        const day = <span className="num w-[44px] shrink-0 text-[11px] text-muted">{plDate(i.date).slice(0, 5)}</span>
         const kind = <span className={cx('shrink-0 text-[11px] text-dim', !compact && 'w-[72px]')}>{KIND_LABEL[i.kind]}</span>
         const target = radarTarget(i)
         // A container's overdue dues (UX-30): the briefing's whole line in the hint – the row's own may be cut. The row
@@ -340,21 +351,27 @@ function Timeline({ items, today }: { items: RadarItem[]; today: string }) {
           </>
         )
         const name = target ? (
-          <button type="button" className="min-w-0 flex-1 truncate text-left text-fg-strong hover:underline" onClick={() => openTarget(target)} title={hint} data-testid="radar-item-open" data-target={target.focus}>
+          <button type="button" className={cx(compact ? 'min-w-0 flex-1' : cx(NAME_MIN, late ? LATE_NAME : 'flex-1'), 'truncate text-left text-fg-strong hover:underline')} onClick={() => openTarget(target)} title={hint} data-testid="radar-item-open" data-target={target.focus}>
             {label}
           </button>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-fg-strong">{label}</span>
+          <span className={cx(compact ? 'min-w-0 flex-1' : cx(NAME_MIN, late ? LATE_NAME : 'flex-1'), 'truncate text-fg-strong')}>{label}</span>
         )
         const note = late ? span : i.overdue ? i.note || 'po terminie' : i.note
+        // A row past its day: its day in the accent, its note in the day's hint – a narrow list hides the notes (T548).
+        const day = (
+          <span className={cx('num w-[44px] shrink-0 text-[11px]', i.overdue ? 'text-accent' : 'text-muted')} title={i.overdue ? note : undefined} data-testid="radar-item-day">
+            {plDate(i.date).slice(0, 5)}
+          </span>
+        )
         const amount = (
-          <span className={cx('num text-right', compact ? 'shrink-0 whitespace-nowrap' : 'w-[110px]', i.direction === 'in' ? 'text-up' : 'text-fg')}>
+          <span className={cx('num text-right', compact ? 'shrink-0 whitespace-nowrap' : AMOUNT_COL, i.direction === 'in' ? 'text-up' : 'text-fg')}>
             {i.amount == null ? '—' : `${i.direction === 'in' ? '+' : i.direction === 'out' ? '−' : ''}${zl(i.amount)}`}
           </span>
         )
         const shields = (
           <span
-            className={cx('num text-right text-[11px]', compact ? 'shrink-0 whitespace-nowrap' : 'w-[96px]', i.shieldsAfter != null && i.shieldsAfter < 0 ? 'text-accent' : 'text-dim')}
+            className={cx('num text-right text-[11px]', compact ? 'shrink-0 whitespace-nowrap' : SHIELDS_COL, i.shieldsAfter != null && i.shieldsAfter < 0 ? 'text-accent' : 'text-dim')}
             title="Osłony po tym zdarzeniu (bez wpływów, których dnia nie znamy)"
             data-testid="radar-shields-after"
           >
@@ -383,7 +400,7 @@ function Timeline({ items, today }: { items: RadarItem[]; today: string }) {
                 {day}
                 {kind}
                 {name}
-                {!late && <span className={cx('w-[150px] truncate text-right text-[11px]', i.overdue ? 'text-accent' : 'text-dim')}>{note}</span>}
+                {!late && <span className={cx(NOTE_COL, 'text-[11px]', i.overdue ? 'text-accent' : 'text-dim')} title={note || undefined}>{note}</span>}
                 {amount}
                 {shields}
               </div>
