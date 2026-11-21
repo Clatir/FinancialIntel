@@ -42,6 +42,8 @@ test('Alt+← w Ustawieniach wraca do poprzedniej zakładki, nie do ostatniej za
 test('Tab w menu „Podziel…” zamyka je i zostawia fokus na stronie – dalej i wstecz', async () => {
   const { app, page, errors } = await launch({ dataDir: seed() })
   try {
+    // The window ready first (a cold start on CI): a shortcut pressed before it is lost.
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
     await page.keyboard.press('Control+2')
     await expect(page.getByTestId('page-operations')).toBeVisible()
     await page.keyboard.press('Control+n')
