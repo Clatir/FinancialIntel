@@ -37,6 +37,9 @@ test('Opis wydatku (1.11.0, D89): notatka na liście, opis części paragonu, wy
     await expect(row.getByTestId('operation-row-account')).toHaveText('mBank')
 
     // A split receipt: each line its own description; without the operation's note the list shows the lines'.
+    // Ctrl+Enter began a new entry (UX-73) – the saved one is opened from the list.
+    await row.click()
+    await expect(page.getByTestId('operation-amount')).toHaveValue(/120/)
     await splitOperation(page, 'categories')
     await expect(page.getByTestId('split-line')).toHaveCount(2)
     await typeAmount(page, page.getByTestId('split-amount').nth(0), '100')
@@ -46,7 +49,8 @@ test('Opis wydatku (1.11.0, D89): notatka na liście, opis części paragonu, wy
     await page.getByTestId('split-note').nth(1).fill('kabel HDMI')
     await page.getByTestId('split-note').nth(1).press('Enter')
     await page.getByTestId('operation-note').fill('')
-    await page.getByTestId('operation-note').press('Control+Enter')
+    // Leaving the field saves it and keeps this entry open (Ctrl+Enter would begin a new one – UX-73).
+    await page.getByTestId('operation-note').blur()
     await expect
       .poll(async () => (await operations(dataDir)).map((t) => [t.note, (t.splits as Array<{ note: string }>).map((s) => s.note)]))
       .toEqual([['', ['zakupy na tydzień', 'kabel HDMI']]])
