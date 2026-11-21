@@ -122,6 +122,13 @@ test('ładownia pilnuje cen i opłat (1.9.0, F9, F23): nowa cena z „Zaktualizu
 
     // The ticked proposals together (Z10, UX-81): „Dodaj zaznaczone (1)”, then „Cofnij” takes the container back.
     await proposal('WODOCIĄGI').getByTestId('cargo-proposal-pick').check()
+    // The ticks are a draft (U5): another screen and back keeps them.
+    await page.keyboard.press('Control+1')
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+5')
+    await expect(page.getByTestId('page-cargo')).toBeVisible()
+    await expect(proposal('WODOCIĄGI').getByTestId('cargo-proposal-pick')).toBeChecked()
+    await expect(proposal('ENERGA')).toHaveCount(0)
     await page.getByTestId('cargo-proposals-add-picked').click()
     await expect(page.locator('[data-testid="cargo-row"][data-name="WODOCIĄGI"]')).toHaveCount(1)
     await expect(proposal('WODOCIĄGI')).toHaveCount(0)

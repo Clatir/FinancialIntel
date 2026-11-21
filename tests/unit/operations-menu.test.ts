@@ -225,6 +225,30 @@ describe('kategoria, finansujący, rodzaj, usuń', () => {
     expect(fin.some((n) => n.id.includes('share'))).toBe(false)
   })
 
+  it('kategoria: pole szukania na górze, bez wpisu – całe drzewo z podkategoriami „· nazwa”', () => {
+    const items = sub(buildMenu(input([tx()])), 'category').items
+    expect(items.map((n) => n.id)).toEqual(['category-search', `category-${FOOD}`, 'category-sub1'])
+    expect(items[0]).toMatchObject({ type: 'search', query: '', none: false })
+    expect(leaf(items, 'category-sub1').label).toBe('· Zakupy')
+  })
+
+  it('kategoria: wpisany fragment zostawia pasujące (bez polskich znaków i wielkości liter), podkategoria z główną', () => {
+    const items = sub(buildMenu(input([tx()], { categoryQuery: 'ZAKUPY' })), 'category').items
+    expect(items.map((n) => n.id)).toEqual(['category-search', 'category-sub1'])
+    expect(leaf(items, 'category-sub1').label).toBe('Jedzenie · Zakupy')
+    expect(leaf(items, 'category-sub1').command).toEqual({ type: 'category', categoryId: 'sub1', label: 'Jedzenie · Zakupy' })
+    // The main category's name holds both: the main one and its subcategory.
+    expect(sub(buildMenu(input([tx()], { categoryQuery: 'jedz' })), 'category').items.map((n) => n.id)).toEqual(['category-search', `category-${FOOD}`, 'category-sub1'])
+  })
+
+  it('kategoria: fragment bez trafienia – tylko pole z „none”, a nawigacja zostaje na polu', () => {
+    const menu = buildMenu(input([tx()], { categoryQuery: 'zzz' }))
+    const items = sub(menu, 'category').items
+    expect(items).toEqual([{ type: 'search', id: 'category-search', query: 'zzz', none: true }])
+    const opened = navigate(menu, { path: [], focus: 'category' }, 'ArrowRight').nav
+    expect(opened).toEqual({ path: ['category'], focus: 'category-search' })
+  })
+
   it('rodzaj: bez korekty; przelew – podmenu kont drugiej strony', () => {
     const kinds = sub(buildMenu(input([tx()])), 'kind').items
     expect(kinds.some((n) => n.id === 'kind-correction')).toBe(false)
@@ -319,6 +343,9 @@ describe('klawiatura', () => {
     nav = navigate(root, nav, 'ArrowDown').nav
     nav = navigate(root, nav, 'ArrowRight').nav
     expect(nav.path).toEqual(['category'])
+    // The category list opens on its search field (U5): typing at once finds a category.
+    expect(nav.focus).toBe('category-search')
+    nav = navigate(root, nav, 'ArrowDown').nav
     expect(nav.focus).toBe(`category-${FOOD}`)
     nav = navigate(root, nav, 'ArrowLeft').nav
     expect(nav.path).toEqual([])

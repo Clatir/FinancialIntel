@@ -22,13 +22,13 @@ import { useFleet, useMinute } from '../../store/fleet'
 import { navigate, toast, useUi } from '../../store/ui'
 import { showPanel } from '../../store/layout'
 import { usePanels } from '../../store/panels'
-import { plnText, signedPln } from '../../components/fields'
+import { DateField, plnText, signedPln } from '../../components/fields'
 import { foreignText, rateText } from '@shared/foreign'
 import { IconBack, IconNext, IconPlus, IconSearch, IconSidebarRight } from '../../components/icons'
 import { PaneEdge, usePaneWidth } from '../../components/layout'
 import { Popover } from '../../components/Popover'
 import { Badge, Kbd, cx } from '../../components/ui'
-import { WEEKDAY_PL, parseDateInput, periodLabel, plDate, plural } from '../../lib/format'
+import { WEEKDAY_PL, periodLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { operationRowText } from './rowText'
 import { CategoryField, useAccounts, useCategories } from './pickers'
@@ -95,46 +95,6 @@ function rowKey(e: ReactKeyboardEvent<HTMLDivElement>, id: string, getOrder: () 
 
 const TONE_CLASS = { up: 'text-up', plain: 'text-fg-strong', muted: 'text-muted', accent: 'text-accent' } as const
 
-/**
- * One end of the „od – do” period (UX-16): a day as 16.10.2026 (typed also as 16.10 or 2026-10-16), empty = open end;
- * saved on leaving the field or Enter, Esc takes the typing back – as `DateField`, which has no empty value.
- */
-function RangeDay({ value, onChange, label, testId }: { value: string | null; onChange: (day: string | null) => void; label: string; testId: string }) {
-  const [draft, setDraft] = useState<string | null>(null)
-  const cancelled = useRef(false)
-  return (
-    <input
-      className="input num"
-      spellCheck={false}
-      placeholder="dd.mm.rrrr"
-      value={draft ?? (value ? plDate(value) : '')}
-      aria-label={label}
-      data-testid={testId}
-      onFocus={(e) => e.currentTarget.select()}
-      onChange={(e) => setDraft(e.currentTarget.value)}
-      onBlur={() => {
-        if (draft != null && !cancelled.current) {
-          const text = draft.trim()
-          const day = text ? parseDateInput(text, Number(value?.slice(0, 4)) || undefined) : null
-          if (text && !day) toast('Nieprawidłowa data – zostaje poprzednia.', 'error')
-          else if (day !== value) onChange(day)
-        }
-        cancelled.current = false
-        setDraft(null)
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape' && draft != null) {
-          e.stopPropagation()
-          cancelled.current = true
-          setDraft(null)
-          e.currentTarget.blur()
-        }
-      }}
-    />
-  )
-}
-
 function PeriodBar({ period }: { period: PeriodFilter }) {
   const month = period.kind === 'month' ? period.month : warsawNow().month
   return (
@@ -173,20 +133,24 @@ function PeriodBar({ period }: { period: PeriodFilter }) {
             </button>
             <label className="mt-1 flex items-center gap-2 text-muted">
               od
-              <RangeDay
+              <DateField
+                allowEmpty
+                placeholder="dd.mm.rrrr"
                 value={period.kind === 'range' ? period.from : null}
                 onChange={(from) => setFilter({ period: { kind: 'range', from, to: period.kind === 'range' ? period.to : null } })}
-                label="Okres od"
-                testId="operations-period-from"
+                aria-label="Okres od"
+                data-testid="operations-period-from"
               />
             </label>
             <label className="flex items-center gap-2 text-muted">
               do
-              <RangeDay
+              <DateField
+                allowEmpty
+                placeholder="dd.mm.rrrr"
                 value={period.kind === 'range' ? period.to : null}
                 onChange={(to) => setFilter({ period: { kind: 'range', from: period.kind === 'range' ? period.from : null, to } })}
-                label="Okres do"
-                testId="operations-period-to"
+                aria-label="Okres do"
+                data-testid="operations-period-to"
               />
             </label>
           </div>

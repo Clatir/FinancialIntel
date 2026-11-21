@@ -92,6 +92,8 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
   const ids = useMemo(() => tickedIn(order, ticked), [order, ticked])
   const count = ids.length
   const [nav, setNav] = useState<MenuNav>(initialNav)
+  // The fragment typed in the category list's search field.
+  const [categoryQuery, setCategoryQuery] = useState('')
   const box = useRef<HTMLDivElement>(null)
 
   const input = useMemo<MenuInput>(() => {
@@ -114,6 +116,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       readOnly: folderLocked ? (lockedReason ?? 'Folder jest tylko do odczytu – zmiany nie są zapisywane.') : null,
       today: warsawNow().date,
       categories,
+      categoryQuery,
       accounts,
       members,
       tags,
@@ -121,7 +124,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       goals: fleet?.goals ?? [],
       loans
     }
-  }, [transactions, ids, cats, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason])
+  }, [transactions, ids, cats, categoryQuery, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason])
   const root = useMemo(() => buildMenu(input), [input])
 
   // A switch of the menu has written (`afterSwitch`: the operations before it and the ones it touched): of these, the ones it
@@ -241,6 +244,11 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       if (node.type === 'calendar') return <MenuCalendar key={node.id} node={node} month={month} setMonth={setMonth} onPick={(date) => void run(dayLeaf(date))} />
       if (node.type === 'shift') return <MenuShift key={node.id} node={node} onApply={(days) => void run(shiftLeaf(days))} />
       if (node.type === 'newtag') return <MenuNewTag key={node.id} node={node} records={input.records} docked={input.docked} onAdd={(tag) => void run(tagLeaf(tag))} />
+      if (node.type === 'search') {
+        // Enter takes the first category the fragment leaves (the field's own Enter – the keys of the menu skip a field).
+        const first = items.find((n): n is MenuLeaf => n.type === 'leaf')
+        return <MenuCategorySearch key={node.id} node={node} onQuery={setCategoryQuery} onFirst={first ? () => void run(first) : undefined} />
+      }
       const open = node.type === 'sub' && nav.path[depth] === node.id
       const mark = node.type === 'leaf' ? node.mark : undefined
       return (
@@ -340,7 +348,8 @@ function MenuBox({ anchor, width, testId, children }: { anchor: { at: { x: numbe
       role="menu"
       data-testid={testId}
       className="fixed z-40 flex flex-col overflow-y-auto border border-line-strong bg-raised py-1"
-      style={{ width, left: place?.left ?? 0, top: place?.top ?? 0, maxHeight: place?.maxHeight, visibility: place ? 'visible' : 'hidden' }}
+      // Not `visibility: hidden` until it is placed: a hidden element takes no focus, and the focus is asked for at once.
+      style={{ width, left: place?.left ?? 0, top: place?.top ?? 0, maxHeight: place?.maxHeight, opacity: place ? 1 : 0, pointerEvents: place ? undefined : 'none' }}
     >
       {children}
     </div>
@@ -455,6 +464,34 @@ function MenuShift({ node, onApply }: { node: Extract<MenuWidget, { type: 'shift
       <button type="button" className="btn ml-auto h-[24px]" disabled={!days} title={days ? undefined : 'Podaj liczbę dni inną niż 0.'} onClick={() => onApply(days)} data-testid="operations-menu-date-shift-apply">
         Podgląd…
       </button>
+    </div>
+  )
+}
+
+function MenuCategorySearch({ node, onQuery, onFirst }: { node: Extract<MenuWidget, { type: 'search' }>; onQuery: (query: string) => void; onFirst?: () => void }) {
+  return (
+    <div className="flex flex-col gap-1 px-2 py-1" data-menu-item={node.id}>
+      <input
+        className="input h-[24px] py-0"
+        placeholder="szukaj kategorii…"
+        value={node.query}
+        spellCheck={false}
+        data-menu-focus=""
+        onChange={(e) => onQuery(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && onFirst) {
+            e.preventDefault()
+            onFirst()
+          }
+        }}
+        aria-label="Szukaj kategorii"
+        data-testid="operations-menu-category-search"
+      />
+      {node.none && (
+        <span className="text-[11px] text-muted" data-testid="operations-menu-category-none">
+          Żadna kategoria nie zawiera „{node.query.trim()}”.
+        </span>
+      )}
     </div>
   )
 }

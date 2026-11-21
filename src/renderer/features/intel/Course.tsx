@@ -271,7 +271,7 @@ export function ManeuverPanel({ fleet, input }: { fleet: FleetState; input: Cour
             <div className="flex flex-wrap items-center gap-2">
               <input className="input h-[24px] w-[110px]" value={f.goalName} maxLength={80} placeholder="nazwa" onChange={(e) => set({ goalName: e.currentTarget.value })} aria-label="Nazwa nowego celu" data-testid="maneuver-goal-name" />
               <AmountField className="h-[24px] w-[100px]" value={f.goalTarget} allowEmpty onChange={(goalTarget) => set({ goalTarget })} aria-label="Kwota nowego celu" data-testid="maneuver-goal" />
-              <MonthField className="h-[24px] w-[76px]" value={f.goalDeadline || null} allowEmpty onChange={(goalDeadline) => set({ goalDeadline: goalDeadline ?? '' })} aria-label="Termin nowego celu" data-testid="maneuver-goal-deadline" />
+              <MonthField className="h-[24px] w-[124px]" value={f.goalDeadline || null} allowEmpty onChange={(goalDeadline) => set({ goalDeadline: goalDeadline ?? '' })} aria-label="Termin nowego celu" data-testid="maneuver-goal-deadline" />
               <Toggle checked={f.goalRate} onChange={(goalRate) => set({ goalRate })} label="rata z pensji" data-testid="maneuver-goal-rate" />
             </div>
           </Field>

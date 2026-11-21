@@ -38,3 +38,9 @@ export async function splitOperation(page: Page, how: 'categories' | 'people'): 
   await page.getByTestId('operation-split-menu').click()
   await page.getByTestId(how === 'categories' ? 'operation-split' : 'operation-share-start').click()
 }
+
+// U5: the quick entry's „Podziel…” is the same menu – „Na kategorie” (`quick-split`) and „Na osoby” (`quick-joint-start`).
+export async function splitQuick(quick: Pick<Page, 'getByTestId'>, how: 'categories' | 'people'): Promise<void> {
+  await quick.getByTestId('quick-split-menu').click()
+  await quick.getByTestId(how === 'categories' ? 'quick-split' : 'quick-joint-start').click()
+}

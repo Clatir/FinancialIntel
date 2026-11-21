@@ -1,0 +1,52 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, test } from '@playwright/test'
+import { addDays, warsawNow } from '../../src/shared/calc/dates'
+import { launch } from './app'
+import { records } from './files'
+import { seedFolder, zl } from './seed'
+
+const MBANK = '01KDEFACC00000000000000001'
+const GROCERIES = '01KDEFCAT00000000000000101'
+const FUEL = '01KDEFCAT00000000000000301'
+
+// U5: the category search in the right-click menu of Operacje, the same tree and wording as the editor's field.
+test('menu pod prawym przyciskiem: szukanie kategorii – pole na górze, filtr, Enter bierze pierwszą', async () => {
+  const { date: today, month } = warsawNow()
+  const dataDir = join(mkdtempSync(join(tmpdir(), 'fi-u5-menu-')), 'FinancialIntel')
+  seedFolder(dataDir, {
+    settings: (s) => ({ ...s, budget: { ...s.budget, start: `${month}-01` } }),
+    records: {
+      balances: [{ date: `${month}-01`, accountId: MBANK, kind: 'opening', amount: zl(20000) }],
+      transactions: [{ date: addDays(today, -1), accountId: MBANK, amount: -zl(10), categoryId: GROCERIES, counterparty: 'Sklep Alfa' }]
+    }
+  })
+  const { app, page, dataDir: dir, errors } = await launch({ dataDir })
+  try {
+    await expect(page.getByTestId('page-bridge')).toBeVisible()
+    await page.keyboard.press('Control+2')
+    await expect(page.getByTestId('page-operations')).toBeVisible()
+    await page.getByTestId('operations-period-menu').click()
+    await page.getByTestId('operations-period-all').click()
+    await page.getByTestId('operation-row').filter({ hasText: 'Sklep Alfa' }).click({ button: 'right' })
+    await page.getByTestId('operations-menu-category').click()
+    // The list opens on its search field; the whole tree is there until something is typed.
+    const search = page.getByTestId('operations-menu-category-search')
+    await expect(search).toBeFocused()
+    await expect(page.getByTestId(`operations-menu-category-${GROCERIES}`)).toBeVisible()
+    await search.fill('PALIW')
+    await expect(page.getByTestId(`operations-menu-category-${FUEL}`)).toHaveText('Auto · paliwo')
+    await expect(page.getByTestId(`operations-menu-category-${GROCERIES}`)).toHaveCount(0)
+    await search.fill('zzz')
+    await expect(page.getByTestId('operations-menu-category-none')).toBeVisible()
+    await expect(page.getByTestId(`operations-menu-category-${FUEL}`)).toHaveCount(0)
+    await search.fill('paliw')
+    await search.press('Enter')
+    await expect(page.getByTestId('operations-menu')).toHaveCount(0)
+    await expect.poll(async () => (await records(dir, 'transactions'))[0]?.categoryId).toBe(FUEL)
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

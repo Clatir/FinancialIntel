@@ -6,7 +6,7 @@ import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
-import { pickCategory, splitOperation } from './forms'
+import { pickCategory, splitOperation, splitQuick } from './forms'
 
 const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
@@ -163,7 +163,7 @@ test('Wspólne finansowanie (D83): kilka osób równo i procentami, prezent babc
     await quick.getByTestId('quick-time').fill('12:00')
     await quick.getByTestId('quick-time').press('Tab')
     await pickCategory(quick, 'quick-category', GROCERIES)
-    await quick.getByTestId('quick-joint-start').click()
+    await splitQuick(quick, 'people')
     const joint = quick.getByTestId('quick-joint')
     await joint.getByTestId('quick-joint-person').nth(1).selectOption({ label: 'Tata' })
     await joint.getByTestId('quick-joint-gift').check()

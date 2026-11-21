@@ -16,7 +16,7 @@ paths:
   autozapis jak ICTTJ), ekrany w `features/<ekran>/`.
 
 - Pola kwot, dat, godzin, miesięcy i nazw zapisują po wyjściu z pola (`AmountField`, `DateField`, `TimeField`,
-  `MonthField`, `NameInput`); teksty przez `useTextDraft` (Enter / Ctrl+Enter zatwierdza, Esc cofa). Akcja czytająca
+  `MonthField` – w spoczynku słownie „listopad 2026”, po fokusie RRRR-MM, `NameInput`; `DateField` z `allowEmpty` ma pusty koniec okresu); teksty przez `useTextDraft` (Enter / Ctrl+Enter zatwierdza, Esc cofa). Akcja czytająca
   formularz woła najpierw `commitActiveField` (`store/ui.ts`, T34).
 - Szkice formularzy w pamięci okna (`store/drafts.ts` `useDraft`); zmiana folderu je czyści. **Pułapka (AP-8):** wpisana
   wartość w `useState` komponentu ginie przy zmianie ekranu – pole, które coś wpisuje, to szkic; pytanie przed zmianą
@@ -41,7 +41,8 @@ paths:
   id), nie `<select>` (import, Ładownia i boje zostają przy `CategorySelect` – setki pól, W17); dane i szukanie –
   czyste `operations/pick.ts`. Lista otwarta ma własny Enter (wybór, nic nie zapisuje) i własny Esc (`ownsEscape`:
   `Modal` i Esc szybkiego wpisu go pomijają). Kontrahent – `CounterpartyField` (podpowiedzi z historii, maks. 8, Enter
-  tylko po strzałce). „Podziel…” – jeden przycisk z menu (`SplitMenu`).
+  tylko po strzałce). „Podziel…” – jeden przycisk z menu (`SplitMenu`), także w szybkim wpisie (`quick-split-menu`).
+  Menu PPM Operacji szuka kategorii własnym polem (`search` w `operationsMenuModel.ts`, `categoryQuery`; T554).
   Lista w portalu ustawia `aria-controls` na polu – `Popover` ignoruje klik tylko w listę swojego pola (`inOwnList`, T553).
   Słowa finansowania domownika w komunikatach – tylko `financeLabel` / `financeLabelInline` (`@shared/financeWords`,
   T552); lista finansujących (`financersText`) zostaje przy słowie pola „finansuje:”.
