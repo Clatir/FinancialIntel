@@ -69,7 +69,7 @@ export function TransferPairs({ onClose }: { onClose: () => void }) {
     >
       <div className="flex flex-col gap-2 text-[12px]">
         <p className="text-muted">
-          Każda para to jeden przelew między kontami budżetu zapisany przed 1.7.0 jako dwie operacje – po połączeniu jedna operacja obejmie oba konta. Salda i
+          Każda para to jeden przelew między kontami budżetu zapisany dawniej jako dwie operacje – po połączeniu jedna operacja obejmie oba konta. Salda i
           warstwy się nie zmienią; „Cofnij” po połączeniu.
         </p>
         <div className="flex items-center gap-2">

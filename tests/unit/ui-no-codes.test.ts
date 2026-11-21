@@ -18,16 +18,9 @@ const CODE = /\b[TDBNW]\d{1,3}\b|\bF(?!1\b|11\b|12\b)\d{1,3}\b|\bA[FP]-\d+|\(spe
  */
 const VERSION = /(?<![\w.\-/])v?\d+\.\d+\.\d+(?![\w.])/
 const isSvgLine = (line: string) => /<path\b|\bd="/.test(line)
-// Texts of screens other than Ustawienia and Synchronizacja that still name a version – each to be rewritten with its
-// screen's own step (Operacje, Meldunki, Import); the list only shrinks.
+// Files whose version-like text is not a version of this app (1.21.0: every screen's text rewritten – the list only
+// shrinks).
 const VERSION_PENDING = [
-  join('src', 'renderer', 'features', 'import', 'ImportPage.tsx'),
-  join('src', 'renderer', 'features', 'import', 'RulesAudit.tsx'),
-  join('src', 'renderer', 'features', 'inbox', 'InboxPage.tsx'),
-  join('src', 'renderer', 'features', 'inbox', 'TransferPairs.tsx'),
-  join('src', 'renderer', 'features', 'operations', 'OperationEditor.tsx'),
-  join('src', 'shared', 'calc', 'inbox.ts'),
-  join('src', 'shared', 'merge.ts'),
   // An example of the format in an error about a release tag (not a version of this app).
   join('src', 'shared', 'update.ts')
 ]

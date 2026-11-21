@@ -416,7 +416,7 @@ function MatchesPanel() {
             <span className="label">Druga strona przelewu między kontami ({sides.length})</span>
             <p className="text-[11px] text-dim">
               Przelew między kontami budżetu jest jedną operacją z obiema stronami: wiersz tego konta (ta sama kwota, ±3 dni) dołącza do przelewu, który już
-              jest – nic nie wchodzi drugi raz. Przelew zapisany przed 1.7.0 jako jedna strona staje się przy tym jedną operacją.
+              jest – nic nie wchodzi drugi raz. Przelew zapisany dawniej jako jedna strona staje się przy tym jedną operacją z obiema stronami.
             </p>
             {sides.slice(0, limits.sides).map((p) => {
               const from = p.row.amount < 0 ? plan.accountId : p.tx.counterAccountId

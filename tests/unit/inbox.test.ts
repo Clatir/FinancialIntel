@@ -130,7 +130,7 @@ describe('meldunki do rozpatrzenia (1.6.0, F6)', () => {
     expect(items.filter((i) => i.kind === 'repayments').map((i) => [i.ref, i.text, i.action])).toEqual([['p', 'Babcia: zwrot 30.00 zł z 05.10 – wskaż, co spłaca (do oddania: 1 zakup).', 'Przypisz']])
     expect(items.filter((i) => i.kind === 'firewall').map((i) => [i.ref, i.text, i.action])).toEqual([['F1', 'Dopłata do XTB 200.00 zł z 16.10 wbrew rozkazowi firewall (osłony albo kadłub niepełne) – potwierdź, że to Twoja decyzja.', 'Potwierdź']])
     expect(text('transfers')).toEqual([
-      '1 przelew między kontami zapisany jako dwie osobne operacje (sprzed 1.7.0) – połączenie w jedną operację nie zmienia żadnego salda.',
+      '1 przelew między kontami zapisany dawniej jako dwie osobne operacje – połączenie w jedną operację nie zmienia żadnego salda.',
       'mBank → Portfel XTB 05.10, 500.00 zł: strona konta Portfel XTB zapisana też osobno (06.10) – liczy się dwa razy.',
       'mBank → Portfel XTB 07.10, 200.00 zł: zapisany tylko na koncie mBank – saldo konta Portfel XTB go nie ma.'
     ])

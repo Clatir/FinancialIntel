@@ -164,7 +164,7 @@ function RuleDetails({ rule, audit, label }: { rule: ImportRule; audit: RuleAudi
         <>
           {/* AP-4 (AF-8): „reszta jako zaliczka” of 1.15.3–1.15.5 learned such rules – the debt never went down. */}
           <span className="text-accent" data-testid="import-rule-review-note">
-            Zaliczka na przyszłość: wpłaty tej osoby idą w całości do depozytu i nie spłacają tego, co ma oddać. Do wersji 1.15.5 tak zapisywał się też wybór „reszta jako zaliczka”. Spłata – wpłata najpierw
+            Zaliczka na przyszłość: wpłaty tej osoby idą w całości do depozytu i nie spłacają tego, co ma oddać. Dawniej tak zapisywał się też wybór „reszta jako zaliczka”. Spłata – wpłata najpierw
             wyrówna dług, a reszta pójdzie jak w ustawieniu osoby (Ustawienia → Domownicy); zapisane już wpłaty zgłaszają Meldunki.
           </span>
           <span className="flex gap-2">

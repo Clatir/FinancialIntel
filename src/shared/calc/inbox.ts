@@ -278,7 +278,7 @@ export function inboxItems(o: InboxInput): InboxItem[] {
     out.push({
       kind: 'transfers',
       key: 'transfers:pairs',
-      text: `${pairs} ${plural(pairs, 'przelew', 'przelewy', 'przelewów')} między kontami ${pairs === 1 ? 'zapisany' : 'zapisane'} jako dwie osobne operacje (sprzed 1.7.0) – połączenie w jedną operację nie zmienia żadnego salda.`,
+      text: `${pairs} ${plural(pairs, 'przelew', 'przelewy', 'przelewów')} między kontami ${pairs === 1 ? 'zapisany' : 'zapisane'} dawniej jako dwie osobne operacje – połączenie w jedną operację nie zmienia żadnego salda.`,
       // The list of the pairs first (the S review): a pair by the amount and the day only is checked.
       action: 'Połącz…'
     })

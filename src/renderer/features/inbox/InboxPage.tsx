@@ -28,13 +28,13 @@ const HINT: Partial<Record<InboxKind, string>> = {
   corrections:
     'To samo saldo potwierdzone na dwóch komputerach przed synchronizacją daje dwie korekty o tej samej kwocie. Zgłaszamy tylko pary z dwóch różnych komputerów – dwie korekty z jednego komputera to dwie Twoje decyzje.',
   returned:
-    'Operacje z banku, które usunąłeś, a import pliku w drugim formacie (lista operacji ↔ historia rachunku) wpisał je znowu jako nowe (przed wersją 1.15.5). „Usuń” usuwa je znowu (z „Cofnij”), „zostaw” – zostają i nie będą zgłaszane.',
+    'Operacje z banku, które usunąłeś, a import pliku w drugim formacie (lista operacji ↔ historia rachunku) wpisał je znowu jako nowe (we wcześniejszych wersjach aplikacji). „Usuń” usuwa je znowu (z „Cofnij”), „zostaw” – zostają i nie będą zgłaszane.',
   transfers:
-    'Od 1.7.0 przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane wcześniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
+    'Przelew między kontami budżetu to jedna operacja z obiema stronami. Przelewy zapisane dawniej jako osobne strony łączysz tutaj (z „Cofnij”); brakującą stronę zgłaszamy tylko po ostatnim potwierdzonym saldzie konta.',
   firewall:
     'Dopłata do konta tradingowego, gdy osłony albo kadłub nie są pełne, łamie rozkaz firewall – czerwony alarm i poważne naruszenie w grze. „Potwierdź” mówi, że to Twoja decyzja (z „Cofnij”); naruszenie zostaje.',
   advances:
-    'Wpłaty zapisane jako zaliczka na przyszłość idą w całości do depozytu i nie spłacają długu – do wersji 1.15.5 tak zapisywał się też wybór „reszta jako zaliczka” w imporcie. „Spłać” – najpierw wyrównają to, co osoba ma oddać, reszta zostanie zaliczką (z „Cofnij”); „zostaw” – zostają zaliczką i nie będą zgłaszane.',
+    'Wpłaty zapisane jako zaliczka na przyszłość idą w całości do depozytu i nie spłacają długu – dawniej tak zapisywał się też wybór „reszta jako zaliczka” w imporcie. „Spłać” – najpierw wyrównają to, co osoba ma oddać, reszta zostanie zaliczką (z „Cofnij”); „zostaw” – zostają zaliczką i nie będą zgłaszane.',
   refunds: 'Zakupy finansowane pieniędzmi osłon, których domownik jeszcze nie oddał (Ustawienia → Domownicy).',
   balances: 'Salda potwierdzone z bankiem ponad 30 dni temu – potwierdzenie pokazuje, czy operacje zgadzają się z kontem.'
 }

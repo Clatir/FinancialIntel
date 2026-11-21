@@ -957,7 +957,7 @@ function TransferSides({ t, readOnly, guarded }: { t: Transaction; readOnly: boo
   const other = issue ? (issue.keep.id === t.id ? issue.drop : issue.keep) : null
   return (
     <div className="flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="operation-transfer-legacy">
-      <span className="text-accent">Zapisany przed 1.7.0 jako jedna strona – liczy się tylko na koncie {name(t.accountId)}.</span>
+      <span className="text-accent">Zapisany dawniej jako jedna strona – liczy się tylko na koncie {name(t.accountId)}.</span>
       {!readOnly &&
         (other ? (
           <button
