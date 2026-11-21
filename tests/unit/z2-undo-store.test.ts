@@ -260,6 +260,49 @@ describe('„Koperty ze średnich” w minionym miesiącu – „Cofnij” z pla
   })
 })
 
+// U1 – review (T550): the plan a decision or a top-up made, its deletion refused by the folder – said, and the decision or
+// the top-up taken back in the plan that stays; the screen's draft of the split back only once the decision is gone.
+describe('podział łupów i dopełnienie kadłuba – odmowa usunięcia założonego planu (U1, T550)', () => {
+  const REFUSED = 'Plik jest używany przez inny program.'
+  const refusedSaid = () => toasts().some((t) => t.kind === 'error' && t.text.includes(REFUSED))
+
+  it('podział łupów: folder odmówił usunięcia – decyzja zdjęta w planie, który został; szkic wraca dopiero wtedy', async () => {
+    open([plan(EARLIER, { envelopes: { [FOOD]: zl(500) } })])
+    const back = vi.fn()
+    month.decideLoot(BEFORE, zl(1000), { nextMonth: zl(200), goals: {} }, back)
+    await data.writeNow('months', monthPlanId(BEFORE))
+    api.deleteRecord.mockRejectedValueOnce(new Error(REFUSED))
+    undo('Podział łupów')
+    // Before: the screen's draft back at once – the decision not gone yet (and, refused, never).
+    expect(back).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(refusedSaid()).toBe(true))
+    await vi.waitFor(() => expect(own(BEFORE)?.loot).toBeNull())
+    expect(back).toHaveBeenCalledTimes(1)
+  })
+
+  it('podział łupów: usunięcie się udało – szkic wraca po nim', async () => {
+    open([plan(EARLIER)])
+    const back = vi.fn()
+    month.decideLoot(BEFORE, zl(1000), { nextMonth: zl(200), goals: {} }, back)
+    await data.writeNow('months', monthPlanId(BEFORE))
+    undo('Podział łupów')
+    await vi.waitFor(() => expect(back).toHaveBeenCalledTimes(1))
+    expect(own(BEFORE)).toBeUndefined()
+  })
+
+  it('dopełnienie kadłuba: folder odmówił usunięcia – wpis dopełnienia zdjęty w planie, który został', async () => {
+    open([plan(EARLIER)])
+    expect(month.topUpHull(zl(150))).toBe(true)
+    expect(own(NOW.month)!.hullTopUps).toHaveLength(1)
+    await data.writeNow('months', monthPlanId(NOW.month))
+    api.deleteRecord.mockRejectedValueOnce(new Error(REFUSED))
+    undo('Kadłub dopełniony')
+    await vi.waitFor(() => expect(refusedSaid()).toBe(true))
+    // Before: the plan came back with the top-up – the shields' money still moved.
+    await vi.waitFor(() => expect(own(NOW.month)?.hullTopUps ?? []).toEqual([]))
+  })
+})
+
 describe('UX-8: podział łupów – linia podsumowania i „Cofnij” przywracające plan miesiąca sprzed decyzji', () => {
   it('linia podsumowania w kolejności silnika (cele, zapas kopert, następny miesiąc), reszta do osłon zawsze', () => {
     expect(month.lootSplitText({ goals: zl(300), envelopes: zl(50), nextMonth: zl(200), shields: zl(450) })).toBe('300,00 zł → cele · 50,00 zł → zapas kopert · 200,00 zł → następny miesiąc · 450,00 zł → osłony')

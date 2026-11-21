@@ -589,6 +589,128 @@ describe('„Cofnij” samej reguły tytułu – też edycja otwartej operacji (
   })
 })
 
+// U1 – review (T550): the edit with the preview, the edit waiting at its question (F12), a draft written by the edit, the
+// edit only with the rule taken back, „Cofnij” asking as an edit does; the amount of a brand's rule through `plnText`.
+describe('„Cofnij” reguły tytułu – poprawki przeglądu U1 (T550)', () => {
+  const FOOD = defaultCategoryId(1)
+  const income = { keyword: 'ubezpieczyciel', kind: 'income', direction: 'in' } as const
+  const editor = (id: string, p: Partial<Transaction>, draft = false) => () => {
+    updateOperation(id, (r) => ({ ...r, ...p }), draft)
+    return p
+  }
+  const toIncome = { kind: 'income', amount: 1000, categoryId: null, memberId: null, refundable: false, inflowKind: undefined, advance: false, counterAccountId: null } as const
+  const asDraft = (id: string) => data.useData.setState((s) => ({ drafts: { ...s.drafts, [id]: true as const } }))
+  const AT = '2026-10-01T10:00:00.000Z'
+  /** A balance confirmed on 10.10 – an edit of an operation of 5.10 changing its amount asks first (F12). */
+  function confirmedBalance(): void {
+    const balance = (over: Record<string, unknown>) => balanceSchema.parse({ schemaVersion: SCHEMA_VERSION, id: nextId(), createdAt: AT, updatedAt: AT, accountId: MBANK_ACCOUNT_ID, ...over })
+    const list = [balance({ date: '2026-10-01', kind: 'opening', amount: 100000 }), balance({ date: '2026-10-10', kind: 'confirmation', amount: 99000 })]
+    data.useData.setState((s) => ({ records: { ...s.records, balances: Object.fromEntries(list.map((b) => [b.id, { record: b, relPath: `balances/${b.id}.json`, readOnly: false }])) } }))
+  }
+  const guard = async () => (await import('../../src/renderer/store/guard')).useGuard
+  beforeEach(async () => (await import('../../src/renderer/store/guard')).clearGuards())
+
+  it('z podglądem, otwarta to szkic: „Cofnij” zmiany zbiorczej cofa historię, regułę i edycję szkicu', async () => {
+    const past = tx({ date: '2024-03-01', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const draft = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([past, draft])
+    asDraft(draft.id)
+    expect(applyTitleRule({ ...income, updateHistory: true }, draft, editor(draft.id, toIncome, true))).toMatchObject({ ok: true, preview: true })
+    useBulkPreview.getState().preview!.apply!()
+    await settle()
+    expect([rec(past.id).kind, rec(draft.id).kind]).toEqual(['income', 'income'])
+    ui.useUi.getState().toasts.find((t) => t.text.startsWith('Zastosowano regułę'))!.action!.run()
+    expect(rec(past.id)).toMatchObject({ kind: 'expense', amount: 1000 })
+    expect(rulesNow()).toEqual([])
+    // Before: the draft's edit stayed – the rule and the history went, the open one kept what the rule had set.
+    expect(rec(draft.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+  })
+
+  it('edycja czeka na pytanie przy potwierdzonym saldzie: „Cofnij” reguły zdejmuje też to pytanie', async () => {
+    const a = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([a])
+    confirmedBalance()
+    const asks = await guard()
+    applyTitleRule(income, a, editor(a.id, toIncome))
+    expect(asks.getState().asks.map((x) => x.id)).toEqual([a.id])
+    expect(rec(a.id)).toEqual(a)
+    lastToast()!.action!.run()
+    expect(rulesNow()).toEqual([])
+    // Before: the question stayed – „Zmień mimo to” would write the rule's edit with the rule gone, beyond any „Cofnij”.
+    expect(asks.getState().asks).toEqual([])
+    expect(rec(a.id)).toEqual(a)
+  })
+
+  it('pytanie innej, późniejszej edycji tej operacji zostaje', async () => {
+    const a = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([a])
+    confirmedBalance()
+    const asks = await guard()
+    applyTitleRule(income, a, editor(a.id, toIncome))
+    // Typed again in the editor: the question of the rule's edit replaced by the newest one (`askGuard`).
+    updateOperation(a.id, (r) => ({ ...r, amount: -3000 }), false)
+    const mine = asks.getState().asks.map((x) => x.seq)
+    lastToast()!.action!.run()
+    expect(asks.getState().asks.map((x) => x.seq)).toEqual(mine)
+  })
+
+  it('„Cofnij” edycji po „Zmień mimo to” pyta jak edycja (potwierdzone saldo) – zapis dopiero po odpowiedzi', async () => {
+    const a = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([a])
+    confirmedBalance()
+    const asks = await guard()
+    const { answerGuard } = await import('../../src/renderer/store/guard')
+    applyTitleRule(income, a, editor(a.id, toIncome))
+    answerGuard(asks.getState().asks[0]!.seq, true)
+    expect(rec(a.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    lastToast()!.action!.run()
+    // Before: written at once, past the question of the confirmed balance.
+    expect(rec(a.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    expect(asks.getState().asks.map((x) => x.id)).toEqual([a.id])
+    answerGuard(asks.getState().asks[0]!.seq, true)
+    expect(rec(a.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+  })
+
+  it('szkic zapisany przez edycję reguły: „Cofnij” oddaje pola i mówi, że wpis zostaje zapisany', () => {
+    const draft = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([draft])
+    asDraft(draft.id)
+    applyTitleRule(income, draft, editor(draft.id, toIncome, true))
+    expect(data.useData.getState().drafts[draft.id]).toBeUndefined()
+    lastToast()!.action!.run()
+    expect(rec(draft.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+    expect(lastToast()!.text).toBe('Nowy wpis zostaje zapisany, z polami sprzed reguły.')
+  })
+
+  it('reguła zmieniona od tego czasu zostaje – edycja otwartej operacji też (nie pół cofnięcia)', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const undo = lastToast()!.action!.run
+    data.updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: f.settings.import.rules.map((r) => ({ ...r, household: true })) } } }))
+    undo()
+    expect(rulesNow()).toHaveLength(1)
+    // Before: the operation's fields went back while the rule stayed.
+    expect(rec(current.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    expect(lastToast()!.text).toBe('Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.')
+  })
+
+  it('reguła marki do kwoty: kwota w toaście jak na ekranach – z groszami, ukryta przy ukrytych kwotach', async () => {
+    const { setAmountsHidden } = await import('../../src/renderer/components/fields')
+    load([])
+    addAmountRule({ brand: 'orlen', label: 'Orlen', maxAmount: 4050, categoryId: FOOD })
+    // Before: „do 40,5 zł” – and the amount shown with the amounts hidden.
+    expect(lastToast()!.text).toBe('Nowa reguła: Orlen do 40,50 zł.')
+    setAmountsHidden(true)
+    try {
+      addAmountRule({ brand: 'shell', label: 'Shell', maxAmount: 3000, categoryId: FOOD })
+      expect(lastToast()!.text).toBe('Nowa reguła: Shell do ••• zł.')
+    } finally {
+      setAmountsHidden(false)
+    }
+  })
+})
+
 describe('słowo początkowe reguły – najdłuższy wyraz tytułu (T535)', () => {
   it('najdłuższy wyraz z co najmniej 3 literami, z pominięciem słów ogólnych banku', () => {
     expect(titleKeyword('Zwrot od ubezpieczyciela za leki')).toBe('ubezpieczyciela')

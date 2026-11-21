@@ -487,7 +487,7 @@ export function addAmountRule(input: { brand: string; label: string; maxAmount: 
   })
   setRules((rules) => [...rules, rule])
   // At least `UNDO_MIN_MS` – the action's own time (T550).
-  toast(`Nowa reguła: ${input.label} do ${(input.maxAmount / 100).toLocaleString('pl-PL')} zł.`, 'success', undefined, {
+  toast(`Nowa reguła: ${input.label} do ${plnText(input.maxAmount)} zł.`, 'success', undefined, {
     label: 'Cofnij',
     run: () => {
       // Deleted only while as it was added (an edit since stays – review 3 of N4).

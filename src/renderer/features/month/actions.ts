@@ -229,12 +229,16 @@ export function decideLoot(month: string, loot: number, choice: { nextMonth: num
       // month to a copy). Its decision as before already (taken back there) – nothing either; another one – it stays.
       if (!own) return
       if (!deepEqual(own.loot, decision)) return deepEqual(own.loot, was) ? undefined : undoKept(0, 1)
-      const entry = useData.getState().records.months[own.id]
-      // Gone, as it came – only when nothing changed it since, to the last field (as `topUpHull`, przegląd 2 N3).
-      const untouched = !!wrote && own.id === wrote.id && !!entry && !entry.readOnly && sameContentAs(own, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === own.id)
-      if (untouched) deleteOrSay('months', own.id)
-      else if (!editPlan(month, (p) => ({ ...p, loot: was }))) return
-      onUndo?.()
+      const back = () => editPlan(month, (p) => ({ ...p, loot: was }))
+      // Gone, as it came – only when nothing changed it since, to the last field (as `topUpHull`, przegląd 2 N3). Its
+      // deletion refused (said by `deleteOrSay`): the decision taken back in the plan that stays (T550). The screen's draft
+      // back only once the decision is gone.
+      const untouched = asWritten(month, wrote)
+      if (untouched)
+        return void deleteOrSay('months', untouched.id).then((gone) => {
+          if (gone || back()) onUndo?.()
+        })
+      if (back()) onUndo?.()
     }
   })
   return true
@@ -277,13 +281,17 @@ export function topUpHull(amount: number): boolean {
       // Nothing to take back – the month's plan gone meanwhile (another computer, the month back on the plan in force) or
       // the entry no longer in it: never a plan made anew (przegląd 3 N3 – T46 would pin the month to a copy).
       if (!own || !(own.hullTopUps ?? []).some((u) => u.id === id)) return
-      const entry = useData.getState().records.months[own.id]
+      const back = () => editPlan(month, (p) => ({ ...p, hullTopUps: (p.hullTopUps ?? []).filter((u) => u.id !== id) }))
       // Gone, as it came – only when nothing changed it since, to the last field (przegląd 2 N3): one from another
       // computer or a newer version (kept by `looseObject`), an edit here, a change of another computer waiting for a
-      // decision. Anything else – the entry only, the file stays.
-      const untouched = !!wrote && own.id === wrote.id && !!entry && !entry.readOnly && sameContentAs(own, wrote) && !useRemote.getState().pending.some((p) => p.collection === 'months' && p.id === own.id)
-      if (untouched) deleteOrSay('months', own.id)
-      else editPlan(month, (p) => ({ ...p, hullTopUps: (p.hullTopUps ?? []).filter((u) => u.id !== id) }))
+      // decision. Anything else – the entry only, the file stays; so too when the folder refused the deletion (said by
+      // `deleteOrSay`, T550).
+      const untouched = asWritten(month, wrote)
+      if (untouched)
+        void deleteOrSay('months', untouched.id).then((gone) => {
+          if (!gone) back()
+        })
+      else back()
     }
   })
   return true
