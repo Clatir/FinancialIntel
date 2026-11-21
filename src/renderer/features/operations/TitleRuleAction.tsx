@@ -129,47 +129,37 @@ function TitleRulePopover({
   const handleApply = (close: () => void) => {
     const input = inputOf()
 
-    // The open operation as the rule decides – the editor's own edit (without the history, or a draft – T535).
-    const patchCurrent = () => {
-      if (activeKind === 'expense') {
-        const isRefund = selectedType === 'refund'
-        patch({
-          kind: 'expense',
-          amount: isRefund ? Math.abs(t.amount) : -Math.abs(t.amount),
-          categoryId,
-          refundable,
-          memberId: refundable ? memberId : null,
-          gift: refundable && gift ? true : undefined,
-          inflowKind: undefined,
-          counterAccountId: null
-        })
-      } else if (activeKind === 'income') {
-        patch({
-          kind: 'income',
-          amount: Math.abs(t.amount),
-          categoryId: null,
-          memberId,
-          refundable: false,
-          inflowKind: memberId ? inflowKind : undefined,
-          advance: memberId ? inflowKind === 'advance' : false,
-          counterAccountId: null
-        })
-      } else if (activeKind === 'transfer') {
-        patch({
-          kind: 'transfer',
-          counterAccountId,
-          categoryId: null,
-          refundable: false,
-          memberId: null
-        })
-      } else {
-        patch({
-          kind: activeKind,
-          categoryId: null,
-          refundable: false,
-          memberId: null
-        })
-      }
+    // The open operation as the rule decides – the editor's own edit (without the history, or a draft – T535); the fields
+    // it sets returned – the rule's „Cofnij” takes them back too (T550).
+    const patchCurrent = (): Partial<Transaction> => {
+      const p: Partial<Transaction> =
+        activeKind === 'expense'
+          ? {
+              kind: 'expense',
+              amount: selectedType === 'refund' ? Math.abs(t.amount) : -Math.abs(t.amount),
+              categoryId,
+              refundable,
+              memberId: refundable ? memberId : null,
+              gift: refundable && gift ? true : undefined,
+              inflowKind: undefined,
+              counterAccountId: null
+            }
+          : activeKind === 'income'
+            ? {
+                kind: 'income',
+                amount: Math.abs(t.amount),
+                categoryId: null,
+                memberId,
+                refundable: false,
+                inflowKind: memberId ? inflowKind : undefined,
+                advance: memberId ? inflowKind === 'advance' : false,
+                counterAccountId: null
+              }
+            : activeKind === 'transfer'
+              ? { kind: 'transfer', counterAccountId, categoryId: null, refundable: false, memberId: null }
+              : { kind: activeKind, categoryId: null, refundable: false, memberId: null }
+      patch(p)
+      return p
     }
 
     const res = applyTitleRule(input, t, patchCurrent)

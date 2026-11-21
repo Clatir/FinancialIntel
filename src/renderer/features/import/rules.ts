@@ -410,7 +410,8 @@ export function saveConditionsRule(id: string | null, d: ConditionsDraft): strin
     toast(`Reguła „${label}” zmieniona.`, 'success', 6000, { label: 'Cofnij', run: () => ruleBack(was, rule) })
   } else {
     setRules((list) => [...list, rule])
-    toast(`Nowa reguła: „${label}”.`, 'success', 6000, {
+    // At least `UNDO_MIN_MS` – the action's own time (T550).
+    toast(`Nowa reguła: „${label}”.`, 'success', undefined, {
       label: 'Cofnij',
       run: () => {
         // Deleted only while as it was added (an edit since stays – T418).
@@ -484,7 +485,8 @@ export function addAmountRule(input: { brand: string; label: string; maxAmount: 
     updatedAt: new Date().toISOString()
   })
   setRules((rules) => [...rules, rule])
-  toast(`Nowa reguła: ${input.label} do ${(input.maxAmount / 100).toLocaleString('pl-PL')} zł.`, 'success', 6000, {
+  // At least `UNDO_MIN_MS` – the action's own time (T550).
+  toast(`Nowa reguła: ${input.label} do ${(input.maxAmount / 100).toLocaleString('pl-PL')} zł.`, 'success', undefined, {
     label: 'Cofnij',
     run: () => {
       // Deleted only while as it was added (an edit since stays – review 3 of N4).

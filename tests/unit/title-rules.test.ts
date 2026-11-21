@@ -22,7 +22,8 @@ const data = await import('../../src/renderer/store/data')
 const ui = await import('../../src/renderer/store/ui')
 const { matchesTitle, findMatchingByTitle, applyTargetToTransaction, applyTitleRule, titleKeyword, titleRulePlan } = await import('../../src/renderer/features/operations/titleRules')
 const { useBulkPreview, closeBulkPreview } = await import('../../src/renderer/features/operations/bulkPreview')
-const { addKeywordRule, rememberCategory } = await import('../../src/renderer/features/import/rules')
+const { addKeywordRule, rememberCategory, addAmountRule, saveConditionsRule } = await import('../../src/renderer/features/import/rules')
+const { updateOperation } = await import('../../src/renderer/features/operations/state')
 const { confirmedChanges } = await import('@shared/calc/balances')
 const { balanceSchema } = await import('@shared/schema')
 
@@ -488,6 +489,103 @@ describe('reguła tytułu – poprawki po przeglądzie 1.21.0 (T549)', () => {
     again()
     expect(rulesNow()).toHaveLength(2)
     expect(lastToast()!.text).toBe('Nic nie cofnięto – zmieniło się od tego czasu i zostaje, jak jest.')
+  })
+})
+
+// U1 (1.21.1, T550): „Cofnij” of the rule alone takes back the open operation's own edit in the editor too (while it is
+// as the edit left it – T418) and stays at least `UNDO_MIN_MS` (the toast's action, no fixed time).
+describe('„Cofnij” samej reguły tytułu – też edycja otwartej operacji (U1, T550)', () => {
+  const FOOD = defaultCategoryId(1)
+  const income = { keyword: 'ubezpieczyciel', kind: 'income', direction: 'in' } as const
+  /** The editor's `patch` as `TitleRuleAction` runs it (`updateOperation`), returning the fields it set. */
+  const editor = (id: string, p: Partial<Transaction>, draft = false) => () => {
+    updateOperation(id, (r) => ({ ...r, ...p }), draft)
+    return p
+  }
+  const toIncome = { kind: 'income', amount: 1000, categoryId: null, memberId: null, refundable: false, inflowKind: undefined, advance: false, counterAccountId: null } as const
+
+  it('„Cofnij” zdejmuje regułę i oddaje otwartej operacji pola sprzed reguły', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([current])
+    expect(applyTitleRule(income, current, editor(current.id, toIncome))).toMatchObject({ ok: true })
+    expect(rec(current.id)).toMatchObject({ kind: 'income', amount: 1000, categoryId: null })
+    lastToast()!.action!.run()
+    expect(rulesNow()).toEqual([])
+    // Before: the rule went, the operation stayed an income – half of what the toast's „Cofnij” took.
+    expect(rec(current.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+  })
+
+  it('z historią, gdy w niej nic do zmiany, a otwarta to szkic: „Cofnij” cofa też jego edycję', () => {
+    const already = tx({ kind: 'income', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const draft = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([already, draft])
+    data.useData.setState((s) => ({ drafts: { ...s.drafts, [draft.id]: true as const } }))
+    expect(applyTitleRule({ ...income, updateHistory: true }, draft, editor(draft.id, toIncome, true))).toMatchObject({ ok: true, count: 0 })
+    expect(rec(draft.id)).toMatchObject({ kind: 'income', amount: 1000 })
+    lastToast()!.action!.run()
+    expect(rec(draft.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+    expect(rulesNow()).toEqual([])
+  })
+
+  it('pole edycji zmienione od tego czasu: operacja zostaje, jak jest – ze słowem; reguła cofnięta', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD, note: 'stara' })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const undo = lastToast()!.action!.run
+    data.updateRecord('transactions', current.id, (r) => ({ ...r, amount: 2500 }))
+    undo()
+    expect(rulesNow()).toEqual([])
+    expect(rec(current.id)).toMatchObject({ kind: 'income', amount: 2500 })
+    expect(lastToast()!.text).toBe('Otwarta operacja zmieniła się od tego czasu – zostaje, jak jest.')
+  })
+
+  it('zmiana innego pola od tego czasu (notatka) zostaje, pola reguły wracają', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const undo = lastToast()!.action!.run
+    data.updateRecord('transactions', current.id, (r) => ({ ...r, note: 'dopisana' }))
+    undo()
+    expect(rec(current.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD, note: 'dopisana' })
+  })
+
+  it('edycja, która nic nie zmieniła (operacja już taka): „Cofnij” nie zapisuje operacji', () => {
+    const current = tx({ kind: 'income', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    load([current])
+    applyTitleRule(income, current, editor(current.id, toIncome))
+    const after = rec(current.id)
+    lastToast()!.action!.run()
+    expect(rec(current.id)).toBe(after)
+    expect(rulesNow()).toEqual([])
+  })
+
+  it('toast z „Cofnij” trwa co najmniej UNDO_MIN_MS – reguła tytułu, reguła z warunkami, reguła marki do kwoty', () => {
+    const current = tx({ title: 'Zwrot od ubezpieczyciela' })
+    load([current])
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      applyTitleRule(income, current, vi.fn())
+      expect(
+        saveConditionsRule(null, {
+          label: '',
+          direction: 'out',
+          conditions: [{ field: 'counterparty', value: 'Orlen' }, { field: 'amount', min: null, max: 4000 }],
+          combine: 'all',
+          choice: { kind: 'expense', categoryId: FOOD, refundable: false, household: false, memberId: null, advance: false, counterAccountId: null },
+          manual: false,
+          tags: []
+        })
+      ).toBeNull()
+      addAmountRule({ brand: 'orlen', label: 'Orlen', maxAmount: 4000, categoryId: FOOD })
+      const texts = () => ui.useUi.getState().toasts.filter((t) => t.action?.label === 'Cofnij').map((t) => t.text)
+      expect(texts()).toHaveLength(3)
+      vi.advanceTimersByTime(ui.UNDO_MIN_MS - 1)
+      expect(texts()).toHaveLength(3)
+      vi.advanceTimersByTime(1)
+      expect(texts()).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

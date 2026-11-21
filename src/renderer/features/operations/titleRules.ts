@@ -7,8 +7,9 @@
  */
 import { isGenericWord, keywordMatcher, normalizeKeyword, tokens, words } from '@shared/import/brands'
 import { counterpartyKey } from '@shared/import/names'
+import { deepEqual } from '@shared/merge'
 import type { ImportRule, Transaction } from '@shared/schema'
-import { canWrite, useData } from '../../store/data'
+import { canWrite, updateRecord, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 import { keywordRuleRefusal, rulesUndo, saveKeywordRule, undoRules, type KeywordRuleInput } from '../import/rules'
 import { titleRuled, type TitleTarget } from './bulkModel'
@@ -139,13 +140,46 @@ function unchangedText(plan: BulkPlan, done: number): string {
   return parts.length ? ` Operacje w historii bez zmian – ${parts.join(', ')}.` : ''
 }
 
+/** An operation's fields by name – of the editor's edit and of its „Cofnij”. */
+type Fields = Record<string, unknown>
+
+/**
+ * The open operation's own edit in the editor (`applied`, T550) run, and its „Cofnij”: the fields it set (`applied` returns
+ * them) back as they were – while they are still as it left them (T418); changed since, it stays, said. null – nothing to
+ * take back (no edit, nothing it changed). Read when it runs: an edit asked first at a confirmed balance (F12) and written
+ * after „Zmień mimo to” is taken back too.
+ */
+function editorEdit(id: string | undefined, applied: (() => Partial<Transaction> | void) | undefined): (() => void) | null {
+  if (!applied) return null
+  const was = id ? (useData.getState().records.transactions[id]?.record as Fields | undefined) : undefined
+  const set = applied() as Fields | undefined
+  if (!id || !was || !set) return null
+  const fields = Object.keys(set).filter((k) => !deepEqual(was[k], set[k]))
+  if (!fields.length) return null
+  return () => {
+    const cur = useData.getState().records.transactions[id]?.record as Fields | undefined
+    // Already as before (taken back by hand, or the edit never confirmed at its question): nothing to do.
+    if (cur && fields.every((k) => deepEqual(cur[k], was[k]))) return
+    if (!cur || !fields.every((k) => deepEqual(cur[k], set[k]))) return void toast('Otwarta operacja zmieniła się od tego czasu – zostaje, jak jest.', 'info', 6000)
+    updateRecord('transactions', id, (r) => {
+      const out: Fields = { ...r }
+      for (const k of fields) {
+        if (was[k] === undefined) delete out[k]
+        else out[k] = was[k]
+      }
+      return out as Transaction
+    })
+  }
+}
+
 /**
  * Save a keyword rule for future transactions; with `updateHistory` the matching ones of the history (past and future
  * dates) – first in the bulk changes' preview (T535): nothing is written until it is confirmed, then the rule and the
  * operations, with one „Cofnij”. `applied` – the open operation's own edit in the editor (its question at a confirmed
- * balance – F12): without the history, or when it is a draft (the bulk change takes no draft).
+ * balance – F12): without the history, or when it is a draft (the bulk change takes no draft); it returns the fields it
+ * set – the rule's „Cofnij” takes them back with the rule (T550).
  */
-export function applyTitleRule(input: TitleRuleInput, currentTransaction?: Transaction, applied?: () => void): TitleRuleResult {
+export function applyTitleRule(input: TitleRuleInput, currentTransaction?: Transaction, applied?: () => Partial<Transaction> | void): TitleRuleResult {
   if (!canWrite()) return { ok: false, error: 'Folder jest tylko do odczytu.' }
 
   const norm = normalizeKeyword(input.keyword)
@@ -174,16 +208,24 @@ export function applyTitleRule(input: TitleRuleInput, currentTransaction?: Trans
   const before = rulesNow()
   const err = saveKeywordRule(rule)
   if (err) return { ok: false, error: err }
-  if (!input.updateHistory || draft) applied?.()
+  const editBack = !input.updateHistory || draft ? editorEdit(currentTransaction?.id, applied) : null
   // The history asked for and nothing of it to change: said how many and why (AP-15) – never a bare „na przyszłość”.
   const unchanged = history ? unchangedText(history.plan, history.done) : ''
-  // „Cofnij” of the rule (T535, as „Zapamiętaj”): while it is as this left it – changed since, it stays, said.
-  toast(`Reguła dla tytułu „${keyword}” zapamiętana na przyszłość.${unchanged}`, 'success', 5000, { label: 'Cofnij', run: rulesUndo(before, rulesNow()) })
+  // „Cofnij” of the rule (T535, as „Zapamiętaj”): while it is as this left it – changed since, it stays, said; the open
+  // operation's edit with it (T550). At least `UNDO_MIN_MS` – the action's own time, no other given.
+  const ruleBack = rulesUndo(before, rulesNow())
+  toast(`Reguła dla tytułu „${keyword}” zapamiętana na przyszłość.${unchanged}`, 'success', undefined, {
+    label: 'Cofnij',
+    run: () => {
+      ruleBack()
+      editBack?.()
+    }
+  })
   return { ok: true, count: 0 }
 }
 
 /** The preview confirmed (T535): the rule, then the operations – one „Cofnij” takes back both. */
-async function confirmTitleRule(plan: BulkPlan, rule: KeywordRuleInput, what: string, applied?: () => void): Promise<void> {
+async function confirmTitleRule(plan: BulkPlan, rule: KeywordRuleInput, what: string, applied?: () => Partial<Transaction> | void): Promise<void> {
   const before = rulesNow()
   const err = saveKeywordRule(rule)
   // Refused since the preview opened (the folder read-only, another one opening): said, the history left as it is.

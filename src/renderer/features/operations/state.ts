@@ -715,26 +715,43 @@ export interface BulkApplyOptions {
 
 /**
  * The plan's operations still as it read them (T549): the preview stays open while a sync, the autosave or another window
- * may change them – one changed since (or deleted, or rewritten by a newer version) is left as it is, never written over
- * with what the preview showed; `changed` – how many, said by the toast (`undoKept`'s words).
+ * may change them – one changed since (or deleted) is left as it is, never written over with what the preview showed;
+ * `changed` – how many, said by the toast (`undoKept`'s words). One a newer version of the app wrote since is left too,
+ * counted with the plan's `newer` (as `SaveResult.newer` – T550), not as changed; `newerSince` – how many of them.
  */
-function stillAsRead(plan: BulkPlan): { plan: BulkPlan; changed: number } {
+function stillAsRead(plan: BulkPlan): { plan: BulkPlan; changed: number; newerSince: number } {
   const now = useData.getState().records.transactions
-  const keep = plan.before.map((b) => {
+  const state = plan.before.map((b): 'keep' | 'changed' | 'newer' => {
     const cur = now[b.id]
-    return !!cur && !cur.readOnly && sameContentAs(cur.record, b)
+    if (cur?.readOnly) return 'newer'
+    return !!cur && sameContentAs(cur.record, b) ? 'keep' : 'changed'
   })
-  const changed = keep.filter((k) => !k).length
-  if (!changed) return { plan, changed }
+  const changed = state.filter((s) => s === 'changed').length
+  const newerSince = state.filter((s) => s === 'newer').length
+  if (!changed && !newerSince) return { plan, changed, newerSince }
+  const keep = (_: unknown, i: number) => state[i] === 'keep'
   return {
-    plan: { ...plan, before: plan.before.filter((_, i) => keep[i]), after: plan.after.filter((_, i) => keep[i]) },
-    changed
+    plan: { ...plan, before: plan.before.filter(keep), after: plan.after.filter(keep), newer: plan.newer + newerSince },
+    changed,
+    newerSince
   }
 }
 
-/** Nothing of the plan written: every one of its operations changed since the preview read them (T549). */
-function allChangedNote(n: number): void {
-  toast(n === 1 ? 'Nic nie zapisano – operacja zmieniła się od podglądu i zostaje, jak jest.' : `Nic nie zapisano – operacje zmieniły się od podglądu i zostają, jak są (${n}).`, 'info', 7000)
+/**
+ * Nothing of the plan written: every one of its operations changed since the preview read them (T549) or a newer version
+ * of the app wrote it since (T550) – said which.
+ */
+function allChangedNote(changed: number, newer: number): void {
+  const text = !newer
+    ? changed === 1
+      ? 'Nic nie zapisano – operacja zmieniła się od podglądu i zostaje, jak jest.'
+      : `Nic nie zapisano – operacje zmieniły się od podglądu i zostają, jak są (${changed}).`
+    : !changed
+      ? newer === 1
+        ? 'Nic nie zapisano – operację od podglądu zapisała nowsza wersja aplikacji; zostaje, jak jest.'
+        : `Nic nie zapisano – operacje od podglądu zapisała nowsza wersja aplikacji; zostają, jak są (${newer}).`
+      : `Nic nie zapisano – zmienione od podglądu zostają, jak są: ${changed}, zapisane przez nowszą wersję aplikacji: ${newer}.`
+  toast(text, 'info', 7000)
 }
 
 /**
@@ -744,9 +761,9 @@ function allChangedNote(n: number): void {
  */
 export async function applyBulk(read: BulkPlan, what = '', opts: BulkApplyOptions = {}): Promise<boolean> {
   if (!read.before.length || !canWrite()) return false
-  const { plan, changed } = stillAsRead(read)
+  const { plan, changed, newerSince } = stillAsRead(read)
   if (!plan.before.length) {
-    allChangedNote(changed)
+    allChangedNote(changed, newerSince)
     return false
   }
   const n = plan.before.length
