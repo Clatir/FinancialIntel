@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { layersEffect, type LayersLine } from '@shared/calc/effect'
 import { salariesText } from '@shared/format'
-import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel, type NotifyPrefs } from '@shared/machine'
+import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel } from '@shared/machine'
 import { briefingAt, eveningAt } from '@shared/notify'
 import { BRIEFING_FROM } from '@shared/notifyPlan'
 import type { GameSettings, LayersSettings, Orders } from '@shared/schema'
@@ -13,8 +13,9 @@ import { setMachinePrefs, useMachine } from '../../store/machine'
 import { AmountField, plnText, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
 import { cx, Field, NumberField, Panel, Toggle } from '../../components/ui'
-import { toast } from '../../store/ui'
+import { navigate, toast } from '../../store/ui'
 import { MachineOnly } from './MachineOnly'
+import { NOTIFY_GROUPS, NOTIFY_KEYS, notifyCount, notifySetAll, type NotifyKey } from './notifyGroups'
 
 type LayersPatch = Partial<Pick<LayersSettings, 'shieldSalaries' | 'hullMonths' | 'assumedCosts'>>
 
@@ -408,31 +409,8 @@ function VolumeSlider() {
   )
 }
 
-const NOTIFY_ROWS: Array<[keyof NotifyPrefs, string]> = [
-  ['briefing', 'Odprawa poranna – przed innymi powiadomieniami'],
-  ['evening', 'Wieczorne dopisanie wydatków'],
-  ['low', 'Energia dziś poniżej 20% albo koperta powyżej 80%'],
-  ['overrun', 'Przekroczenie przydziału albo koperty'],
-  ['asteroid', 'Asteroida (opłata okresowa) – 14 i 3 dni przed terminem'],
-  ['cargo', 'Kontener niezaładowany – opłata stała 3 dni po terminie bez płatności'],
-  ['importOverdue', 'Zaległy import z mBanku – po 3 dniach'],
-  ['balances', 'Potwierdzenie sald – w niedzielę'],
-  ['debriefing', 'Debriefing – 1. dnia miesiąca'],
-  ['yearReview', 'Przegląd roczny – w styczniu, za rok zamknięty'],
-  ['ictj', 'Nowa wypłata w ICTTJ do zadokowania'],
-  ['loans', 'Rata pożyczki 3 dni po terminie (własna albo spłata od dłużnika)'],
-  ['pit38', 'PIT-38 – 14 i 3 dni przed 30 kwietnia'],
-  ['house', 'Domownik nie oddał za zakupy – po 30 dniach od najstarszego'],
-  ['plans', 'Boje i terminy (dni przed, ustawione w boi), boja po terminie, koniec kontenera – 14 dni przed'],
-  ['accounts', 'Za mało na koncie przed płatnością (salda kont za 90 dni)'],
-  ['cargoWatch', 'Ładownia: kontener w nowej cenie, kontener bez płatności, nowa opłata w historii'],
-  ['anomalies', 'Nieznany sygnał: nietypowa kwota, nowy kontrahent, możliwe podwójne obciążenie'],
-  ['returns', 'Zwrot pieniędzy, który nie dotarł w terminie'],
-  ['watch', 'Raport wachty – w niedzielę od 18:00']
-]
-
-/** Ustawienia → Powiadomienia i dźwięki (config.json – this computer only): the quick entry's shortcut too. */
-export function NotifyTab() {
+/** Ustawienia → Zasobnik i start: the quick entry's global shortcut (config.json – this computer only). */
+export function QuickEntryPanel() {
   const prefs = useMachine((s) => s.prefs)
   const [state, setState] = useState<{ accelerator: string; registered: boolean; replaced: string | null } | null>(null)
   useEffect(() => {
@@ -442,6 +420,34 @@ export function NotifyTab() {
       alive = false
     }
   }, [prefs.quickShortcut])
+  return (
+    <Panel title="Szybki wpis" actions={<MachineOnly />} testId="settings-quick-entry">
+      <div className="flex flex-col gap-2 text-[12px]">
+        <Field label="Skrót globalny" labelWidth={200} hint="Działa w całym systemie. Zmień, jeśli koliduje z platformą tradingową (kliknij i naciśnij nowy skrót; Backspace – bez skrótu).">
+          <div className="flex items-center gap-2">
+            <ShortcutField
+              value={prefs.quickShortcut}
+              onChange={(quickShortcut) => void setMachinePrefs({ quickShortcut }).then(() => api.quickShortcutState().then(setState, () => undefined))}
+              data-testid="settings-shortcut"
+            />
+            {state && state.accelerator === prefs.quickShortcut && prefs.quickShortcut && (
+              <span className={state.registered ? 'text-[11.5px] text-muted' : 'text-[11.5px] text-accent'} data-testid="settings-shortcut-state">
+                {state.registered ? 'działa' : `zajęty przez inny program – wybierz inny niż ${shortcutLabel(prefs.quickShortcut)}`}
+              </span>
+            )}
+            <button className="btn h-[24px]" onClick={() => void api.quickOpen()}>
+              Otwórz szybki wpis
+            </button>
+          </div>
+        </Field>
+      </div>
+    </Panel>
+  )
+}
+
+/** Ustawienia → Powiadomienia i dźwięki (config.json – this computer only): the switches in groups (UX-45). */
+export function NotifyTab() {
+  const prefs = useMachine((s) => s.prefs)
   const n = prefs.notify
   const s = prefs.sounds
   const quiet = useData((st) => st.fi?.settings.orders.quietHours)
@@ -449,66 +455,92 @@ export function NotifyTab() {
   const eveningShift = quiet && eveningAt(n.eveningTime, quiet) !== n.eveningTime ? eveningAt(n.eveningTime, quiet) : null
   // The briefing's hour in the quiet hours (D99 pkt 7): it comes at their end – said where it is set.
   const briefingShift = quiet && n.briefingTime && briefingAt(n.briefingTime, quiet) !== n.briefingTime ? briefingAt(n.briefingTime, quiet) : null
+  const total = notifyCount(n)
+  const setAll = (keys: readonly NotifyKey[], on: boolean) => void setMachinePrefs({ notify: notifySetAll(n, keys, on) })
   return (
     <>
-      <Panel title="Szybki wpis" actions={<MachineOnly />}>
-        <div className="flex flex-col gap-2 text-[12px]">
-          <Field label="Skrót globalny" labelWidth={200} hint="Działa w całym systemie. Zmień, jeśli koliduje z platformą tradingową (kliknij i naciśnij nowy skrót; Backspace – bez skrótu).">
-            <div className="flex items-center gap-2">
-              <ShortcutField
-                value={prefs.quickShortcut}
-                onChange={(quickShortcut) => void setMachinePrefs({ quickShortcut }).then(() => api.quickShortcutState().then(setState, () => undefined))}
-                data-testid="settings-shortcut"
-              />
-              {state && state.accelerator === prefs.quickShortcut && prefs.quickShortcut && (
-                <span className={state.registered ? 'text-[11.5px] text-muted' : 'text-[11.5px] text-accent'} data-testid="settings-shortcut-state">
-                  {state.registered ? 'działa' : `zajęty przez inny program – wybierz inny niż ${shortcutLabel(prefs.quickShortcut)}`}
-                </span>
-              )}
-              <button className="btn h-[24px]" onClick={() => void api.quickOpen()}>
-                Otwórz szybki wpis
-              </button>
-            </div>
-          </Field>
-        </div>
-      </Panel>
-      <Panel title="Powiadomienia" actions={<MachineOnly />}>
+      <Panel
+        title="Powiadomienia"
+        actions={
+          <span className="flex items-center gap-2">
+            <MachineOnly />
+            <span className="num text-[11.5px] text-muted" data-testid="notify-count" data-on={total.on} data-all={total.all}>
+              włączone {total.on} z {total.all}
+            </span>
+            <button className="btn h-[22px]" disabled={total.on === total.all} onClick={() => setAll(NOTIFY_KEYS, true)} data-testid="notify-all-on">
+              Włącz wszystkie
+            </button>
+            <button className="btn h-[22px]" disabled={total.on === 0} onClick={() => setAll(NOTIFY_KEYS, false)} data-testid="notify-all-off">
+              Wyłącz wszystkie
+            </button>
+          </span>
+        }
+      >
         <div className="flex flex-col gap-1.5 text-[12px]">
           <p className="text-[11.5px] text-muted">Tylko na tym komputerze; działają w tle, gdy aplikacja jest w zasobniku. Nic w ciszy nocnej.</p>
-          {NOTIFY_ROWS.map(([key, label]) => (
-            <div key={key} className="flex items-center gap-3">
-              <Toggle checked={n[key] as boolean} onChange={(on) => void setMachinePrefs({ notify: { ...n, [key]: on } })} label={label} data-testid={`notify-${key}`} />
-              {/* When the briefing comes (D99 pkt 7, D84 C9): at the first opening (the default) or at its hour. */}
-              {key === 'briefing' && (
-                <select
-                  className="input h-[24px] w-[260px]"
-                  value={n.briefingTime ? 'time' : 'open'}
-                  onChange={(e) => void setMachinePrefs({ notify: { ...n, briefingTime: e.currentTarget.value === 'time' ? BRIEFING_FROM : null } })}
-                  aria-label="Kiedy odprawa poranna"
-                  data-testid="notify-briefing-when"
-                >
-                  <option value="open">przy pierwszym otwarciu okna po ciszy nocnej</option>
-                  <option value="time">o ustalonej godzinie</option>
-                </select>
-              )}
-              {key === 'briefing' && n.briefingTime && (
-                <TimeField className="w-[70px]" value={n.briefingTime} onChange={(briefingTime) => briefingTime && void setMachinePrefs({ notify: { ...n, briefingTime } })} aria-label="Godzina odprawy porannej" data-testid="notify-briefing-time" />
-              )}
-              {key === 'briefing' && briefingShift && quiet && (
-                <span className="text-[11px] text-accent" data-testid="notify-briefing-quiet">
-                  w ciszy nocnej ({quiet.from}–{quiet.to}) – przyjdzie o {briefingShift}
-                </span>
-              )}
-              {key === 'evening' && (
-                <TimeField className="w-[70px]" value={n.eveningTime} onChange={(eveningTime) => eveningTime && void setMachinePrefs({ notify: { ...n, eveningTime } })} aria-label="Godzina wieczornego dopisania" data-testid="notify-evening-time" />
-              )}
-              {key === 'evening' && eveningShift && quiet && (
-                <span className="text-[11px] text-accent" data-testid="notify-evening-quiet">
-                  w ciszy nocnej ({quiet.from}–{quiet.to}) – przyjdzie o {eveningShift}
-                </span>
-              )}
-            </div>
-          ))}
+          {quiet && (
+            <p className="text-[11.5px] text-muted" data-testid="notify-quiet-hours">
+              Cisza nocna:{' '}
+              <span className="num">
+                {quiet.from}–{quiet.to}
+              </span>{' '}
+              (wspólna dla budżetu).{' '}
+              <button type="button" className="text-accent hover:underline" onClick={() => navigate({ page: 'settings', tab: 'layers' })} data-testid="notify-quiet-link">
+                Zmień w Warstwy i rozkazy ›
+              </button>
+            </p>
+          )}
+          {NOTIFY_GROUPS.map((g) => {
+            const keys = g.rows.map(([k]) => k)
+            const c = notifyCount(n, keys)
+            return (
+              <div key={g.id} className="mt-1 flex flex-col gap-1.5" data-testid={`notify-group-${g.id}`}>
+                <div className="flex items-center gap-2 border-b border-line/70 pb-0.5">
+                  <span className="label">{g.label}</span>
+                  <span className="num text-[11px] text-dim" data-testid={`notify-group-count-${g.id}`}>
+                    {c.on} z {c.all}
+                  </span>
+                  <button type="button" className="ml-auto text-[11px] text-accent hover:underline" onClick={() => setAll(keys, c.on !== c.all)} data-testid={`notify-group-toggle-${g.id}`}>
+                    {c.on === c.all ? 'wyłącz wszystkie' : 'włącz wszystkie'}
+                  </button>
+                </div>
+                {g.rows.map(([key, label]) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <Toggle checked={n[key]} onChange={(on) => void setMachinePrefs({ notify: { ...n, [key]: on } })} label={label} data-testid={`notify-${key}`} />
+                    {/* When the briefing comes (D99 pkt 7, D84 C9): at the first opening (the default) or at its hour. */}
+                    {key === 'briefing' && (
+                      <select
+                        className="input h-[24px] w-[260px]"
+                        value={n.briefingTime ? 'time' : 'open'}
+                        onChange={(e) => void setMachinePrefs({ notify: { ...n, briefingTime: e.currentTarget.value === 'time' ? BRIEFING_FROM : null } })}
+                        aria-label="Kiedy odprawa poranna"
+                        data-testid="notify-briefing-when"
+                      >
+                        <option value="open">przy pierwszym otwarciu okna po ciszy nocnej</option>
+                        <option value="time">o ustalonej godzinie</option>
+                      </select>
+                    )}
+                    {key === 'briefing' && n.briefingTime && (
+                      <TimeField className="w-[70px]" value={n.briefingTime} onChange={(briefingTime) => briefingTime && void setMachinePrefs({ notify: { ...n, briefingTime } })} aria-label="Godzina odprawy porannej" data-testid="notify-briefing-time" />
+                    )}
+                    {key === 'briefing' && briefingShift && quiet && (
+                      <span className="text-[11px] text-accent" data-testid="notify-briefing-quiet">
+                        w ciszy nocnej ({quiet.from}–{quiet.to}) – przyjdzie o {briefingShift}
+                      </span>
+                    )}
+                    {key === 'evening' && (
+                      <TimeField className="w-[70px]" value={n.eveningTime} onChange={(eveningTime) => eveningTime && void setMachinePrefs({ notify: { ...n, eveningTime } })} aria-label="Godzina wieczornego dopisania" data-testid="notify-evening-time" />
+                    )}
+                    {key === 'evening' && eveningShift && quiet && (
+                      <span className="text-[11px] text-accent" data-testid="notify-evening-quiet">
+                        w ciszy nocnej ({quiet.from}–{quiet.to}) – przyjdzie o {eveningShift}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
         </div>
       </Panel>
       <Panel title="Dźwięki" actions={<MachineOnly />}>

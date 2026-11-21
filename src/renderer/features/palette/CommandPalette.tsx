@@ -3,7 +3,7 @@ import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import { useFocusTrap } from '../../components/trap'
 import { Command } from 'cmdk'
 import { fold } from '@shared/fold'
-import { searchRecords, type SearchHits, type SettingsItem } from '@shared/search'
+import { searchRecords, type SearchHits } from '@shared/search'
 import type { LayoutPreset } from '@shared/schema'
 import { plnText } from '../../components/fields'
 import { plDate } from '../../lib/format'
@@ -15,7 +15,7 @@ import { checkForUpdates } from '../../store/update'
 import { applyPageLayout } from '../../store/layout'
 import { Kbd } from '../../components/ui'
 import { PAGES } from '../screens/pages'
-import { SETTINGS_TABS } from '../settings/SettingsPage'
+import { SETTINGS_TABS } from '../settings/settingsNav'
 import { startWizard } from '../wizard/state'
 import { revealAmounts, toggleHideAmounts, useMachine } from '../../store/machine'
 import { newOperation, openOperation, resetFilter } from '../operations/state'
@@ -23,6 +23,7 @@ import { openIctj } from '../../store/ictj'
 import { openFirstDocking } from '../dock/state'
 import { KEYS, pageKeys } from '../../components/shortcuts'
 import { readRecent, rememberRecent } from './recent'
+import { SETTINGS_ITEMS } from './settingsItems'
 
 const GROUP =
   '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted'
@@ -35,34 +36,6 @@ interface Action {
   keys?: string
   run: () => void
 }
-
-/** The settings found by what they set (F19: „cisza nocna” → Warstwy i rozkazy). */
-export const SETTINGS_ITEMS: readonly SettingsItem[] = [
-  { id: 'ship-name', label: 'Nazwa okrętu', tab: 'general' },
-  { id: 'opening', label: 'Saldo otwarcia konta', tab: 'accounts', words: 'konta saldo potwierdzenie salda korekta' },
-  { id: 'accounts', label: 'Konta budżetu', tab: 'accounts', words: 'konto dodaj archiwum' },
-  { id: 'categories', label: 'Kategorie i koperty', tab: 'categories', words: 'podkategoria koperta archiwizacja' },
-  { id: 'shields', label: 'Osłony – cel (pensje)', tab: 'layers', words: 'bufor warstwy' },
-  { id: 'hull', label: 'Kadłub – cel (miesiące)', tab: 'layers', words: 'fundusz awaryjny warstwy' },
-  { id: 'min-shields', label: 'Minimalne osłony', tab: 'layers', words: 'rozkazy' },
-  { id: 'cargo-line', label: 'Linia zanurzenia (% pensji)', tab: 'layers', words: 'ładownia rozkazy' },
-  { id: 'quiet', label: 'Cisza nocna', tab: 'layers', words: 'noc rozkazy zakupy w nocy' },
-  { id: 'impulse', label: 'Dziennik kapitański od kwoty (plan / impuls)', tab: 'layers', words: 'próg dziennika impuls' },
-  { id: 'firewall', label: 'Firewall dopłat do XTB', tab: 'layers', words: 'rozkazy xtb' },
-  { id: 'members', label: 'Domownicy i rozliczenia', tab: 'household', words: 'data rozliczeń saldo na start depozyt' },
-  { id: 'import-rules', label: 'Reguły importu z banku', tab: 'import', words: 'słowa kluczowe połączone nazwy nazwiska duplikaty mbank' },
-  { id: 'ictj', label: 'Folder ICTTJ i scenariusz prognozy', tab: 'ictj', words: 'ict trade journal cele' },
-  { id: 'shortcut', label: 'Skrót szybkiego wpisu', tab: 'notify', words: 'globalny skrót klawisz' },
-  { id: 'notifications', label: 'Powiadomienia', tab: 'notify', words: 'wieczorny raport przypomnienie' },
-  { id: 'sounds', label: 'Dźwięki i głośność', tab: 'notify' },
-  { id: 'zoom', label: 'Rozmiar interfejsu', tab: 'view', words: 'skala powiększenie zoom' },
-  { id: 'contrast', label: 'Wyższy kontrast', tab: 'view', words: 'wygląd' },
-  { id: 'hide', label: 'Ukrywanie kwot', tab: 'view', words: 'prywatność bezczynność blokada ekranu' },
-  { id: 'folder', label: 'Folder danych', tab: 'folder', words: 'onedrive zmiana folderu' },
-  { id: 'backups', label: 'Kopie zapasowe i odzyskanie z kopii', tab: 'folder', words: 'backup kopia zip' },
-  { id: 'tray', label: 'Zasobnik i autostart', tab: 'system', words: 'start z windows zamykanie' },
-  { id: 'updates', label: 'Aktualizacje i token GitHub', tab: 'updates', words: 'wersja' }
-]
 
 const ITEM = 'flex h-[30px] items-center gap-2 px-2 text-[12.5px] data-[selected=true]:bg-accent-soft data-[selected=true]:text-fg-strong'
 const NO_HITS: SearchHits = { operations: [], containers: [], goals: [], loans: [], members: [], settings: [] }

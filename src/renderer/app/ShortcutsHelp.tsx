@@ -20,7 +20,7 @@ const GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
       [KEYS.palette, 'paleta komend'],
       [KEYS.save, 'zapisz teraz (zapis i tak jest automatyczny)'],
       [KEYS.newOperation, 'nowa operacja'],
-      [QUICK_ROW, 'szybki wpis – w całym systemie (zmiana: Ustawienia → Powiadomienia i dźwięki)'],
+      [QUICK_ROW, 'szybki wpis – w całym systemie (zmiana: Ustawienia → Zasobnik i start)'],
       [KEYS.hideAmounts, 'ukryj / pokaż kwoty'],
       ['Ctrl+Plus / Ctrl+Minus', 'większy / mniejszy interfejs (90–150 %)'],
       ['Ctrl+Shift+0', 'interfejs 100 %'],

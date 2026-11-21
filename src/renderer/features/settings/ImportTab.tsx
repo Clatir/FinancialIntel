@@ -33,7 +33,7 @@ function MergedNames() {
             <button
               type="button"
               className="btn h-[22px]"
-              title="Połączenia z 1.2.2 zrobione na nazwach z datą transakcji – nic już nie łączą"
+              title="Połączenia zrobione dawniej na nazwach z datą transakcji – nic już nie łączą"
               onClick={() => {
                 const undo = removeInactive()
                 if (undo) toast(`Usunięto ${countLabel(inactive, 'nieaktywne połączenie', 'nieaktywne połączenia', 'nieaktywnych połączeń')}.`, 'success', 6000, { label: 'Cofnij', run: undo })
@@ -70,7 +70,7 @@ function MergedNames() {
             <span className="truncate" title={`klucz: ${key} → ${a.to}`}>
               <span className="text-fg-strong">{a.label || key}</span>
               <span className="text-muted"> = {a.toLabel || a.to}</span>
-              {inactiveAlias(a) && <span className="text-dim"> · nieaktywne (nazwa z datą transakcji, 1.2.2)</span>}
+              {inactiveAlias(a) && <span className="text-dim"> · nieaktywne (nazwa z datą transakcji, dawny format)</span>}
             </span>
             <button type="button" className="btn btn-ghost h-[22px] px-1.5 text-[11px] hover:text-down" onClick={() => unmergeName(key)} data-testid="alias-unmerge">
               rozłącz
