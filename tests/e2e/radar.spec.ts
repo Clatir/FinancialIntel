@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
+import { openForm } from './forms'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -35,8 +36,16 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
     await expect(item('asteroid')).toContainText('OC auta')
     await expect(item('salary').first()).toContainText('Pensja od siebie')
     await expect(page.getByTestId('radar-house')).toHaveText('85,00 zł')
+    // The columns are named, a row opens its record (Z10, UX-35, UX-74): the container in Ładownia, marked there.
+    await expect(page.getByTestId('radar-columns')).toContainText('osłony po')
+    await item('asteroid').getByTestId('radar-item-open').click()
+    await expect(page.getByTestId('page-cargo')).toBeVisible()
+    await expect(page.locator('[data-testid="cargo-row"][data-name="OC auta"]')).toHaveClass(/bg-accent-soft/)
+    await page.keyboard.press('Control+7')
+    await expect(page.getByTestId('page-radar')).toBeVisible()
 
     // A loan given: 600 zł in two monthly installments, the money out of the shields now.
+    await openForm(page, 'loan')
     await page.getByTestId('loan-name').fill('Pożyczka dla Ani')
     await page.getByTestId('loan-counterparty').fill('Anna Nowak')
     await page.getByTestId('loan-amount').fill('600')
@@ -57,6 +66,7 @@ test('Radar: 90 dni (pensja, asteroida, raty), pożyczka udzielona ze spłatą, 
     await expect(item('repayment')).toHaveCount(1)
 
     // A loan taken: 3 000 zł, 3 300 zł to pay back in 3 installments – a container of the cargo hold, the debt in the range.
+    await openForm(page, 'loan')
     await page.getByRole('radio', { name: 'Biorę pożyczkę' }).click()
     await page.getByTestId('loan-name').fill('Laptop')
     await page.getByTestId('loan-counterparty').fill('Bank XYZ')

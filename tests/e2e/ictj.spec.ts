@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch, withMainLog } from './app'
 import { json, records } from './files'
+import { openForm } from './forms'
 import { seedFolder, zl } from './seed'
 
 const MBANK = '01KDEFACC00000000000000001'
@@ -137,6 +138,7 @@ test('ICTTJ: podpowiedź folderu, dokowanie z mBanku i na Portfel XTB, pula Cele
     await page.keyboard.press('Control+6')
     const goal = (name: string) => page.locator(`[data-testid="starmap-goal"][data-name="${name}"]`)
     await expect(goal('Wakacje').getByTestId('starmap-amount')).toHaveText('500,00 zł')
+    await openForm(page, 'goal')
     await page.getByTestId('starmap-new-name').fill('Rower')
     await page.getByTestId('starmap-new-target').fill('1000')
     await page.getByTestId('starmap-new-target').press('Tab')

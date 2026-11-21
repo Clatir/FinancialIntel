@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
+import { openForm } from './forms'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -41,6 +42,7 @@ test('Ctrl+N z każdego ekranu, szkic formularza po zmianie ekranu, szybki wpis:
     // „Nowa pożyczka” keeps what was typed while another screen is shown (N36).
     await page.keyboard.press('Control+7')
     await expect(page.getByTestId('page-radar')).toBeVisible()
+    await openForm(page, 'loan')
     await page.getByTestId('loan-name').fill('Pożyczka dla Ani')
     await page.keyboard.press('Control+5')
     await expect(page.getByTestId('page-cargo')).toBeVisible()
