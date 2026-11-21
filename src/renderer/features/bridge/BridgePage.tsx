@@ -39,7 +39,6 @@ import { useFuture } from '../radar/future'
 import { useIctj } from '../../store/ictj'
 import { useGameRecords } from '../../store/game'
 import { useMembers } from '../household/actions'
-import { financeLabelInline } from '../household/financeWords'
 import { WealthChart } from '../intel/charts'
 import { useWealth } from '../intel/wealth'
 import { CAP_REASON, capNote, deliveryWhy, energyWhy, rangeWhy, targetsWhy, type WhyLine } from '@shared/calc/why'
@@ -386,7 +385,8 @@ export function BridgePanels({ single = false }: { single?: boolean }) {
   // A household member's purchase or money (D80) says whose it is instead of the category.
   const noteOf = (t: (typeof recent)[number]): string => {
     const financed = financersText(t, members)
-    if (financed) return financeLabelInline(false, financed)
+    // A list of the financers (me, members, „(prezent)”) – the field's word, not one member's label (T552).
+    if (financed) return `finansuje: ${financed}`
     const payer = payerOf(t)
     if (payer) return `od: ${memberName(payer, members)}`
     return t.categoryId ? cats.label(t.categoryId) : ''

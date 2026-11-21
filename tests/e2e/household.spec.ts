@@ -148,7 +148,7 @@ test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z 
     await expect(bridgeMember('Tata')).toContainText('150,00 zł')
     await expect(bridgeMember('Mama')).toContainText('100,00 zł')
     await expect(page.getByTestId('bridge-house')).toHaveText('100,00 zł')
-    await expect(page.locator('[data-testid="bridge-recent-row"]', { hasText: 'Lidl' })).toContainText('kupione dla: Tata')
+    await expect(page.locator('[data-testid="bridge-recent-row"]', { hasText: 'Lidl' })).toContainText('finansuje: Tata')
     await expect(page.locator('[data-testid="bridge-recent-row"]', { hasText: 'PIOTR TESTOWY' })).toContainText('od: Tata')
     await page.screenshot({ path: join('test-results', 'screens', '13-domownicy-mostek.png') })
 

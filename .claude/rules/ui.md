@@ -43,7 +43,8 @@ paths:
   `Modal` i Esc szybkiego wpisu go pomijają). Kontrahent – `CounterpartyField` (podpowiedzi z historii, maks. 8, Enter
   tylko po strzałce). „Podziel…” – jeden przycisk z menu (`SplitMenu`).
   Lista w portalu ustawia `aria-controls` na polu – `Popover` ignoruje klik tylko w listę swojego pola (`inOwnList`, T553).
-  Słowa finansowania domownika w komunikatach – tylko `financeLabel` (`household/financeWords.ts`, T552).
+  Słowa finansowania domownika w komunikatach – tylko `financeLabel` / `financeLabelInline` (`@shared/financeWords`,
+  T552); lista finansujących (`financersText`) zostaje przy słowie pola „finansuje:”.
 - Zapis zablokowany przy folderze tylko do odczytu albo w trakcie przełączania (`canWrite`, `useFolderLocked`);
   zapisy zwracają boolean.
 - `data-testid` w kebab-case z prefiksem ekranu (`operation-…`, `import-…`, `quick-…`, `phone-…`); stan w `data-*`
