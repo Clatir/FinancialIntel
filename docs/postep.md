@@ -27,9 +27,26 @@ filtra godzin Killzones w Operacjach **nie** ma (nowa funkcja); `MonthField` pok
 | U5 | Edytor i pola | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 45–60 min | ✅ 21.11 (19 min) |
 | U6 | Wydajność Mostku i Rozliczeń | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 15–20 min | ✅ 21.11 (9 min) |
 | U7 | Stabilność testów, skrypty `tests/audyt/*` | `wykonawca-sonnet` · high | Sonnet 5.5 · high | 30–45 min | ✅ 21.11 (25 min) |
-| U8 | Pełne testy + E2E, `/code-review` (xhigh: U1, U2; high: reszta), CHANGELOG `## 1.21.1`, wersja, PR, CI, wydanie | sesja główna | Opus 5.5 · high | 45–60 min + CI | |
+| U8 | Pełne testy + E2E, `/code-review` (xhigh: U1, U2; high: reszta), CHANGELOG `## 1.21.1`, wersja, PR, CI, wydanie | sesja główna | Opus 5.5 · high | 45–60 min + CI | ⏳ PR |
 
-**Stan 21.11:** fala 1 (U1–U4, U6) scalona; w toku U5, U7. Do pytania użytkownika w U8: puste „osłony po” wierszy opłat w Radarze; „Finansuje:” w `TitleRuleAction.tsx:293`; nowy tekst U1 „Otwarta operacja zmieniła się od tego czasu – zostaje, jak jest.”. T555: licznik Meldunków liczony raz (`useInboxCountHost`, telefon `PhoneInboxWatcher`), publikowany w `store/inboxCount`; wiersze zakupów Rozliczeń w `memo` z prymitywów.
+**Stan 21.11 (U8):** U1–U7 scalone z poprawkami przeglądów; wersja 1.21.1, CHANGELOG, T550–T556, reguły `ui.md`,
+`silnik.md`. Testy lokalne (870c82a): typecheck, unit 2289/2290 (próg AP-35 przy obciążeniu – osobno 4/4), E2E 174/175
+(`ictj` znany lokalnie), telefon 12/12; na HEAD unit – timeouty wydajności fs przy obciążeniu maszyny inną sesją. PR i CI.
+- Przeglądy: U1+U2 xhigh (3 important – poprawione z testami, 3 pre_existing – 2 poprawione), U3–U6 high (1 important
+  – poprawione), runda 2 na poprawkach U1/U3 (1 important – lista finansujących na Mostku), U5 high + 3 rundy na
+  poprawkach (fokus w menu PPM, `MonthField`) – wzorzec `realHover` (najechanie tylko przy realnym ruchu myszy).
+- Do potwierdzenia przez użytkownika (przyjęte jako T): wiersze opłat w Radarze bez „osłony po” (T551); „Finansuje:”
+  w oknie reguły tytułu zostaje (etykieta pola); nowe teksty „Otwarta operacja zmieniła się od tego czasu – zostaje, jak
+  jest.” i „Nowy wpis zostaje zapisany, z polami sprzed reguły.” (T550); lista finansujących na Mostku „finansuje: …”.
+- Uwagi na później: menu PPM otwarte klawiszem pod nieruchomym kursorem – pierwsze najechanie bierze fokus (było przed
+  U5); pozycja odrzucona przy przesunięciu listy nie łapie potem drobnego ruchu wewnątrz (Enter → `nav.focus`);
+  `MenuBox` bez rodzica zostaje przezroczysty; menu przebudowywane przy każdym klawiszu szukania; `editPlan` (B11) –
+  kopia planu następnego miesiąca zostaje, gdy zapis miesiąca odmówi (kolejność celowa – krok max); `confirmTitleRule`
+  – `editBack` bez sprawdzenia `kept` i notka „zapisany” liczona przed pytaniem F12; zastąpione pytanie F12 innej
+  edycji ginie przy „Cofnij”; `withShields` zakłada liniową linię osłon (dziś bez skutku – F27); `categorizeRest` liczy
+  szkice i przebiega całą mapę; pierwszy render Mostku z licznikiem 0; `store/ui` importuje `features/settings`;
+  9 kopii `quickWindow` w E2E bez ogrodzenia IPC; `main/quick.ts` `show()` – drugi `quickData` przy istniejącym oknie;
+  `MemberPickers` wariant zwrotu „prezent od: X (zwrot do osłon)”.
 
 Fale: U1, U2, U3, U4, U6 równolegle; U5, U7 po scaleniu fali 1; U8 na końcu. Numery T: U1 T550 … U7 T556, U8 T557.
 
