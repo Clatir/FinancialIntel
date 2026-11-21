@@ -4,6 +4,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { startPhoneServer, seedDrive, zl, type PhoneServer } from './server'
+import { pickCategory } from '../e2e/forms'
 
 const FOLDER = 'FinancialIntel'
 const CLIENT = '0a1b2c3d-1111-2222-3333-444455556666'
@@ -78,7 +79,7 @@ test('Operacje: miesiąc, wyszukiwanie, edycja kategorii i kwoty idzie na OneDri
   // The computers' editor over the screen.
   const editor = page.getByTestId('phone-operation')
   await expect(editor.getByTestId('operation-editor')).toBeVisible()
-  await editor.getByTestId('operation-category').selectOption(GROCERIES)
+  await pickCategory(editor, 'operation-category', GROCERIES)
   await editor.getByTestId('operation-amount').fill('19,50')
   await editor.getByTestId('operation-amount').press('Tab')
   await page.getByTestId('phone-operation-back').click()

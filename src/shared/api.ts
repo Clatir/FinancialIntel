@@ -544,6 +544,8 @@ export interface QuickData {
    */
   lastByBrand: Record<string, string>
   counterparties: string[]
+  /** The categories of the newest expenses, the newest first (Z7: the category field's „Ostatnie” section). */
+  recentCategories?: string[]
   rules: ImportRule[]
   aliases: BrandAliases
   /**

@@ -20,7 +20,10 @@ import { Modal } from '../../components/Modal'
 import { plDate, plDateTime } from '../../lib/format'
 import { HistoryButton } from '../history/HistoryDialog'
 import { DeleteButton } from '../history/DeleteButton'
-import { AccountSelect, CategorySelect, useAccounts } from './pickers'
+import { AccountSelect, CategoryField, useAccounts } from './pickers'
+import { CounterpartyField } from './CounterpartyField'
+import { SplitMenu } from './SplitMenu'
+import { counterpartyHistory } from './pick'
 import { changeKind as changeOperationKind, deleteOperation, openOperation, newOperation, rememberAccount, showBrand, updateOperation } from './state'
 import { addOtherSide, joinTransfers, transferEdits, transferIssuesOf, type JoinIssue } from './transfers'
 import { bankNameOf, rememberCategory, ruleFor } from '../import/rules'
@@ -83,6 +86,8 @@ export function OperationEditor({ id }: { id: string }) {
   const balances = useRecordList('balances')
   const members = useMembers()
   const knownTags = useKnownTags()
+  // The counterparties of the history (Z7, UX-72): the field suggests the most used ones holding what is typed.
+  const history = useData((s) => counterpartyHistory(listOf(s.records.transactions)))
   // A direction chosen while the amount is still 0 (the sign lives in the amount): kept here until one is typed.
   const [zeroSign, setZeroSign] = useState<1 | -1 | null>(null)
   // A share typed not covering the whole (AP-37, T156): refused as the quick entry refuses it – never written; kept in the
@@ -322,7 +327,25 @@ export function OperationEditor({ id }: { id: string }) {
         {!expense && whenAndWhere}
         <Field label={t.kind === 'income' ? 'Od kogo' : 'Kontrahent'} hint={isDraft ? undefined : <BrandYearLine t={t} />}>
           <div className="flex min-w-0 items-center gap-2">
-            <TextField commit className="min-w-0 flex-1" value={t.counterparty} onChange={(counterparty) => patch({ counterparty })} placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'} maxLength={300} data-testid="operation-counterparty" />
+            <CounterpartyField
+              commit
+              className="min-w-0 flex-1"
+              value={t.counterparty}
+              onChange={(counterparty) => patch({ counterparty })}
+              // A name taken from the history brings the category last used with it – only into an empty category field.
+              onPick={(s) =>
+                update((r) => {
+                  const named = { ...r, counterparty: s.name }
+                  const category = s.categoryId
+                  if (r.kind !== 'expense' || r.categoryId || !(r.splits.length === 0 || shareOf(r)) || !category || !cats.byId.get(category) || cats.byId.get(category)!.archived) return named
+                  return shareOf(r) ? withShare({ ...named, categoryId: category }, r.share!) : { ...named, categoryId: category }
+                })
+              }
+              history={history}
+              placeholder={t.kind === 'expense' ? 'sklep, usługa…' : 'kto'}
+              maxLength={300}
+              data-testid="operation-counterparty"
+            />
             {/* F18: every operation of this counterparty – the brand the import knows it by, the whole history. */}
             {!isDraft && (t.counterparty || t.title) && (
               <button
@@ -344,7 +367,7 @@ export function OperationEditor({ id }: { id: string }) {
             {t.splits.length === 0 || share ? (
               <>
                 <div className="flex items-center gap-2">
-                  <CategorySelect
+                  <CategoryField
                     className="min-w-0 flex-1"
                     value={t.categoryId}
                     // A shared purchase's lines take the category with it (one category, D83).
@@ -352,28 +375,42 @@ export function OperationEditor({ id }: { id: string }) {
                     data-testid="operation-category"
                   />
                   {!share && (
-                    <button
-                      type="button"
-                      className="btn h-[24px] shrink-0"
-                      onClick={() =>
-                        // The operation's category and financing go to the first line (B76, B78): what the lines leave is
-                        // a line of no category, financed by nobody – the editor says it, the marks and filters see it.
-                        patch({
-                          splits: [
-                            { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, ...(t.refundable && t.gift ? { gift: true } : {}), note: '' },
-                            { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
-                          ],
-                          categoryId: null,
-                          refundable: false,
-                          memberId: null,
-                          gift: undefined
-                        })
-                      }
-                      title="Kilka kategorii albo część swoja i część domownika"
-                      data-testid="operation-split"
-                    >
-                      Podziel paragon
-                    </button>
+                    <SplitMenu
+                      testId="operation-split-menu"
+                      items={[
+                        {
+                          label: 'Na kategorie',
+                          hint: 'Kilka kategorii albo część swoja i część domownika',
+                          testId: 'operation-split',
+                          run: () =>
+                            // The operation's category and financing go to the first line (B76, B78): what the lines leave is
+                            // a line of no category, financed by nobody – the editor says it, the marks and filters see it.
+                            patch({
+                              splits: [
+                                { id: newId(), amount: t.amount, categoryId: t.categoryId, refundable: t.refundable, memberId: t.refundable ? t.memberId : null, advance: false, ...(t.refundable && t.gift ? { gift: true } : {}), note: '' },
+                                { id: newId(), amount: 0, categoryId: null, refundable: false, memberId: null, advance: false, note: '' }
+                              ],
+                              categoryId: null,
+                              refundable: false,
+                              memberId: null,
+                              gift: undefined
+                            })
+                        },
+                        ...(firstMember
+                          ? [
+                              {
+                                label: 'Na osoby',
+                                hint: 'Kilka osób płaci za ten zakup: równo, procentami albo kwotami',
+                                testId: 'operation-share-start',
+                                run: () => {
+                                  clearRefusedShare()
+                                  update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))
+                                }
+                              }
+                            ]
+                          : [])
+                      ]}
+                    />
                   )}
                 </div>
                 {!share && t.bank && bankNameOf(t) && t.categoryId && rules && ruleFor(t)?.categoryId !== t.categoryId && (
@@ -436,20 +473,6 @@ export function OperationEditor({ id }: { id: string }) {
                     <span className="w-[64px] shrink-0 text-[11.5px] text-muted">{outgoing ? 'Finansuje' : 'Czyj zakup'}</span>
                     {/* A product return (DM sp. 6): whose purchase comes back – never „Zwrot dla … finansuje: X”. */}
                     <FinancerSelect refundable={t.refundable} memberId={t.memberId} gift={t.gift} onChange={(p) => patch(p)} testId="operation-financer" back={!outgoing} />
-                    {firstMember && (
-                      <button
-                        type="button"
-                        className="btn h-[24px] shrink-0"
-                        onClick={() => {
-                          clearRefusedShare()
-                          update((r) => withShare(r, startShare(r.refundable ? (r.memberId ?? HOUSE_MEMBER_ID) : firstMember.id, r.refundable && !!r.gift)))
-                        }}
-                        title="Kilka osób płaci za ten zakup: równo, procentami albo kwotami"
-                        data-testid="operation-share-start"
-                      >
-                        Wspólnie
-                      </button>
-                    )}
                   </div>
                 )}
                 <FinancedNote t={t} />
@@ -764,7 +787,7 @@ function SplitEditor({ t, sign, update }: { t: Transaction; sign: 1 | -1; update
         return (
           <div key={s.id} className="grid grid-cols-[96px_minmax(0,1fr)_auto_auto_auto] items-center gap-1.5" data-testid="split-line">
             <AmountField value={Math.abs(s.amount)} onChange={(v) => setLine(s.id, { amount: sign * (v ?? 0) })} aria-label={`Kwota części ${i + 1}`} data-testid="split-amount" />
-            <CategorySelect value={s.categoryId} onChange={(categoryId) => setLine(s.id, { categoryId })} data-testid="split-category" />
+            <CategoryField value={s.categoryId} onChange={(categoryId) => setLine(s.id, { categoryId })} data-testid="split-category" />
             <FinancerSelect refundable={s.refundable} memberId={s.memberId} gift={s.gift} onChange={(p) => setLine(s.id, p)} compact testId="split-financer" />
             <button
               type="button"

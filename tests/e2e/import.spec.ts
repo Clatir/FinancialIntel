@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { importDone, launch } from './app'
 import { records } from './files'
+import { pickCategory } from './forms'
 
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 
@@ -36,7 +37,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.getByTestId('operation-date').press('Enter')
     await page.getByTestId('operation-time').fill('18:40')
     await page.getByTestId('operation-time').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await expect.poll(async () => (await operations(dataDir)).map((t) => [t.date, t.time, t.amount])).toEqual([['2025-10-02', '18:40', -1616]])
 
     // The file.
@@ -207,7 +208,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await expect(page.getByTestId('operation-bank')).toContainText('KOLEO')
     // Categorized by the starter rule: nothing to remember until the category changes.
     await expect(page.getByTestId('operation-remember')).toHaveCount(0)
-    await page.getByTestId('operation-category').selectOption({ label: 'Auto · parking i opłaty' })
+    await pickCategory(page, 'operation-category', 'Auto · parking i opłaty')
     await page.getByTestId('operation-remember').click()
     await expect(page.getByTestId('operation-remember')).toHaveCount(0)
     await expect
@@ -218,7 +219,7 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await page.getByTestId('operations-search').fill('allegro')
     await page.getByTestId('operations-tick-all').check()
     await expect(page.getByTestId('operations-bulk-count')).toContainText('9 operacji')
-    await page.getByTestId('operations-bulk-category').selectOption({ label: 'Osobiste · ubrania' })
+    await pickCategory(page, 'operations-bulk-category', 'Osobiste · ubrania')
     await page.getByTestId('operations-bulk-remember').selectOption('brands')
     await page.getByTestId('operations-bulk-apply').click()
     const allegro = async () => new Set((await operations(dataDir)).filter((t) => /allegro/i.test(t.counterparty as string)).map((t) => t.categoryId))

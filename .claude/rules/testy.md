@@ -20,6 +20,9 @@ paths:
   `app.evaluate`; okno szybkiego wpisu – `page.evaluate('window.fi.quickOpen()')`; pole kwoty z wartością – najpierw
   klik, potem wpisanie. Testy z należnościami sprzed dziś ustawiają `household.since`. Kod współdzielony E2E importują
   względnie (bez aliasów).
+- Pole kategorii (`operation-category`, `quick-category`, `operations-bulk-category`, `title-rule-category`) to combobox:
+  wybór `pickCategory(scope, testId, nazwa | id)` z `tests/e2e/forms.ts` (lista jest w portalu – szukana na stronie),
+  odczyt `toHaveAttribute('data-value', id)`; „Podziel…” – `splitOperation`.
 - Zmienne testowe: `FI_USER_DATA`, `FI_DATA_DIR`, `FI_MACHINE_NAME`, `FI_DEFAULT_DATA_DIR`, `FI_UPDATE_URL`,
   `FI_UPDATE_CHECK_DELAY_MS`, `FI_UPDATE_TOKEN`, `FI_E2E_EXECUTABLE`, `FI_ICTJ_DIR` / `FI_ICTJ_APPDATA` /
   `FI_ICTJ_LAUNCH`, `FI_SYSTEM_IDLE`, `FI_IDLE_CHECK_MS`, `FI_CONFIG_RETRY_MS`, `FI_CONFIG_WRITE_DELAY_MS`,

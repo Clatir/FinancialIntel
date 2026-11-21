@@ -15,12 +15,16 @@ import { quickPartLines, quickShareAs, quickSurplusInput, restToChoose, senderOw
 import { debtShares, evenShares, surplusView, type SurplusAs, type SurplusShare, type SurplusView } from '@shared/calc/household'
 import { AMOUNT_MASK, AmountField, DateField, plnText, setAmountsHidden, TimeField } from '../../components/fields'
 import { LimitHint, Segmented, cx } from '../../components/ui'
+import { ownsEscape } from '../../components/AnchoredList'
 import { IconClose, IconPlus } from '../../components/icons'
 import { api } from '../../lib/api'
 import type { QuickDraft } from '../../store/quickHost'
 import { useUi } from '../../store/ui'
 import { fieldWords } from './fieldWords'
 import { ForeignField } from '../operations/ForeignField'
+import { CategoryCombobox } from '../operations/CategoryCombobox'
+import { CounterpartyField } from '../operations/CounterpartyField'
+import type { CategoryChoice } from '../operations/pick'
 import { currencyRefusal, DEFAULT_CURRENCY } from '@shared/foreign'
 
 type Kind = QuickDraft['kind']
@@ -318,6 +322,8 @@ export function QuickApp() {
 
   const set = (p: Partial<QuickDraft>) => setD((x) => ({ ...x, ...p }))
   const cats = useMemo(() => new Map((data?.categories ?? []).map((c) => [c.id, c])), [data])
+  // The history's names for the counterparty field (Z7): the most used first, as the officer reads them.
+  const counterpartyNames = useMemo(() => (data?.counterparties ?? []).map((name) => ({ name })), [data?.counterparties])
   const night = d.kind !== 'income' && !!d.time && !!data && inClockWindow(d.time, data.quietHours.from, data.quietHours.to)
   // The lines of the draft as saved: a shared purchase's people, a split receipt's parts, or the purchase itself.
   const parts = useMemo((): Line[] => {
@@ -560,6 +566,8 @@ export function QuickApp() {
     // stays for the next opening. The event stops here – a field cancelling its draft on the same Esc would take it back.
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      // An open list (category, counterparty) closes first; the next Esc is „×”.
+      if (ownsEscape(e.target)) return
       e.preventDefault()
       e.stopPropagation()
       const active = document.activeElement
@@ -777,13 +785,8 @@ export function QuickApp() {
             )}
           </Row>
           <Row label={d.kind === 'income' ? 'Od kogo' : 'Gdzie'}>
-            <input className="input" list="quick-counterparties" value={d.counterparty} onChange={(e) => onCounterparty(e.currentTarget.value)} maxLength={300} placeholder="sklep, usługa, osoba" data-testid="quick-counterparty" />
-            <LimitHint length={d.counterparty.length} max={300} />
-            <datalist id="quick-counterparties">
-              {data.counterparties.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+            {/* The names of the history (Z7, UX-72); one taken goes the way a name typed does – it brings its brand's category into an empty field. */}
+            <CounterpartyField value={d.counterparty} onChange={onCounterparty} history={counterpartyNames} maxLength={300} placeholder="sklep, usługa, osoba" data-testid="quick-counterparty" />
           </Row>
           {d.kind !== 'income' && lines.length <= 1 && (
             <Row label="Kategoria">
@@ -1109,22 +1112,10 @@ export function QuickApp() {
 }
 
 function CategoryPick({ data, value, onChange, testId }: { data: QuickData; value: string | null; onChange: (id: string | null) => void; testId?: string }) {
-  const mains = data.categories.filter((c) => c.mainId === c.id)
-  return (
-    <select className="input min-w-0 flex-1" value={value ?? ''} onChange={(e) => onChange(e.currentTarget.value || null)} aria-label="Kategoria" data-testid={testId}>
-      <option value="">— bez kategorii —</option>
-      {mains.map((m) => (
-        <optgroup key={m.id} label={m.label}>
-          <option value={m.id}>{m.label}</option>
-          {data.categories
-            .filter((c) => c.mainId === m.id && c.id !== m.id)
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-        </optgroup>
-      ))}
-    </select>
+  // The tree as the editor's field has it (Z7): the main categories, each followed by its subcategories.
+  const choices = useMemo<CategoryChoice[]>(
+    () => data.categories.filter((c) => c.mainId === c.id).flatMap((m) => [{ id: m.id, label: m.label, main: true }, ...data.categories.filter((c) => c.mainId === m.id && c.id !== m.id).map((c) => ({ id: c.id, label: c.label, main: false }))]),
+    [data.categories]
   )
+  return <CategoryCombobox className="min-w-0 flex-1" choices={choices} recent={data.recentCategories} value={value} onChange={onChange} data-testid={testId} />
 }

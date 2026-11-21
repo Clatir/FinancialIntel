@@ -6,6 +6,7 @@ import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
+import { pickCategory } from './forms'
 
 const MBANK = '01KDEFACC00000000000000001'
 
@@ -44,7 +45,7 @@ test('meldunki do rozpatrzenia (1.6.0, F6): licznik w menu, wydatek bez kategori
     await expect(page.getByTestId('page-operations')).toBeVisible()
     await expect(page.getByTestId('operation-row')).toHaveCount(1)
     await page.getByTestId('operation-row').click()
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
     await expect(nav).toHaveAttribute('data-badge', '1')
 
     // The balance: confirmed with the bank's – the inbox is empty, the counter gone.

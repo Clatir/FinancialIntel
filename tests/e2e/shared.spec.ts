@@ -6,6 +6,7 @@ import { addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { launch } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
+import { pickCategory, splitOperation } from './forms'
 
 const ACC = '01KDEFACC00000000000000001'
 const FOOD = '01KDEFCAT00000000000000100'
@@ -73,8 +74,8 @@ test('Wspólne finansowanie (D83): kilka osób równo i procentami, prezent babc
     await typeAmount(page, 'operation-amount', '300')
     await page.getByTestId('operation-counterparty').fill('Biedronka')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
-    await page.getByTestId('operation-share-start').click()
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
+    await splitOperation(page, 'people')
     const share = page.getByTestId('operation-share')
     await expect(share.getByTestId('operation-share-line')).toHaveCount(2)
     await share.getByTestId('operation-share-person').nth(1).selectOption({ label: 'Mama' })
@@ -145,8 +146,8 @@ test('Wspólne finansowanie (D83): kilka osób równo i procentami, prezent babc
     await typeAmount(page, 'operation-amount', '50')
     await page.getByTestId('operation-counterparty').fill('Kwiaciarnia')
     await page.getByTestId('operation-counterparty').press('Enter')
-    await page.getByTestId('operation-category').selectOption({ label: 'Jedzenie · zakupy spożywcze' })
-    await page.getByTestId('operation-financer').selectOption({ label: 'prezent od: Dziadek' })
+    await pickCategory(page, 'operation-category', 'Jedzenie · zakupy spożywcze')
+    await page.getByTestId('operation-financer').selectOption({ label: 'prezent dla: Dziadek' })
     await expect(page.getByTestId('operation-financed')).toHaveText('Dziadek: prezent – z osłon 50,00 zł (nikt nic nie jest winien)')
     await expect.poll(async () => {
       const t = await opOf(dir, 'Kwiaciarnia')
@@ -161,7 +162,7 @@ test('Wspólne finansowanie (D83): kilka osób równo i procentami, prezent babc
     // Midday: not the quiet hours, whenever the test runs.
     await quick.getByTestId('quick-time').fill('12:00')
     await quick.getByTestId('quick-time').press('Tab')
-    await quick.getByTestId('quick-category').selectOption(GROCERIES)
+    await pickCategory(quick, 'quick-category', GROCERIES)
     await quick.getByTestId('quick-joint-start').click()
     const joint = quick.getByTestId('quick-joint')
     await joint.getByTestId('quick-joint-person').nth(1).selectOption({ label: 'Tata' })

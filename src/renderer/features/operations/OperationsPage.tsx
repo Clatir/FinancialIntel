@@ -31,7 +31,7 @@ import { Badge, Kbd, cx } from '../../components/ui'
 import { WEEKDAY_PL, parseDateInput, periodLabel, plDate, plural } from '../../lib/format'
 import { OperationEditor } from './OperationEditor'
 import { operationRowText } from './rowText'
-import { CategorySelect, useAccounts, useCategories } from './pickers'
+import { CategoryField, useAccounts, useCategories } from './pickers'
 import { anchorTick, categorizeTicked, clearTicked, clickTickRow, extendTickFromCursor, financeTicked, followCurrentMonth, newOperation, resetFilter, selectOperation, setFilter, showStoredFilter, tickAllVisible, tickOnly, tickOperations, tickRow, useOperationsUi } from './state'
 import { useMembers } from '../household/actions'
 import { useRecordList } from '../../store/records'
@@ -497,7 +497,7 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
       </span>
       <fieldset disabled={readOnly} className="contents">
         <span className="text-muted">kategoria</span>
-        <CategorySelect className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
+        <CategoryField className="h-[24px] min-w-[190px] py-0" value={categoryId} onChange={setCategoryId} emptyLabel="— wybierz kategorię —" data-testid="operations-bulk-category" />
         <select className="input h-[24px] w-[250px] py-0" value={mode} onChange={(e) => setRemember(e.currentTarget.value as typeof remember)} aria-label="Zapamiętaj dla importu" data-testid="operations-bulk-remember">
           <option value="none">bez zapamiętania</option>
           <option value="brands">zapamiętaj dla ich marek (import)</option>
@@ -514,7 +514,7 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
         </button>
         {/* Who finances them (D80 g): a household member, their gift, several people (D83) or me again. */}
         <select
-          className="input h-[24px] w-[170px] py-0"
+          className="input h-[24px] w-[200px] py-0"
           value={financer}
           onChange={(e) => {
             const v = e.currentTarget.value
@@ -530,14 +530,14 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
             .filter((m) => !m.archived)
             .map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                kupione dla: {m.name} (odda)
               </option>
             ))}
           {members
             .filter((m) => !m.archived)
             .map((m) => (
               <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
-                {m.name} – prezent
+                prezent dla: {m.name}
               </option>
             ))}
           {firstMember && <option value="share">wspólnie…</option>}

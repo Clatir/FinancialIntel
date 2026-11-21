@@ -8,6 +8,7 @@ import { importDone, launch } from './app'
 import { json, records } from './files'
 import { listaCsv } from './mbank-csv'
 import { seedFolder, zl } from './seed'
+import { pickCategory } from './forms'
 
 // AP-33 (D100 (1)): the cash is kept on the account „Gotówka” – an ATM withdrawal of the import is an own transfer
 // mBank → Gotówka (no cost), the purchases paid with the cash are expenses from it (the quick entry, Operacje).
@@ -88,7 +89,7 @@ test('AP-33: wypłata z bankomatu – przelew mBank → Gotówka; zakupy gotówk
     await quick.getByTestId('quick-amount').fill('55,36')
     await quick.getByTestId('quick-amount').press('Tab')
     await quick.getByTestId('quick-counterparty').fill('Piekarnia')
-    await quick.getByTestId('quick-category').selectOption(FOOD)
+    await pickCategory(quick, 'quick-category', FOOD)
     await quick.getByTestId('quick-account').selectOption({ label: 'Gotówka' })
     await quick.getByTestId('quick-save').click()
     // In the quiet hours (23:00–05:00) a note and a confirmation first (testy.md).

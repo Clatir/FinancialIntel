@@ -4,6 +4,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { startPhoneServer, seedDrive, zl, type PhoneServer } from './server'
+import { pickCategory } from '../e2e/forms'
 
 const FOLDER = 'FinancialIntel'
 const CLIENT = '0a1b2c3d-1111-2222-3333-444455556666'
@@ -82,7 +83,7 @@ test('Operacje: zaznaczone dostają kategorię, widok zapisany, eksport CSV do u
   await expect(page.locator('[data-testid="operation-row"][data-ticked="1"]')).toHaveCount(2)
   const bulk = page.getByTestId('phone-bulk')
   await expect(bulk.getByTestId('operations-bulk-count')).toContainText('Zaznaczone: 2')
-  await bulk.getByTestId('operations-bulk-category').selectOption(FOOD)
+  await pickCategory(bulk, 'operations-bulk-category', FOOD)
   await bulk.getByTestId('operations-bulk-apply').click()
   await expect.poll(() => driveRecords('transactions').filter((t) => String(t.counterparty).startsWith('Kawiarnia')).map((t) => t.categoryId), { timeout: 20_000 }).toEqual([FOOD, FOOD])
   await page.getByTestId('phone-operations-pick').click()

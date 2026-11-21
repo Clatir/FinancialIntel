@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import { categoryIndex, type CategoryIndex } from '@shared/calc/operations'
 import type { Account, Category } from '@shared/schema'
-import { useData } from '../../store/data'
+import { listOf, useData } from '../../store/data'
 import { cx } from '../../components/ui'
+import { CategoryCombobox } from './CategoryCombobox'
+import { categoryChoices, recentCategoryIds } from './pick'
 
 const NO_CATEGORIES: Category[] = []
 const NO_ACCOUNTS: Account[] = []
@@ -101,6 +103,30 @@ export function CategorySelect({
       {value && !cats.byId.has(value) && <option value={value}>(usunięta kategoria)</option>}
     </select>
   )
+}
+
+/**
+ * The category field of the editor, the bulk bar and the title rule's window (Z7, UX-70): the tree with a search by a
+ * fragment and the newest operations' categories on top (`CategoryCombobox`). `''` = without a category. The import,
+ * the cargo and the buoys keep `CategorySelect` (hundreds of rows, one select each – W17).
+ */
+export function CategoryField({
+  value,
+  onChange,
+  className,
+  emptyLabel,
+  ...rest
+}: {
+  value: string | null
+  onChange: (id: string | null) => void
+  className?: string
+  emptyLabel?: string
+  'aria-label'?: string
+  'data-testid'?: string
+}) {
+  const cats = useCategories()
+  const recent = useData((s) => recentCategoryIds(listOf(s.records.transactions)))
+  return <CategoryCombobox choices={categoryChoices(cats, value)} recent={recent} value={value} onChange={onChange} className={className} emptyLabel={emptyLabel} {...rest} />
 }
 
 /** An account of the budget (an archived one only when it is the current value); `none` = an extra first choice. */
