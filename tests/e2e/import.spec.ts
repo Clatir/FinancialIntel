@@ -120,8 +120,20 @@ test('Import CSV z mBanku: dopasowanie wpisu ręcznego, kategoryzacja grupami, r
     await search.fill('')
     await page.screenshot({ path: join('test-results', 'screens', '06-import.png') })
 
+    // The bar at the bottom (UX-39): the button and what comes in without a category; „Pokaż” goes to the themes to decide.
+    const bar = page.getByTestId('import-bar')
+    await expect(bar.getByTestId('import-run')).toHaveText(/^Importuj \(\d+\)$/)
+    const undecided = Number(await bar.getAttribute('data-undecided'))
+    expect(undecided).toBeGreaterThan(0)
+    await expect(bar.getByTestId('import-bar-undecided')).toContainText(`bez decyzji: ${undecided}`)
+    await expect(bar.getByTestId('import-bar-warning')).toContainText('bez kategorii')
+    await bar.getByTestId('import-bar-show').click()
+    await expect(page.getByTestId('import-section-todo')).toBeVisible()
+
     await page.getByTestId('import-run').click()
     await importDone(page, userData)
+    // The rest to categorize: Operacje with the filter „bez kategorii” (UX-39).
+    await expect(page.getByTestId('import-categorize-rest')).toContainText('Skategoryzuj pozostałe')
     await expect(page.getByTestId('import-done')).toContainText('Nowe: 265')
     await expect(page.getByTestId('import-done')).toContainText('połączone z wpisami: 1')
     await expect(page.getByTestId('import-done')).toContainText('nie importowane (Twój wybór): 3')

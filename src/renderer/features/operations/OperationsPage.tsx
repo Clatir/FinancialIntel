@@ -15,6 +15,7 @@ import { CompactContext } from '../../components/compact'
 import { ColumnsMenu, ExportVisible, MoreFilters, SortHeader, ViewsBar, viewable } from './ListTools'
 import { columnsTemplate, useOperationColumns, type OperationColumn } from './columns'
 import { keywordOfSearch } from '../import/rules'
+import { REMEMBER_NOTE } from '../import/notes'
 import { TX_KIND_LABEL, TX_KINDS, type Transaction, type TxKind } from '@shared/schema'
 import { canWrite, discardDraft, listOf, useData, useFolderLocked } from '../../store/data'
 import { useFleet, useMinute } from '../../store/fleet'
@@ -564,6 +565,12 @@ export function BulkBar({ visible }: { visible: readonly Transaction[] }) {
           Ustaw finansującego
         </button>
       </fieldset>
+      {/* UX-62: the same sentence as „zapamiętaj” in Import says what the remembered choice is. */}
+      {mode !== 'none' && (
+        <span className="basis-full text-[11px] text-dim" data-testid="operations-bulk-remember-note">
+          {REMEMBER_NOTE}
+        </span>
+      )}
       <BulkChangeBar shown={shown} readOnly={readOnly} />
       <button type="button" className="btn btn-ghost h-[24px]" onClick={clearTicked} data-testid="operations-bulk-clear">
         Odznacz
