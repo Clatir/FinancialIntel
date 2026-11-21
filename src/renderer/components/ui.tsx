@@ -178,31 +178,55 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
  * record's history (main keeps another computer's version whenever it is overwritten).
  */
 function useTextDraft(value: string, onChange: (v: string) => void, commit: boolean | undefined, multiline: boolean) {
+  return useTextDraftState(value, onChange, commit, multiline).props
+}
+
+/** The props of a text input kept by `useTextDraftState` (`onBlur` / `onKeyDown` only with `commit`). */
+export interface TextDraftProps {
+  value: string
+  onChange: (e: { currentTarget: { value: string } }) => void
+  onBlur?: () => void
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => void
+}
+
+/**
+ * `useTextDraft` with the way to throw the draft away at once (`discard`): a field that takes its value another way (a
+ * suggestion picked) must not apply the typed text on leaving – `CounterpartyField`.
+ */
+export function useTextDraftState(
+  value: string,
+  onChange: (v: string) => void,
+  commit: boolean | undefined,
+  multiline: boolean
+): { props: TextDraftProps; discard: () => void } {
   const [draft, setDraft] = useState<{ text: string; base: string } | null>(null)
   // Escape: the blur it causes runs with this render's draft – it must not apply it.
   const cancelled = useRef(false)
-  if (!commit) return { value, onChange: (e: { currentTarget: { value: string } }) => onChange(e.currentTarget.value) }
+  if (!commit) return { props: { value, onChange: (e) => onChange(e.currentTarget.value) }, discard: () => undefined }
   return {
-    value: draft?.text ?? value,
-    onChange: (e: { currentTarget: { value: string } }) => {
-      const text = e.currentTarget.value
-      setDraft((d) => ({ text, base: d?.base ?? value }))
-    },
-    onBlur: () => {
-      if (draft && !cancelled.current && draft.text !== value) {
-        onChange(draft.text)
-        if (value !== draft.base) toast('Ten tekst zmienił się w międzyczasie na innym komputerze – zapisano Twoją wersję, tamta jest w historii wpisu.', 'info', 8000)
-      }
-      cancelled.current = false
-      setDraft(null)
-    },
-    onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && (!multiline || e.ctrlKey)) e.currentTarget.blur()
-      if (e.key === 'Escape' && draft != null) {
-        e.stopPropagation()
-        cancelled.current = true
+    discard: () => setDraft(null),
+    props: {
+      value: draft?.text ?? value,
+      onChange: (e) => {
+        const text = e.currentTarget.value
+        setDraft((d) => ({ text, base: d?.base ?? value }))
+      },
+      onBlur: () => {
+        if (draft && !cancelled.current && draft.text !== value) {
+          onChange(draft.text)
+          if (value !== draft.base) toast('Ten tekst zmienił się w międzyczasie na innym komputerze – zapisano Twoją wersję, tamta jest w historii wpisu.', 'info', 8000)
+        }
+        cancelled.current = false
         setDraft(null)
-        e.currentTarget.blur()
+      },
+      onKeyDown: (e) => {
+        if (e.key === 'Enter' && (!multiline || e.ctrlKey)) e.currentTarget.blur()
+        if (e.key === 'Escape' && draft != null) {
+          e.stopPropagation()
+          cancelled.current = true
+          setDraft(null)
+          e.currentTarget.blur()
+        }
       }
     }
   }

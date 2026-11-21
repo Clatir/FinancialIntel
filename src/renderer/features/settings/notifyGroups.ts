@@ -64,6 +64,13 @@ export function notifyCount(n: NotifyPrefs, keys: readonly NotifyKey[] = NOTIFY_
   return { on: keys.filter((k) => n[k]).length, all: keys.length }
 }
 
+/** The switches of `keys` as they were in `before`; what was changed since in the others (and the hours) stays as it is in `current`. */
+export function notifyRestore(current: NotifyPrefs, before: NotifyPrefs, keys: readonly NotifyKey[]): NotifyPrefs {
+  const next = { ...current }
+  for (const k of keys) next[k] = before[k]
+  return next
+}
+
 /** The switches of `keys` all set to `on`; the rest (the hours) as they were. */
 export function notifySetAll(n: NotifyPrefs, keys: readonly NotifyKey[], on: boolean): NotifyPrefs {
   const next = { ...n }

@@ -25,7 +25,7 @@ import { useFleet } from '../../store/fleet'
 import { useGameView } from '../../store/game'
 import { useRecordList } from '../../store/records'
 import { toast } from '../../store/ui'
-import { api } from '../../lib/api'
+import { api, errorMessage } from '../../lib/api'
 import { orderRange, swappedText } from '../../lib/guards'
 import { DateField, plnText } from '../../components/fields'
 import { Columns } from '../../components/layout'
@@ -51,7 +51,7 @@ const TABS: Array<{ value: Tab; label: string }> = [
 
 /** A file saved (UX-85): where, and the way to it – „Pokaż w folderze” opens the file manager on the file. */
 const saved = (path: string | null) => {
-  if (path) toast(`Zapisano: ${path}`, 'success', 6000, { label: 'Pokaż w folderze', run: () => void api.showPath(path).catch(() => undefined) })
+  if (path) toast(`Zapisano: ${path}`, 'success', 6000, { label: 'Pokaż w folderze', run: () => void api.showPath(path).catch((e: unknown) => toast(errorMessage(e), 'error')) })
 }
 const NO_OPERATIONS = 'Brak operacji w okresie.'
 const NO_MONTHS = 'Brak miesięcy w okresie.'

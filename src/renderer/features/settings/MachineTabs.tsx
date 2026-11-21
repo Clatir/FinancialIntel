@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { layersEffect, type LayersLine } from '@shared/calc/effect'
-import { salariesText } from '@shared/format'
+import { countLabel, salariesText } from '@shared/format'
 import { HIDE_IDLE_CHOICES, SOUND_KINDS, SOUND_LABEL, ZOOM_MAX, ZOOM_MIN, shortcutLabel } from '@shared/machine'
 import { briefingAt, eveningAt } from '@shared/notify'
 import { BRIEFING_FROM } from '@shared/notifyPlan'
@@ -13,9 +13,9 @@ import { setMachinePrefs, useMachine } from '../../store/machine'
 import { AmountField, plnText, TimeField } from '../../components/fields'
 import { ShortcutField } from '../../components/ShortcutField'
 import { cx, Field, NumberField, Panel, Toggle } from '../../components/ui'
-import { navigate, toast } from '../../store/ui'
+import { navigate, toast, UNDO_MIN_MS } from '../../store/ui'
 import { MachineOnly } from './MachineOnly'
-import { NOTIFY_GROUPS, NOTIFY_KEYS, notifyCount, notifySetAll, type NotifyKey } from './notifyGroups'
+import { NOTIFY_GROUPS, NOTIFY_KEYS, notifyCount, notifyRestore, notifySetAll, type NotifyKey } from './notifyGroups'
 
 type LayersPatch = Partial<Pick<LayersSettings, 'shieldSalaries' | 'hullMonths' | 'assumedCosts'>>
 
@@ -456,7 +456,17 @@ export function NotifyTab() {
   // The briefing's hour in the quiet hours (D99 pkt 7): it comes at their end – said where it is set.
   const briefingShift = quiet && n.briefingTime && briefingAt(n.briefingTime, quiet) !== n.briefingTime ? briefingAt(n.briefingTime, quiet) : null
   const total = notifyCount(n)
-  const setAll = (keys: readonly NotifyKey[], on: boolean) => void setMachinePrefs({ notify: notifySetAll(n, keys, on) })
+  // A bulk change of the switches: with „Cofnij” (the switches of these keys as they were; a later change of another stays).
+  const setAll = (keys: readonly NotifyKey[], on: boolean) => {
+    const before = n
+    const changed = keys.filter((k) => before[k] !== on)
+    void setMachinePrefs({ notify: notifySetAll(before, keys, on) })
+    if (!changed.length) return
+    toast(`Powiadomienia ${on ? 'włączone' : 'wyłączone'}: ${countLabel(changed.length, 'przełącznik', 'przełączniki', 'przełączników')}.`, 'info', UNDO_MIN_MS, {
+      label: 'Cofnij',
+      run: () => void setMachinePrefs({ notify: notifyRestore(useMachine.getState().prefs.notify, before, changed) })
+    })
+  }
   return (
     <>
       <Panel

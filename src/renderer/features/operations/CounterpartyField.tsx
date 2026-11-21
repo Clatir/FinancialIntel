@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { AnchoredList } from '../../components/AnchoredList'
-import { cx, LimitHint } from '../../components/ui'
+import { cx, LimitHint, useTextDraftState } from '../../components/ui'
 import { suggestCounterparties } from './pick'
 
 /** A counterparty of the history with what picking it may bring along (`categoryId`: the category last used with it). */
@@ -43,14 +43,13 @@ export function CounterpartyField({
   const testId = rest['data-testid']
   const listId = useId()
   const input = useRef<HTMLInputElement>(null)
-  const [draft, setDraft] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   // -1: nothing highlighted – Enter is not the list's.
   const [active, setActive] = useState(-1)
-  // Escape cancelling the draft: the blur it causes must not apply it.
-  const cancelled = useRef(false)
-
-  const text = draft ?? value
+  // The draft of a record's field is the text field's own (`useTextDraft`): applied on leaving, Esc throws it away, the
+  // text changed meanwhile on another computer says so.
+  const { props: draft, discard } = useTextDraftState(value, onChange, commit, false)
+  const text = draft.value
   const found = open ? suggestCounterparties(history, text) : []
   const at = (i: number) => `${listId}-${i}`
 
@@ -59,7 +58,7 @@ export function CounterpartyField({
   })
 
   const pick = (s: CounterpartySuggestion) => {
-    setDraft(null)
+    discard()
     setOpen(false)
     setActive(-1)
     if (onPick) onPick(s)
@@ -84,18 +83,14 @@ export function CounterpartyField({
         value={text}
         data-testid={testId}
         onChange={(e) => {
-          const v = e.currentTarget.value
-          if (commit) setDraft(v)
-          else onChange(v)
+          draft.onChange(e)
           setOpen(true)
           setActive(-1)
         }}
         onBlur={() => {
           setOpen(false)
           setActive(-1)
-          if (commit && draft != null && !cancelled.current && draft !== value) onChange(draft)
-          cancelled.current = false
-          setDraft(null)
+          draft.onBlur?.()
         }}
         onKeyDown={(e) => {
           if (e.ctrlKey || e.metaKey || e.altKey) return
@@ -113,7 +108,7 @@ export function CounterpartyField({
               e.preventDefault()
               e.stopPropagation()
               pick(s)
-            } else if (commit) e.currentTarget.blur()
+            } else draft.onKeyDown?.(e)
           } else if (e.key === 'Escape') {
             if (open && found.length > 0) {
               // Only the list closes; the next Esc is the field's own.
@@ -121,12 +116,7 @@ export function CounterpartyField({
               e.stopPropagation()
               setOpen(false)
               setActive(-1)
-            } else if (commit && draft != null) {
-              e.stopPropagation()
-              cancelled.current = true
-              setDraft(null)
-              e.currentTarget.blur()
-            }
+            } else draft.onKeyDown?.(e)
           }
         }}
       />

@@ -114,7 +114,7 @@ export function MachineSetupDialog() {
         {set('ictj')}
       </Row>
       <Row label="Skrót szybkiego wpisu" state={shortcut ? shortcutLabel(shortcut) : 'bez skrótu'} ok={!!shortcut} testId="machine-setup-shortcut">
-        {set('notify')}
+        {set('system')}
       </Row>
       <Row
         label="Start z Windows"
