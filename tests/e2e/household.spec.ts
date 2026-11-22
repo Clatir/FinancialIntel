@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, quickWindow } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 import { pickCategory } from './forms'
@@ -23,15 +23,6 @@ async function typeAmount(page: Page, target: string | Locator, text: string) {
   await field.click()
   await field.fill(text)
   await field.press('Enter')
-}
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
 }
 
 test('Domownicy (D80): osoba w ustawieniach, wydatek „finansuje”, wpłata z zaliczką, zaznaczone hurtem, szybki wpis, Mostek, Radar, debriefing', async () => {

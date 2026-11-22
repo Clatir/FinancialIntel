@@ -89,7 +89,7 @@ function rowKey(e: ReactKeyboardEvent<HTMLDivElement>, id: string, getOrder: () 
   } else if (e.key === 'ContextMenu' || (e.key === MENU_FUNCTION_KEY && e.shiftKey)) {
     e.preventDefault()
     const r = e.currentTarget.getBoundingClientRect()
-    openOperationsMenu(id, r.left + 48, r.bottom)
+    openOperationsMenu(id, r.left + 48, r.bottom, { byKey: true })
   }
 }
 

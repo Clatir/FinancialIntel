@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { CASH_ACCOUNT_ID, CASH_CATEGORY_ID, MBANK_ACCOUNT_ID } from '../../src/shared/schema/budget'
-import { importDone, launch } from './app'
+import { importDone, launch, quickWindow } from './app'
 import { json, records } from './files'
 import { listaCsv } from './mbank-csv'
 import { seedFolder, zl } from './seed'
@@ -13,14 +13,6 @@ import { pickCategory } from './forms'
 // AP-33 (D100 (1)): the cash is kept on the account „Gotówka” – an ATM withdrawal of the import is an own transfer
 // mBank → Gotówka (no cost), the purchases paid with the cash are expenses from it (the quick entry, Operacje).
 const FOOD = '01KDEFCAT00000000000000100'
-
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 async function typeAmount(target: Locator, text: string) {
   await target.click()

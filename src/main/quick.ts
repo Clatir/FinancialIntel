@@ -24,6 +24,8 @@ const HEIGHT = 600
 
 export class QuickEntry {
   private win: BrowserWindow | null = null
+  private ready = false
+  private shown = false
   private accelerator = ''
   private registered = false
   /** The shortcut config.json had before the start replaced it (it took a Polish letter – B29): told to the window once. */
@@ -54,17 +56,23 @@ export class QuickEntry {
       if (main && !main.isDestroyed()) main.webContents.send('fi:quickAdd', draft)
       else this.send('fi:quickResult', { ok: false, message: 'Główne okno nie działa – otwórz aplikację.' } satisfies QuickResult)
     })
-    // The quick window's renderer starts after the first request went out: it asks again when it is ready.
+    // The quick window's renderer is ready: if the window is already shown (opened before its renderer mounted), it gets
+    // its data now; if it was only pre-created hidden in the background, `show()` will ask once it opens (T560).
     ipcMain.handle('fi:quickRefresh', (e) => {
       if (!fromQuick(e)) return
-      const main = d.main()
-      if (main && !main.isDestroyed()) main.webContents.send('fi:quickRequest')
-      else this.send('fi:quickData', null)
+      this.ready = true
+      if (this.shown || this.isOpen) this.requestData()
     })
     ipcMain.handle('fi:quickClose', (e) => {
       if (fromQuick(e)) this.hide()
     })
     ipcMain.handle('fi:quickShortcutState', () => ({ accelerator: this.accelerator, registered: this.registered, replaced: this.replaced }))
+  }
+
+  private requestData(): void {
+    const main = this.d.main()
+    if (main && !main.isDestroyed()) main.webContents.send('fi:quickRequest')
+    else this.send('fi:quickData', null)
   }
 
   private send(channel: string, payload: unknown): void {
@@ -91,6 +99,8 @@ export class QuickEntry {
       webPreferences: { preload: this.d.preload, contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
     })
     this.win = win
+    this.ready = false
+    this.shown = false
     win.setAlwaysOnTop(true, 'floating')
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     win.webContents.on('will-navigate', (e, url) => {
@@ -101,11 +111,16 @@ export class QuickEntry {
     win.on('close', (e) => {
       if (!this.quitting) {
         e.preventDefault()
+        this.shown = false
         win.hide()
       }
     })
     win.on('closed', () => {
-      if (this.win === win) this.win = null
+      if (this.win === win) {
+        this.win = null
+        this.ready = false
+        this.shown = false
+      }
     })
     // The main window sends updates only while the window is shown (B125: its data costs a pass over the operations).
     const visible = (on: boolean) => {
@@ -113,13 +128,20 @@ export class QuickEntry {
       if (main && !main.isDestroyed()) main.webContents.send('fi:quickVisible', on)
     }
     win.on('show', () => visible(true))
-    win.on('hide', () => visible(false))
+    win.on('hide', () => {
+      this.shown = false
+      visible(false)
+    })
     // Its renderer gone (a GPU failure, out of memory – B124): the frameless window on top would stay dead under the
     // shortcut – it goes, the next shortcut makes a new one.
     win.webContents.on('render-process-gone', (_e, details) => {
       if (details.reason === 'clean-exit') return
       this.d.log('warn', `szybki wpis: okno przestało działać (${details.reason}) – zostanie utworzone od nowa`)
-      if (this.win === win) this.win = null
+      if (this.win === win) {
+        this.win = null
+        this.ready = false
+        this.shown = false
+      }
       visible(false)
       if (!win.isDestroyed()) win.destroy()
     })
@@ -129,12 +151,11 @@ export class QuickEntry {
 
   private quitting = false
 
-  /** Show it centred on the display with the cursor; the main window sends fresh data first. */
+  /** Show it centred on the display with the cursor; the main window sends fresh data once (when ready, or on `quickRefresh` – T560). */
   show(): void {
     const win = this.ensure()
-    const main = this.d.main()
-    if (main && !main.isDestroyed()) main.webContents.send('fi:quickRequest')
-    else this.send('fi:quickData', null)
+    this.shown = true
+    if (this.ready) this.requestData()
     const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
     this.fit(win, area)
     const [w, h] = win.getSize() as [number, number]
@@ -144,6 +165,7 @@ export class QuickEntry {
   }
 
   hide(): void {
+    this.shown = false
     if (this.win && !this.win.isDestroyed()) this.win.hide()
   }
 

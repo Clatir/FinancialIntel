@@ -13,6 +13,7 @@ import { AmountField, plnText } from '../../components/fields'
 import { IconClose, IconPlus } from '../../components/icons'
 import { Segmented, cx } from '../../components/ui'
 import { rememberInflows, sureCoversOf, useMembers } from './actions'
+import { financerOptionLabel } from './financeWords'
 import { RepaymentPicker, useLedgerBefore } from './Repayments'
 import { loanToName, useLoanChoices } from '../radar/loanChoices'
 import { SurplusPanel, surplusInputOf } from './SurplusPanel'
@@ -69,12 +70,12 @@ export function FinancerSelect({
       <option value="">{compact ? 'ja' : back ? '— ja (mój zakup) —' : '— ja (mój wydatek) —'}</option>
       {offered.map((m) => (
         <option key={m.id} value={`pay:${m.id}`}>
-          {compact ? m.name : back ? `zakup: ${m.name}` : `kupione dla: ${m.name} (odda)`}
+          {financerOptionLabel(m.name, { gift: false, compact, back })}
         </option>
       ))}
       {offered.map((m) => (
         <option key={`gift:${m.id}`} value={`gift:${m.id}`}>
-          {compact ? `${m.name} – prezent` : back ? `prezent od: ${m.name} (zwrot do osłon)` : `prezent dla: ${m.name}`}
+          {financerOptionLabel(m.name, { gift: true, compact, back })}
         </option>
       ))}
     </select>

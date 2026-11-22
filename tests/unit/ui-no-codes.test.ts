@@ -67,6 +67,17 @@ describe('AP-23: kody decyzji i teksty robocze nie trafiają do interfejsu', () 
     expect(found).toEqual([])
   })
 
+  it('bieżąca sekcja CHANGELOG.md (pokazywana w Ustawienia → Aktualizacje) nie zawiera kodów decyzji', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }
+    const lines = readFileSync('CHANGELOG.md', 'utf8').replace(/\r\n/g, '\n').split('\n')
+    const start = lines.findIndex((l) => l.trim() === `## ${pkg.version}`)
+    expect(start).toBeGreaterThanOrEqual(0)
+    const next = lines.findIndex((l, i) => i > start && l.startsWith('## '))
+    const section = lines.slice(start + 1, next > start ? next : lines.length)
+    const found = section.filter((l) => CODE.test(l))
+    expect(found).toEqual([])
+  })
+
   it('skaner numerów wersji wyłapuje „1.2.3” w tekście, a ścieżkę SVG i zwykłe liczby przepuszcza', () => {
     expect(VERSION.test('title="Połączenia z 1.2.2 zrobione na nazwach"')).toBe(true)
     expect(VERSION.test('Zakupy oznaczone przed 1.3.0 („do zwrotu”)')).toBe(true)

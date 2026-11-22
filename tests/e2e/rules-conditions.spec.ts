@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { importDone, launch, MASS } from './app'
+import { importDone, launch, MASS, quickWindow } from './app'
 import { records } from './files'
 import { seedFolder, seedId } from './seed'
 import { pickCategory } from './forms'
@@ -11,14 +11,6 @@ import { pickCategory } from './forms'
 // by it, its audit, and its hint („także dla wpisów ręcznych”) in the operation's editor and the quick entry.
 const FIXTURE = resolve('tests', 'fixtures', 'mbank', 'lista_operacji.csv')
 const OUTINGS = '01KDEFCAT00000000000000601'
-
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 const rulesOf = (dataDir: string) => JSON.parse(readFileSync(join(dataDir, 'fi.json'), 'utf8')).settings.import.rules as Array<Record<string, unknown>>
 

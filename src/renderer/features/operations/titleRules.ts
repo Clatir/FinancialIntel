@@ -160,6 +160,7 @@ function editorEdit(id: string | undefined, applied: EditorEdit['applied'] | und
   if (!applied) return null
   const was = id ? (useData.getState().records.transactions[id]?.record as Fields | undefined) : undefined
   const wasDraft = !!id && !!useData.getState().drafts[id]
+  const prevAsk = id ? useGuard.getState().asks.find((a) => a.id === id) : undefined
   const waiting = new Set(useGuard.getState().asks.map((a) => a.seq))
   const set = applied() as Fields | undefined
   if (!id || !was || !set) return null
@@ -167,9 +168,13 @@ function editorEdit(id: string | undefined, applied: EditorEdit['applied'] | und
   if (!fields.length) return null
   // The edit's own question (F12), when it asked one; a later typing of the operation replaces it (`askGuard`).
   const question = useGuard.getState().asks.find((a) => a.id === id && !waiting.has(a.seq))?.seq
-  const written = wasDraft && !useData.getState().drafts[id]
   return () => {
-    if (question != null && useGuard.getState().asks.some((a) => a.seq === question)) return answerGuard(question, false)
+    if (question != null && useGuard.getState().asks.some((a) => a.seq === question)) {
+      if (prevAsk) useGuard.setState((s) => ({ asks: s.asks.map((a) => (a.seq === question ? prevAsk : a)) }))
+      else answerGuard(question, false)
+      return
+    }
+    const written = wasDraft && !useData.getState().drafts[id]
     const cur = useData.getState().records.transactions[id]?.record as Fields | undefined
     // Already as before (taken back by hand, or the edit dropped at its question): nothing to do.
     if (cur && fields.every((k) => deepEqual(cur[k], was[k]))) return
@@ -258,8 +263,9 @@ async function confirmTitleRule(plan: BulkPlan, rule: KeywordRuleInput, what: st
   const after = rulesNow()
   let editBack: (() => void) | null = null
   const undoRule = () => {
-    if (undoRules(before, after).kept) toast(`Reguła dla tytułu ${what} zmieniła się od tego czasu – zostaje, jak jest.`, 'info', 6000)
-    editBack?.()
+    const { kept } = undoRules(before, after)
+    if (kept) toast(`Reguła dla tytułu ${what} zmieniła się od tego czasu – zostaje, jak jest.`, 'info', 6000)
+    else editBack?.()
   }
   const written = await applyBulk(plan, what, { keepTicked: true, note: ' · reguła zapamiętana dla kolejnych importów', undoMore: undoRule })
   // Nothing of the history written: neither is the rule kept – never half of what the preview said.

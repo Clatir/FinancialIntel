@@ -1,13 +1,35 @@
 // adapted from ICTTJ src/renderer/store/ui.ts @ 84a8339
 import { create } from 'zustand'
-import { readSettingsTab } from '../features/settings/settingsNav'
 
 /** Screens of the side menu (docs/specyfikacja.md, „Ekrany”). */
 export type Page = 'bridge' | 'operations' | 'import' | 'month' | 'cargo' | 'starmap' | 'radar' | 'command' | 'intel' | 'reports' | 'settings' | 'sync' | 'wizard' | 'inbox'
 
 export type Route = { page: Exclude<Page, 'settings'> } | { page: 'settings'; tab?: SettingsTab }
 
-export type SettingsTab = 'general' | 'accounts' | 'categories' | 'layers' | 'household' | 'import' | 'ictj' | 'notify' | 'view' | 'folder' | 'system' | 'updates'
+export const SETTINGS_TAB_IDS = ['general', 'accounts', 'categories', 'layers', 'household', 'import', 'ictj', 'notify', 'view', 'folder', 'system', 'updates'] as const
+export type SettingsTab = (typeof SETTINGS_TAB_IDS)[number]
+
+export const isSettingsTab = (v: unknown): v is SettingsTab => typeof v === 'string' && (SETTINGS_TAB_IDS as readonly string[]).includes(v)
+
+const SETTINGS_TAB_KEY = 'fi.settings.tab'
+
+/** The tab shown last, on this computer (`localStorage`, like the other small choices of the view); none = `general`. */
+export function readSettingsTab(): SettingsTab {
+  try {
+    const v = localStorage.getItem(SETTINGS_TAB_KEY)
+    return isSettingsTab(v) ? v : 'general'
+  } catch {
+    return 'general'
+  }
+}
+
+export function rememberSettingsTab(tab: SettingsTab): void {
+  try {
+    localStorage.setItem(SETTINGS_TAB_KEY, tab)
+  } catch {
+    // A full or blocked storage: the memory is only a convenience.
+  }
+}
 
 export interface Toast {
   id: number

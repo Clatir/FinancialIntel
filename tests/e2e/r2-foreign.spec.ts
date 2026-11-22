@@ -5,18 +5,9 @@ import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { warsawNow } from '../../src/shared/calc/dates'
 import { defaultCategoryId, MBANK_ACCOUNT_ID } from '../../src/shared/schema/budget'
-import { launch } from './app'
+import { launch, quickWindow } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 /**
  * AP-48 (1.17.0, R2 – T492, T493): „kwota w walucie” – information beside the złoty: typed in the editor (folded „+ kwota

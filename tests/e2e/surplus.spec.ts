@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { importDone, launch } from './app'
+import { importDone, launch, quickWindow } from './app'
 import { json, records } from './files'
 import { CSV_NUMBER, listaCsv } from './mbank-csv'
 import { seedFolder, zl } from './seed'
@@ -14,14 +14,6 @@ const ACC = '01KDEFACC00000000000000001'
 const GROCERIES = '01KDEFCAT00000000000000101'
 const MAMA = '01KMEMMAMA0000000000000001'
 const TATA = '01KMEMTATA0000000000000002'
-
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 async function typeAmount(page: Page, target: string | Locator, text: string) {
   const field = typeof target === 'string' ? page.getByTestId(target) : target

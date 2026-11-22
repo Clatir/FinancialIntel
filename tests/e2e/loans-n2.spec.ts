@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { MBANK_ACCOUNT_ID } from '../../src/shared/schema/budget'
-import { importDone, launch } from './app'
+import { importDone, launch, quickWindow } from './app'
 import { json, records } from './files'
 import { listaCsv } from './mbank-csv'
 import { seedFolder, zl } from './seed'
@@ -16,14 +16,6 @@ const MAMA = '01KMEMMAMA0000000000000001'
 const JAN = '01KN2EJAN00000000000000001'
 const mama = { id: MAMA, name: 'Mama', bankNames: ['ANNA NOWAK'], inflow: 'income', archived: false, via: null, opening: { owed: 0, deposit: 0 } }
 type Split = { memberId: string | null; loanId?: string; amount: number }
-
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 async function typeAmount(target: Locator, text: string) {
   await target.click()

@@ -709,6 +709,70 @@ describe('„Cofnij” reguły tytułu – poprawki przeglądu U1 (T550)', () =>
       setAmountsHidden(false)
     }
   })
+
+  it('z podglądem, otwarta to szkic, a reguła zmieniona od tego czasu: „Cofnij” zostawia regułę i edycję szkicu (T558)', async () => {
+    const past = tx({ date: '2024-03-01', amount: 1000, title: 'Zwrot od ubezpieczyciela' })
+    const draft = tx({ title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([past, draft])
+    asDraft(draft.id)
+    applyTitleRule({ ...income, updateHistory: true }, draft, editor(draft.id, toIncome, true))
+    useBulkPreview.getState().preview!.apply!()
+    await settle()
+    data.updateSettings((f) => ({ ...f, settings: { ...f.settings, import: { ...f.settings.import, rules: f.settings.import.rules.map((r) => ({ ...r, household: true })) } } }))
+    ui.useUi.getState().toasts.find((t) => t.text.startsWith('Zastosowano regułę'))!.action!.run()
+    expect(rec(past.id)).toMatchObject({ kind: 'expense', amount: 1000 })
+    expect(rulesNow()).toHaveLength(1)
+    expect(rec(draft.id)).toMatchObject({ kind: 'income', amount: 1000 })
+  })
+
+  it('szkic zapisany dopiero po „Zmień mimo to” (F12): „Cofnij” mówi, że nowy wpis zostaje zapisany (T558)', async () => {
+    const draft = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([draft])
+    asDraft(draft.id)
+    confirmedBalance()
+    const asks = await guard()
+    const { answerGuard } = await import('../../src/renderer/store/guard')
+    applyTitleRule(income, draft, () => {
+      updateOperation(
+        draft.id,
+        (r) => ({ ...r, ...toIncome }),
+        false,
+        () => data.useData.setState((s) => {
+          const next = { ...s.drafts }
+          delete next[draft.id]
+          return { drafts: next }
+        })
+      )
+      return toIncome
+    })
+    // Before „Zmień mimo to” the operation is still a draft.
+    expect(data.useData.getState().drafts[draft.id]).toBe(true)
+    answerGuard(asks.getState().asks[0]!.seq, true)
+    expect(data.useData.getState().drafts[draft.id]).toBeUndefined()
+    // „Cofnij” asks at the confirmed balance too; once answered, it says the new entry stays written.
+    lastToast()!.action!.run()
+    answerGuard(asks.getState().asks[0]!.seq, true)
+    expect(rec(draft.id)).toMatchObject({ kind: 'expense', amount: -1000, categoryId: FOOD })
+    expect(lastToast()!.text).toBe('Nowy wpis zostaje zapisany, z polami sprzed reguły.')
+  })
+
+  it('wcześniejsze pytanie F12 tej operacji zastąpione przez edycję reguły wraca po „Cofnij” reguły (T558)', async () => {
+    const a = tx({ date: '2026-10-05', title: 'Zwrot od ubezpieczyciela', categoryId: FOOD })
+    load([a])
+    confirmedBalance()
+    const asks = await guard()
+    const { answerGuard } = await import('../../src/renderer/store/guard')
+    // An earlier edit waiting at the confirmed balance (e.g. amount typed to -2500).
+    updateOperation(a.id, (r) => ({ ...r, amount: -2500 }), false)
+    const earlierSeq = asks.getState().asks[0]!.seq
+    applyTitleRule(income, a, editor(a.id, toIncome))
+    expect(asks.getState().asks[0]!.seq).not.toBe(earlierSeq)
+    lastToast()!.action!.run()
+    expect(rulesNow()).toEqual([])
+    expect(asks.getState().asks.map((x) => x.seq)).toEqual([earlierSeq])
+    answerGuard(earlierSeq, true)
+    expect(rec(a.id)).toMatchObject({ kind: 'expense', amount: -2500 })
+  })
 })
 
 describe('słowo początkowe reguły – najdłuższy wyraz tytułu (T535)', () => {

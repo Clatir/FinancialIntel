@@ -3,22 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, quickWindow } from './app'
 import { openForm, splitQuick } from './forms'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
 const ACC = '01KDEFACC00000000000000001'
 const HOUSE = '01KDEFMEM00000000000000001'
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 test('Ctrl+N z każdego ekranu, szkic formularza po zmianie ekranu, szybki wpis: podział, potem wpływ (1.6.4)', async () => {
   const { month } = warsawNow()

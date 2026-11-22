@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { financeLabel } from '../../src/renderer/features/household/financeWords'
+import { financeLabel, financerOptionLabel } from '../../src/renderer/features/household/financeWords'
 import { bulkOptions, optionsFor } from '../../src/renderer/features/import/options'
 import { ruleHintText } from '../../src/shared/import/officer'
 import type { Choice } from '../../src/shared/import/reconcile'
@@ -24,6 +24,11 @@ describe('U3: słowa finansowania domownika', () => {
   it('financeLabel: kupione dla / prezent dla', () => {
     expect(financeLabel(false, 'Tata')).toBe('Kupione dla: Tata')
     expect(financeLabel(true, 'Tata')).toBe('Prezent dla: Tata')
+    expect(financerOptionLabel('Tata', { gift: false })).toBe('kupione dla: Tata (odda)')
+    expect(financerOptionLabel('Tata', { gift: true })).toBe('prezent dla: Tata')
+    expect(financerOptionLabel('Tata', { gift: false, back: true })).toBe('zakup: Tata')
+    expect(financerOptionLabel('Tata', { gift: true, back: true })).toBe('prezent dla: Tata (zwrot do osłon)')
+    expect(financerOptionLabel('Tata', { gift: true, compact: true })).toBe('Tata – prezent')
   })
 
   it('lista importu (wydatek) i decyzja zbiorcza: „Kupione dla” / „Prezent dla”, bez „Finansuje” i „Prezent od”', () => {

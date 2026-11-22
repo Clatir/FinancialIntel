@@ -4020,3 +4020,22 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   tylko w starym checkoucie); `quickWindow` w `ap20.spec.ts` czeka na dane okna szybkiego wpisu ogrodzeniem round-trip
   IPC i fokusem kwoty, bez czasu; skrypty `tests/audyt/*` przez `pickCategory`, `openForm`, `splitQuick` /
   `splitOperation` i `tests/audyt/wywiad.ts` (`intelTab`, `openPanel`, `wholeIntel`).
+- **T558** (1.21.2, W1) `confirmTitleRule`: „Cofnij” cofa edycję otwartego szkicu tylko wtedy, gdy reguła też się
+  cofnęła (`!kept` – jak w `applyTitleRule`); `editorEdit` sprawdza, czy szkic został zapisany, w chwili uruchamiania
+  „Cofnij” (także po „Zmień mimo to”), a gdy edycja reguły zastąpiła wcześniejsze czekające pytanie F12 tej samej
+  operacji (`prevAsk`), „Cofnij” reguły je przywraca; `categorizeRest` pomija szkice (`!drafts[t.id]`) i korzysta z
+  `useRecordList('transactions')`.
+- **T559** (1.21.2, W2) Menu PPM (`OperationsMenu.tsx`, `operationsMenuModel.ts`): otwarcie klawiszem (`byKey`,
+  `initialMouse`) porównuje `realHover` z ostatnią znaną pozycją kursora zamiast z narożnikiem wiersza (a bez wcześniejszego
+  ruchu pomija początkowe `mouseenter` montażu pod kursorem); `withCategoryQuery` podmienia przy szukaniu wyłącznie
+  podmenu kategorii bez przebudowy całego drzewa; `openLevels` i `MenuBox` odrzucają podmenu bez rodzica w drzewie albo
+  DOM; `FinancerSelect` w zwrocie towaru mówi „prezent dla: X (zwrot do osłon)” (`financerOptionLabel`); `impliedLoanRate`
+  sortuje harmonogram z datami chronologicznie.
+- **T560** (1.21.2, W3) Szybki wpis (`main/quick.ts`): `show()` wysyła `fi:quickRequest` tylko dla gotowego okna
+  (`ready`), a `fi:quickRefresh` pyta o dane tylko wtedy, gdy okno jest pokazywane (`shown || isOpen`), bez podwójnego
+  `quickData` przy tle `ensure()` i otwarciu; wszystkie testy E2E korzystają ze wspólnego ogrodzonego `quickWindow`
+  w `tests/e2e/app.ts`; `stageInboxCount` udostępnia licznik Meldunków już w pierwszym renderze Mostku (na telefonie
+  `PhoneInboxWatcher` przed `<main>`); pamięć zakładki Ustawień (`readSettingsTab`, `rememberSettingsTab`, `isSettingsTab`)
+  przeniesiona do `store/ui.ts` (re-eksport w `settingsNav.ts`), bez importu `features/settings` ze store'u.
+- **T561** (1.21.2, W4) Zamknięcie grupy 1.21.2: przegląd `/code-review` high na całym diffie `main...HEAD` bez uwag,
+  pełne testy unit + fs + E2E (komputer i telefon), `CHANGELOG.md` `## 1.21.2`, wersja `1.21.2`.

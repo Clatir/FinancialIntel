@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, quickWindow } from './app'
 import { records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -28,14 +28,6 @@ function seed() {
     }
   })
   return dataDir
-}
-
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
 }
 
 test('edytor: kategoria z szukaniem i „Ostatnie”, kontrahent z historii, „Podziel…”', async () => {

@@ -8,3 +8,10 @@ export const financeLabel = (gift: boolean, name: string): string => `${gift ? '
 
 /** The same inside a sentence or a list of parts: „kupione dla: Tata”, „prezent dla: Tata”. */
 export const financeLabelInline = (gift: boolean, name: string): string => `${gift ? 'prezent dla' : 'kupione dla'}: ${name}`
+
+/** The option of `FinancerSelect` in the operation's editor (an expense, a product return `back`, or a compact split line). */
+export function financerOptionLabel(name: string, opts: { gift: boolean; compact?: boolean; back?: boolean }): string {
+  if (opts.compact) return opts.gift ? `${name} – prezent` : name
+  if (opts.back) return opts.gift ? `prezent dla: ${name} (zwrot do osłon)` : `zakup: ${name}`
+  return opts.gift ? `prezent dla: ${name}` : `kupione dla: ${name} (odda)`
+}

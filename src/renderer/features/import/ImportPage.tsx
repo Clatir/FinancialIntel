@@ -1264,9 +1264,11 @@ function DonePanel() {
   const done = useImport((s) => s.done)
   const batch = useData((s) => (done?.batchId ? s.records.imports[done.batchId]?.record : undefined))
   const operationsMap = useData((s) => s.records.transactions)
+  const operations = useRecordList('transactions')
+  const drafts = useData((s) => s.drafts)
   const latest = useLatestImport()
-  // What the import made and is still an expense without a category (UX-39): from the operations as they are now.
-  const rest = useMemo(() => (!batch || batch.undoneAt ? null : categorizeRest(batch.created, operationsMap)), [batch, operationsMap])
+  // What the import made and is still an expense without a category (UX-39): from the operations as they are now (no drafts – T558).
+  const rest = useMemo(() => (!batch || batch.undoneAt ? null : categorizeRest(batch.created, operationsMap, operations, drafts)), [batch, operationsMap, operations, drafts])
   if (!done) return null
   return (
     <Panel title="Import zakończony">

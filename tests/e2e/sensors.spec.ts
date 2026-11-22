@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { importDone, launch } from './app'
+import { importDone, launch, quickWindow } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -50,15 +50,6 @@ function historia(dir: string, name: string, rows: Array<{ date: string; shop: s
   const file = join(dir, name)
   writeFileSync(file, text)
   return file
-}
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
 }
 
 test('ładownia pilnuje cen i opłat (1.9.0, F9, F23): nowa cena z „Zaktualizuj”, kontener bez płatności, opłata co 2 miesiące i rachunek zmienny z historii', async () => {

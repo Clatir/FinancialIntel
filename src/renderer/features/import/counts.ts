@@ -54,19 +54,27 @@ export function previewCounts(plan: ImportPlan, choices: ImportChoices): Preview
 }
 
 /**
- * „Skategoryzuj pozostałe” after an import (T553): the button opens Operacje from the earliest day of what the import made
- * and left without a category – and the list there holds every expense without a category from that day, not only this
- * import's. The number on the button is what that list holds (its label = its scope). `null` – the import left none.
+ * „Skategoryzuj pozostałe” after an import (T553, T558): the button opens Operacje from the earliest day of what the
+ * import made and left without a category – and the list there holds every expense without a category from that day
+ * (no drafts), not only this import's. The number on the button is what that list holds (its label = its scope).
+ * `null` – the import left none.
  */
-export function categorizeRest(created: readonly string[], byId: Readonly<Record<string, { record: Transaction } | undefined>>): { from: string; count: number } | null {
-  const days = created.flatMap((id) => {
+export function categorizeRest(
+  created: readonly string[],
+  byId: Readonly<Record<string, { record: Transaction } | undefined>>,
+  list?: readonly Transaction[],
+  drafts: Readonly<Record<string, true | undefined>> = {}
+): { from: string; count: number } | null {
+  let from: string | null = null
+  for (const id of created) {
+    if (drafts[id]) continue
     const t = byId[id]?.record
-    return t && isUncategorized(t) ? [t.date] : []
-  })
-  if (!days.length) return null
-  const from = days.reduce((a, b) => (b < a ? b : a))
-  const all = Object.values(byId).flatMap((r) => (r ? [r.record] : []))
-  return { from, count: uncategorizedOf(all, from).count }
+    if (t && isUncategorized(t) && (from === null || t.date < from)) from = t.date
+  }
+  if (from === null) return null
+  const all = list ?? Object.values(byId).flatMap((r) => (r ? [r.record] : []))
+  const saved = Object.keys(drafts).length ? all.filter((t) => !drafts[t.id]) : all
+  return { from, count: uncategorizedOf(saved, from).count }
 }
 
 /**
