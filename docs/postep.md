@@ -5,43 +5,10 @@ Stan bieżący, kolejka i komunikat przed najbliższą grupą. Zakończone etapy
 grupie albo identyfikatorze). Po wydaniu wpisy grupy przenoś do archiwum – tutaj zostaje stan (≤ 20 KB, sprawdza CI – D103).
 Odwołania „`docs/postep.md` „…”” w starszych dokumentach i komentarzach (sekcje do 1.15.1 i audyt) prowadzą do archiwum.
 
-**Stan (22.11.2026):** **1.21.1 wydane** (21.11.2026, PR #72, archiwum PR #73); w toku **Grupa 1.21.2** („Uwagi na
-później” po 1.21.1, W0–W4, T558–T561).
-
-## Grupa 1.21.2 – uwagi na później po 1.21.1 (T558–T561, 22.11.2026)
-
-Źródło: „Uwagi na później” wpisu 1.21.1 w `docs/archiwum/postep-od-1.15.4.md` oraz otwarte punkty w postępie.
-
-| # | Krok | Zakres | Model · thinking | Czas | Stan |
-| --- | --- | --- | --- | --- | --- |
-| W0 | Kontrakt grupy 1.21.2, tabela, numery T (T558–T561) | `docs/postep.md` | Gemini 4 Argon · High | 10 min | ✅ 22.11 (2 min) |
-| W1 | Reguła tytułu, F12 i `categorizeRest` (T558) | `titleRules.ts`, `import/counts.ts`, `ImportPage.tsx` | Gemini 4 Argon · High (xhigh) | 25–35 min | ✅ 22.11 (6 min) |
-| W2 | Menu PPM, edytor (`MemberPickers`) i podpowiedź oprocentowania (T559) | `OperationsMenu.tsx`, `MemberPickers.tsx`, pożyczki | Gemini 4 Argon · Medium/High | 20–30 min | ✅ 22.11 (8 min) |
-| W3 | Szybki wpis (IPC `show()`), ogrodzenie 9 E2E `quickWindow`, pierwszy render Mostku, import `store/ui` (T560) | `main/quick.ts`, `tests/e2e/*`, `inboxCount.ts`, `store/ui.ts` | Gemini 4 Argon · Medium/High | 20–30 min | ✅ 22.11 (6 min) |
-| W4 | Pełne testy + E2E, `/code-review`, CHANGELOG `## 1.21.2`, wersja, PR, CI, wydanie (T561) | zamknięcie grupy | Gemini 4 Argon · High | 25–35 min + CI | ✅ 22.11 |
-
-### Kontrakt kroków
-- **W1 (T558):**
-  1. `confirmTitleRule` (`operations/titleRules.ts:253–268`): `undoRule` sprawdza `const { kept } = undoRules(before, after)`
-     i wywołuje `editBack?.()` tylko wtedy, gdy `!kept` (jak w `applyTitleRule` – gdy reguła zmieniła się od tego czasu
-     i zostaje, edycja otwartego szkicu też zostaje).
-  2. `editorEdit` (`operations/titleRules.ts:159–193`): czy szkic został zapisany przez edycję reguły
-     (`wasDraft && !useData.getState().drafts[id]`), sprawdzaj w chwili uruchamiania „Cofnij” (wewnątrz zwracanej funkcji),
-     a nie synchronicznie przed odpowiedzią na pytanie F12 („Zmień mimo to”).
-  3. Zastąpione pytanie F12 innej, wcześniejszej edycji tej samej operacji (`store/guard.ts`, `titleRules.ts:163–173`):
-     gdy dla operacji `id` czekało już pytanie F12 (`prevAsk`), a edycja reguły tytułu zastąpiła je własnym pytaniem
-     (`question`), to „Cofnij” reguły (gdy `question` wciąż czeka) przywraca `prevAsk` zamiast zostawiać operację bez
-     wcześniejszego pytania.
-  4. `categorizeRest` (`import/counts.ts:61–70`, `ImportPage.tsx:1265–1270`): przyjmuje listę `listOf(operationsMap)`
-     (`useRecordList('transactions')`) oraz `drafts` (pomija szkice `!drafts[t.id]`, jak lista Operacji i `InboxPage`),
-     bez budowania tablicy `Object.values(byId)` przy każdym wywołaniu.
-  Testy unit w `tests/unit/title-rules.test.ts` i `tests/unit/u4-nav.test.ts`.
-- **W2 (T559):** menu PPM (`OperationsMenu.tsx` – otwarcie klawiszem pod nieruchomym kursorem, `MenuBox` bez rodzica,
-  memoizacja drzewa przy szukaniu), `MemberPickers.tsx` (wariant zwrotu „prezent dla: X (zwrot do osłon)”), podpowiedź
-  oprocentowania.
-- **W3 (T560):** `main/quick.ts` `show()` bez drugiego `quickData` przy istniejącym oknie; ogrodzenie IPC w E2E
-  `quickWindow`; pierwszy render Mostku z licznikiem Meldunków; rozcięcie bezpośredniego importu `features/settings`
-  w `store/ui.ts`.
+**Stan (22.11.2026):** **1.21.2 wydane** (22.11.2026, PR #74 – grupa „Uwagi na później” po 1.21.1, W0–W4, T558–T561:
+reguła tytułu i F12, menu PPM pod nieruchomym kursorem, podpowiedź oprocentowania, szybki wpis IPC bez podwójnego żądania,
+pierwszy render Mostku). Wpis grupy – archiwum `postep-od-1.15.4.md` (Grep „Grupa 1.21.2”).
+Następna grupa – na komendę użytkownika (D67).
 
 ## Otwarte
 - **Odbiór zbiorczy 1.15.5–1.19.1:** maszyna wirtualna przez Cowork (48 punktów, `docs/audyt/maszyna.md`, wynik →

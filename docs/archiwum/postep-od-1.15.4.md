@@ -934,3 +934,42 @@ Fale: U1, U2, U3, U4, U6 równolegle; U5, U7 po scaleniu fali 1; U8 na końcu. N
 - **Zamknięcie (21.11):** PR #72 – CI: E2E Linux padło dwa razy (`u4-nav` – skrót przed gotowym oknem, poprawiony
   test; `u5-fields:101` – na Linuksie `mousemove` przed `mouseenter`, `realHover` z czasem ruchu `SAME_MOVE_MS`), potem
   zielone; scalone (D71), wydanie v1.21.1 z `main`; drzewa wykonawców usunięte. Czas: ok. 4 h z czekaniem na CI.
+
+## Grupa 1.21.2 – uwagi na później po 1.21.1 (T558–T561, 22.11.2026; wydane 22.11.2026, PR #74)
+
+Sesja główna (Gemini 4 Argon · High); kroki W0–W4 wykonane jednym ciągiem bez podziału na wykonawców.
+Źródło: „Uwagi na później” wpisu 1.21.1 w archiwum oraz otwarte punkty w postępie.
+
+| # | Krok | Zakres | Model · thinking | Czas | Stan |
+| --- | --- | --- | --- | --- | --- |
+| W0 | Kontrakt grupy 1.21.2, tabela, numery T (T558–T561) | `docs/postep.md` | Gemini 4 Argon · High | 10 min | ✅ 22.11 (2 min) |
+| W1 | Reguła tytułu, F12 i `categorizeRest` (T558) | `titleRules.ts`, `import/counts.ts`, `ImportPage.tsx` | Gemini 4 Argon · High (xhigh) | 25–35 min | ✅ 22.11 (6 min) |
+| W2 | Menu PPM, edytor (`MemberPickers`) i podpowiedź oprocentowania (T559) | `OperationsMenu.tsx`, `MemberPickers.tsx`, pożyczki | Gemini 4 Argon · Medium/High | 20–30 min | ✅ 22.11 (8 min) |
+| W3 | Szybki wpis (IPC `show()`), ogrodzenie 9 E2E `quickWindow`, pierwszy render Mostku, import `store/ui` (T560) | `main/quick.ts`, `tests/e2e/*`, `inboxCount.ts`, `store/ui.ts` | Gemini 4 Argon · Medium/High | 20–30 min | ✅ 22.11 (6 min) |
+| W4 | Pełne testy + E2E, `/code-review`, CHANGELOG `## 1.21.2`, wersja, PR, CI, wydanie (T561) | zamknięcie grupy | Gemini 4 Argon · High | 25–35 min + CI | ✅ 22.11 |
+
+### Kontrakt kroków
+- **W1 (T558):**
+  1. `confirmTitleRule` (`operations/titleRules.ts:253–268`): `undoRule` sprawdza `const { kept } = undoRules(before, after)`
+     i wywołuje `editBack?.()` tylko wtedy, gdy `!kept` (jak w `applyTitleRule` – gdy reguła zmieniła się od tego czasu
+     i zostaje, edycja otwartego szkicu też zostaje).
+  2. `editorEdit` (`operations/titleRules.ts:159–193`): czy szkic został zapisany przez edycję reguły
+     (`wasDraft && !useData.getState().drafts[id]`), sprawdzaj w chwili uruchamiania „Cofnij” (wewnątrz zwracanej funkcji),
+     a nie synchronicznie przed odpowiedzią na pytanie F12 („Zmień mimo to”).
+  3. Zastąpione pytanie F12 innej, wcześniejszej edycji tej samej operacji (`store/guard.ts`, `titleRules.ts:163–173`):
+     gdy dla operacji `id` czekało już pytanie F12 (`prevAsk`), a edycja reguły tytułu zastąpiła je własnym pytaniem
+     (`question`), to „Cofnij” reguły (gdy `question` wciąż czeka) przywraca `prevAsk` zamiast zostawiać operację bez
+     wcześniejszego pytania.
+  4. `categorizeRest` (`import/counts.ts:61–70`, `ImportPage.tsx:1265–1270`): przyjmuje listę `listOf(operationsMap)`
+     (`useRecordList('transactions')`) oraz `drafts` (pomija szkice `!drafts[t.id]`, jak lista Operacji i `InboxPage`),
+     bez budowania tablicy `Object.values(byId)` przy każdym wywołaniu.
+  Testy unit w `tests/unit/title-rules.test.ts` i `tests/unit/u4-nav.test.ts`.
+- **W2 (T559):** menu PPM (`OperationsMenu.tsx` – otwarcie klawiszem pod nieruchomym kursorem, `MenuBox` bez rodzica,
+  memoizacja drzewa przy szukaniu), `MemberPickers.tsx` (wariant zwrotu „prezent dla: X (zwrot do osłon)”), podpowiedź
+  oprocentowania (`impliedLoanRate` sortuje daty harmonogramu).
+- **W3 (T560):** `main/quick.ts` `show()` i `fi:quickRefresh` bez podwójnego `quickData` przy istniejącym oknie;
+  ogrodzenie IPC w 15 plikach E2E przez wspólne `quickWindow`; pierwszy render Mostku z licznikiem Meldunków
+  (`stageInboxCount`); rozcięcie bezpośredniego importu `features/settings` w `store/ui.ts`.
+- **Zamknięcie (22.11):** PR #74 – CI: Linux zielone w 100%, E2E 176/176; Windows CI po re-runie zielone w 100%
+  (flake w `import-tools.spec.ts` zweryfikowany pomyślnie lokalnie 4/4); scalone do `main` (D71), wydanie v1.21.2.
+  Czas grupy: ok. 1 h z czekaniem na CI.
