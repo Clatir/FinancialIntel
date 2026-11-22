@@ -4037,3 +4037,5 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   w `tests/e2e/app.ts`; `stageInboxCount` udostępnia licznik Meldunków już w pierwszym renderze Mostku (na telefonie
   `PhoneInboxWatcher` przed `<main>`); pamięć zakładki Ustawień (`readSettingsTab`, `rememberSettingsTab`, `isSettingsTab`)
   przeniesiona do `store/ui.ts` (re-eksport w `settingsNav.ts`), bez importu `features/settings` ze store'u.
+- **T561** (1.21.2, W4) Zamknięcie grupy 1.21.2: przegląd `/code-review` high na całym diffie `main...HEAD` bez uwag,
+  pełne testy unit + fs + E2E (komputer i telefon), `CHANGELOG.md` `## 1.21.2`, wersja `1.21.2`.

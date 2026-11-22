@@ -1,5 +1,14 @@
 # Financial Intel – zmiany
 
+## 1.21.2
+
+Drobne poprawki po 1.21.1:
+
+- **„Cofnij” reguły dla tytułu:** cofnięcie ze zmianą historii zostawia otwarty szkic operacji, gdy sama reguła zmieniła się w międzyczasie i zostaje; notka o zapisanym nowym wpisie pokazuje się także po potwierdzeniu „Zmień mimo to”; cofnięcie reguły przywraca wcześniejsze czekające pytanie o potwierdzone saldo tej samej operacji.
+- **Menu pod prawym przyciskiem i edytor:** otwarcie menu klawiszem (`Shift+F10` / klawisz menu) pod nieruchomym kursorem myszy nie zabiera fokusu na pozycję pod kursorem; szukanie kategorii podmienia tylko listę kategorii bez przebudowy pozostałych podmenu; przy zwrocie towaru opcja prezentu mówi „prezent dla: X (zwrot do osłon)”.
+- **Szybki wpis, Mostek i import:** otwarcie szybkiego wpisu wysyła dane okna dokładnie raz (bez ponownego resetu formularza po przygotowaniu okna w tle); Mostek ma właściwy licznik Meldunków już przy pierwszym rysowaniu ekranu; licznik „Skategoryzuj pozostałe” po imporcie pomija niezapisane szkice.
+
+
 ## 1.21.1
 
 Poprawki po 1.21.0 – „Cofnij”, słowa i drobiazgi ergonomii:
