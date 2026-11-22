@@ -11,11 +11,6 @@ Wpis grupy z „Uwagami na później” i rzeczami do potwierdzenia – archiwum
 Następna grupa – na komendę użytkownika (D67).
 
 ## Otwarte
-- **E2E `u5-fields.spec.ts:101` czerwone na Linuksie (CI, 21.11, PR #73 otwarty – nie scalać):** najechanie kategorii
-  w menu PPM czasem nie przenosi fokusu (`toBeFocused` → inactive) – `realHover` (`operationsMenuModel.ts:382`,
-  `OperationsMenu.tsx:184–281`) na Linux/Xvfb odrzuca prawdziwe najechanie (kolejność / `timeStamp` `mousemove` vs
-  `mouseenter`). Windows (aplikacja 1.21.1) – lokalnie zielone. Do zbadania: zapis zdarzeń w E2E na CI, ewentualnie
-  `onMouseMove` z warunkiem „pozycja się zmieniła” zamiast porównania z `mouseenter`.
 - **Odbiór zbiorczy 1.15.5–1.19.1:** maszyna wirtualna przez Cowork (48 punktów, `docs/audyt/maszyna.md`, wynik →
   `docs/audyt/raport/maszyna.md`) i sesje „Ty” (`docs/audyt/ty.md`); opisy punktów w `docs/audyt/punkty/`. Warianty
   „do potwierdzenia” z ciągów zaakceptowane 05.11.2026 – tabela w archiwum (Grep „Do potwierdzenia”).
