@@ -13,7 +13,7 @@ import { Empty, Panel } from '@renderer/components/ui'
 import { parseAmountInput, plural } from '@renderer/lib/format'
 import { useFleet } from '@renderer/store/fleet'
 import { useData } from '@renderer/store/data'
-import { publishInboxCount } from '@renderer/store/inboxCount'
+import { publishInboxCount, stageInboxCount } from '@renderer/store/inboxCount'
 import { DUPLICATES_AFTER_MS, dismissCorrection, openInboxItem, opensPairs, useInbox } from '@renderer/features/inbox/state'
 import { TransferButtons } from '@renderer/features/inbox/InboxPage'
 import { TransferPairs } from '@renderer/features/inbox/TransferPairs'
@@ -52,7 +52,8 @@ export function PhoneInboxWatcher(): null {
   // and the duplicates' screen count them while they are shown.
   const duplicates = useKnownDuplicateCount()
   const all = useInbox(duplicates, zl)
-  // The same count Mostek reads (`store/inboxCount`): on the phone the watcher is the one pass of the inbox (U6).
+  // The same count Mostek reads (`store/inboxCount`): on the phone the watcher is the one pass of the inbox (U6, T560).
+  stageInboxCount(all.length)
   useEffect(() => publishInboxCount(all.length), [all.length])
   useEffect(() => {
     const items = all.filter((i) => PHONE_KINDS.has(i.kind))

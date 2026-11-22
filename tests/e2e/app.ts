@@ -161,3 +161,20 @@ export async function clickClosing(win: Page, testId: string): Promise<void> {
     })
   ])
 }
+
+/**
+ * The quick entry window (created hidden at the start or on its first opening): fenced with two IPC round trips so its
+ * fresh data and initial focus on `quick-amount` have arrived before keys are typed (T556, T560).
+ */
+export async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
+  await page.evaluate('window.fi.quickOpen()')
+  let found: Page | undefined
+  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
+  await expect(found!.getByTestId('quick-amount')).toBeVisible()
+  await page.evaluate('window.fi.quickShortcutState()')
+  await found!.evaluate(
+    `window.fi.quickShortcutState().then(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))`
+  )
+  await expect(found!.getByTestId('quick-amount')).toBeFocused()
+  return found!
+}

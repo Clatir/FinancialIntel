@@ -238,6 +238,7 @@ export function Shell() {
   return (
     <CompactContext.Provider value>
       <div className="phone-safe flex h-full flex-col bg-bg" data-amounts={hideAmounts ? 'hidden' : 'shown'} data-testid="phone-shell">
+        {phase === 'ready' && <PhoneInboxWatcher />}
         <TopBar />
         <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain" key={tab === 'main' ? route.page : tab}>
           {screen}
@@ -248,7 +249,6 @@ export function Shell() {
         <GuardDialog />
         <Toasts />
         {phase === 'ready' && <NoticePlanner />}
-        {phase === 'ready' && <PhoneInboxWatcher />}
       </div>
     </CompactContext.Provider>
   )

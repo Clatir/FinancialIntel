@@ -187,4 +187,8 @@ describe('Z3: kod powłoki', () => {
   it('UX-3: Enter na przycisku i liście nie zapisuje szybkiego wpisu', () => {
     expect(read('src/renderer/features/quick/QuickApp.tsx')).toMatch(/ownEnter = e\.target instanceof HTMLButtonElement \|\| e\.target instanceof HTMLSelectElement/)
   })
+
+  it('W3 (T560): store/ui.ts nie importuje z features/settings', () => {
+    expect(read('src/renderer/store/ui.ts')).not.toMatch(/features\/settings/)
+  })
 })

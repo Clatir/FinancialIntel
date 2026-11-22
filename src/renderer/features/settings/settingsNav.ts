@@ -1,4 +1,6 @@
-import type { SettingsTab } from '../../store/ui'
+import { isSettingsTab, readSettingsTab, rememberSettingsTab, type SettingsTab } from '../../store/ui'
+
+export { isSettingsTab, readSettingsTab, rememberSettingsTab }
 
 /**
  * The navigation of Ustawienia in groups (UX-44): what the budget shares between computers (fi.json), what only this
@@ -46,25 +48,3 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
 
 /** Every tab, in the order of the groups (the palette's list and the lookups of a label). */
 export const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = SETTINGS_GROUPS.flatMap((g) => g.tabs.map((t) => ({ ...t })))
-
-export const isSettingsTab = (v: unknown): v is SettingsTab => typeof v === 'string' && SETTINGS_TABS.some((t) => t.id === v)
-
-const KEY = 'fi.settings.tab'
-
-/** The tab shown last, on this computer (`localStorage`, like the other small choices of the view); none = `general`. */
-export function readSettingsTab(): SettingsTab {
-  try {
-    const v = localStorage.getItem(KEY)
-    return isSettingsTab(v) ? v : 'general'
-  } catch {
-    return 'general'
-  }
-}
-
-export function rememberSettingsTab(tab: SettingsTab): void {
-  try {
-    localStorage.setItem(KEY, tab)
-  } catch {
-    // A full or blocked storage: the memory is only a convenience.
-  }
-}

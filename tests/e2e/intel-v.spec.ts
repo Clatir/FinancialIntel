@@ -5,7 +5,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
 import { formatPln, plural } from '../../src/shared/format'
 import { GLOSSARY } from '../../src/shared/glossary'
-import { launch, openIntel } from './app'
+import { launch, openIntel, quickWindow } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 
@@ -35,15 +35,6 @@ const buy = (date: string, counterparty: string, amount: number, categoryId: str
   counterparty,
   ...more
 })
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 test('tagi i wyprawy (1.10.0, F17): karta wyprawy z celem, „Pokaż w Operacjach”, tag w edytorze, ostatni tag i #słowo w szybkim wpisie, tagi reguły importu', async () => {
   const { date: today, month } = warsawNow()

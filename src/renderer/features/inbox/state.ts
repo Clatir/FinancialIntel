@@ -13,7 +13,7 @@ import { listOf, updateSettings, useData } from '../../store/data'
 import { useGhosts } from '../../store/ghosts'
 import { api, errorMessage } from '../../lib/api'
 import { useFleet } from '../../store/fleet'
-import { publishInboxCount } from '../../store/inboxCount'
+import { publishInboxCount, stageInboxCount } from '../../store/inboxCount'
 import { focusRecord, navigate, toast } from '../../store/ui'
 import { useCargoStatuses, useCargoWatch } from '../cargo/status'
 import { openSensor } from '../sensors/open'
@@ -152,6 +152,7 @@ export function dismissCorrection(id: string): void {
 export function useInboxCountHost(): number {
   const duplicates = useKnownDuplicateCount()
   const count = useInbox(duplicates).length
+  stageInboxCount(count)
   useEffect(() => publishInboxCount(count), [count])
   return count
 }

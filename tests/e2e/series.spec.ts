@@ -3,21 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, quickWindow } from './app'
 import { json, records } from './files'
 import { seedFolder } from './seed'
 import { pickCategory } from './forms'
 
 const GROCERIES = '01KDEFCAT00000000000000101'
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 const visible = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)
 

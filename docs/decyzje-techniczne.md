@@ -4031,3 +4031,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   podmenu kategorii bez przebudowy całego drzewa; `openLevels` i `MenuBox` odrzucają podmenu bez rodzica w drzewie albo
   DOM; `FinancerSelect` w zwrocie towaru mówi „prezent dla: X (zwrot do osłon)” (`financerOptionLabel`); `impliedLoanRate`
   sortuje harmonogram z datami chronologicznie.
+- **T560** (1.21.2, W3) Szybki wpis (`main/quick.ts`): `show()` wysyła `fi:quickRequest` tylko dla gotowego okna
+  (`ready`), a `fi:quickRefresh` pyta o dane tylko wtedy, gdy okno jest pokazywane (`shown || isOpen`), bez podwójnego
+  `quickData` przy tle `ensure()` i otwarciu; wszystkie testy E2E korzystają ze wspólnego ogrodzonego `quickWindow`
+  w `tests/e2e/app.ts`; `stageInboxCount` udostępnia licznik Meldunków już w pierwszym renderze Mostku (na telefonie
+  `PhoneInboxWatcher` przed `<main>`); pamięć zakładki Ustawień (`readSettingsTab`, `rememberSettingsTab`, `isSettingsTab`)
+  przeniesiona do `store/ui.ts` (re-eksport w `settingsNav.ts`), bez importu `features/settings` ze store'u.

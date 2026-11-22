@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays, addMonths, warsawNow } from '../../src/shared/calc/dates'
-import { launch } from './app'
+import { launch, quickWindow } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
 import { pickCategory } from './forms'
@@ -16,15 +16,6 @@ const HOUSE = '01KDEFMEM00000000000000001'
 
 
 const operations = (dataDir: string) => records(dataDir, 'transactions')
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  return found!
-}
 
 test('Mostek, szybki wpis (oficer, cisza nocna, domownik), ukrycie kwot, ustawienia komputera', async () => {
   const { date: today, month } = warsawNow()

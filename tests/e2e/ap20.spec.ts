@@ -4,28 +4,9 @@ import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { warsawNow } from '../../src/shared/calc/dates'
 import { defaultCategoryId, MBANK_ACCOUNT_ID, XTB_WALLET_ACCOUNT_ID } from '../../src/shared/schema/budget'
-import { intelTab, launch, openIntel } from './app'
+import { intelTab, launch, openIntel, quickWindow } from './app'
 import { json, records } from './files'
 import { seedFolder, zl } from './seed'
-
-/** The quick entry window (created hidden at the start or on its first opening). */
-async function quickWindow(app: ElectronApplication, page: Page): Promise<Page> {
-  await page.evaluate('window.fi.quickOpen()')
-  let found: Page | undefined
-  await expect.poll(() => (found = app.windows().find((w) => w.url().includes('quick=1')))).toBeTruthy()
-  await expect(found!.getByTestId('quick-amount')).toBeVisible()
-  // The window may exist already (created hidden 3 s after the start) and answer the opening with fresh data a moment
-  // after it is found: that data resets the form and gives the amount the focus again, which takes the keys typed
-  // meanwhile (the „Plan czy impuls?” question then never shows). IPC keeps its order, so two round trips fence it: one
-  // from the main window (its answer to the request is sent before this call returns), one from this window (the data is
-  // delivered before its reply) – then the focus the data gives is awaited, no sleep.
-  await page.evaluate('window.fi.quickShortcutState()')
-  await found!.evaluate(
-    `window.fi.quickShortcutState().then(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))`
-  )
-  await expect(found!.getByTestId('quick-amount')).toBeFocused()
-  return found!
-}
 
 const visible = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)
 const NOW = new Date().toISOString()
