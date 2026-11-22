@@ -54,14 +54,15 @@ describe('U4 (d): szkic manewru po zmianie miesiąca', () => {
 
 describe('U4 (e): „Skategoryzuj pozostałe” – liczba jak lista, którą przycisk otwiera', () => {
   const FOOD = defaultCategoryId(1)
-  it('liczy wszystkie wydatki bez kategorii od dnia najwcześniejszego z importu, nie tylko z niego', () => {
+  it('liczy wszystkie wydatki bez kategorii od dnia najwcześniejszego z importu, nie tylko z niego – bez szkiców (T558)', () => {
     const a = tx('2026-10-05', { counterparty: 'z importu' })
     const done = tx('2026-10-06', { counterparty: 'z kategorią', categoryId: FOOD })
     const own = tx('2026-10-10', { counterparty: 'wpisany ręcznie' })
+    const draft = tx('2026-10-10', { counterparty: 'szkic' })
     const before = tx('2026-09-01', { counterparty: 'sprzed importu' })
     const income = tx('2026-10-11', { kind: 'income', amount: 5000, counterparty: 'wpływ' })
-    const all = [a, done, own, before, income]
-    expect(categorizeRest([a.id, done.id], byId(all))).toEqual({ from: '2026-10-05', count: 2 })
+    const all = [a, done, own, draft, before, income]
+    expect(categorizeRest([a.id, done.id], byId(all), all, { [draft.id]: true })).toEqual({ from: '2026-10-05', count: 2 })
   })
 
   it('bez wydatku bez kategorii z importu – brak przycisku', () => {

@@ -4020,3 +4020,8 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   tylko w starym checkoucie); `quickWindow` w `ap20.spec.ts` czeka na dane okna szybkiego wpisu ogrodzeniem round-trip
   IPC i fokusem kwoty, bez czasu; skrypty `tests/audyt/*` przez `pickCategory`, `openForm`, `splitQuick` /
   `splitOperation` i `tests/audyt/wywiad.ts` (`intelTab`, `openPanel`, `wholeIntel`).
+- **T558** (1.21.2, W1) `confirmTitleRule`: „Cofnij” cofa edycję otwartego szkicu tylko wtedy, gdy reguła też się
+  cofnęła (`!kept` – jak w `applyTitleRule`); `editorEdit` sprawdza, czy szkic został zapisany, w chwili uruchamiania
+  „Cofnij” (także po „Zmień mimo to”), a gdy edycja reguły zastąpiła wcześniejsze czekające pytanie F12 tej samej
+  operacji (`prevAsk`), „Cofnij” reguły je przywraca; `categorizeRest` pomija szkice (`!drafts[t.id]`) i korzysta z
+  `useRecordList('transactions')`.
