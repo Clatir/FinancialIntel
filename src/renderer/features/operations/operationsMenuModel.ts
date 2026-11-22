@@ -112,6 +112,21 @@ export function skipReason(c: BulkChange): string {
 
 const quoted = (s: string) => `„${s}”`
 
+/** The items of the „Kategoria” submenu for `query`: the search field and the categories whose whole label holds it. */
+export function categoryItems(categories: MenuInput['categories'], query = ''): MenuNode[] {
+  const matching = new Set(filterChoices(categories.map((c) => ({ id: c.id, label: c.label, main: !c.sub })), query).map((c) => c.id))
+  const shown = categories.filter((c) => matching.has(c.id))
+  return [
+    { type: 'search', id: 'category-search', query, none: !!query.trim() && !shown.length },
+    ...shown.map((c): MenuLeaf => ({ type: 'leaf', id: `category-${c.id}`, label: c.sub && !query.trim() ? `· ${c.name}` : c.label, command: { type: 'category', categoryId: c.id, label: c.label } }))
+  ]
+}
+
+/** Replaces only the „Kategoria” submenu's items when the search query changes – the rest of the tree is not rebuilt. */
+export function withCategoryQuery(root: readonly MenuNode[], categories: MenuInput['categories'], query: string): MenuNode[] {
+  return root.map((n) => (n.type === 'sub' && n.id === 'category' ? { ...n, items: categoryItems(categories, query) } : n))
+}
+
 export function buildMenu(input: MenuInput): MenuNode[] {
   const { records, docked } = input
   const off = input.readOnly ?? (records.length ? null : NEWER)
@@ -137,18 +152,7 @@ export function buildMenu(input: MenuInput): MenuNode[] {
 
   // The search field first, as the editor's category field has it (Z7): a fragment keeps the categories whose whole label
   // holds it – a subcategory then shows its main one („Jedzenie · Zakupy”), as the field's list does.
-  const query = input.categoryQuery ?? ''
-  const matching = new Set(filterChoices(input.categories.map((c) => ({ id: c.id, label: c.label, main: !c.sub })), query).map((c) => c.id))
-  const shownCategories = input.categories.filter((c) => matching.has(c.id))
-  const category = group(
-    'category',
-    'Kategoria',
-    [
-      { type: 'search', id: 'category-search', query, none: !!query.trim() && !shownCategories.length },
-      ...shownCategories.map((c) => ({ type: 'leaf', id: `category-${c.id}`, label: c.sub && !query.trim() ? `· ${c.name}` : c.label, command: { type: 'category', categoryId: c.id, label: c.label } }) as MenuLeaf)
-    ],
-    null
-  )
+  const category = group('category', 'Kategoria', categoryItems(input.categories, input.categoryQuery ?? ''), null)
 
   const finance = group(
     'finance',
@@ -322,6 +326,19 @@ export function findLevel(root: MenuNode[], path: readonly string[]): MenuNode[]
   return level
 }
 
+/** The root and the open submenus along `path` that exist in `root` (stops at the first missing or off parent). */
+export function openLevels(root: MenuNode[], path: readonly string[]): Array<{ parent: string | null; items: MenuNode[] }> {
+  const out: Array<{ parent: string | null; items: MenuNode[] }> = [{ parent: null, items: root }]
+  let cur = root
+  for (const id of path) {
+    const sub = cur.find((n) => n.id === id)
+    if (!sub || sub.type !== 'sub' || sub.disabled) break
+    out.push({ parent: id, items: sub.items })
+    cur = sub.items
+  }
+  return out
+}
+
 /** The items the arrows stop on: not a separator, not an off one. */
 const focusable = (items: readonly MenuNode[]): MenuNode[] => items.filter((n) => n.type !== 'sep' && !n.disabled)
 
@@ -368,6 +385,15 @@ export function navigate(root: MenuNode[], nav: MenuNav, key: MenuKey): { nav: M
       return node.type === 'leaf' ? { nav, run: node } : { nav }
     }
   }
+}
+
+/**
+ * Where `realHover` starts when the menu opens: at the click's coordinates (`!at.byKey`), or at the last known pointer
+ * position (`pointer`) when opened by keyboard at a row – so a resting cursor over the newly opened menu does not steal
+ * focus on the initial `mouseenter`.
+ */
+export function initialMouse(at: { x: number; y: number; byKey?: boolean }, pointer: { x: number; y: number } | null): { x: number; y: number } | null {
+  return at.byKey ? pointer : { x: at.x, y: at.y }
 }
 
 /**

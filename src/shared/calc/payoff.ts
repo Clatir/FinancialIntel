@@ -259,7 +259,7 @@ export function payoff(input: PayoffInput): Payoff {
  */
 export function impliedLoanRate(loan: {
   amount: number
-  schedule?: ReadonlyArray<{ amount: number }>
+  schedule?: ReadonlyArray<{ date?: string; amount: number }>
   total?: number
   installments?: number
 }): number | null {
@@ -267,7 +267,8 @@ export function impliedLoanRate(loan: {
   if (!Number.isFinite(amount) || amount <= 0) return null
   let amounts: number[]
   if (loan.schedule && loan.schedule.length > 0) {
-    amounts = loan.schedule.map((s) => s.amount)
+    const ordered = loan.schedule.some((s) => s.date) ? [...loan.schedule].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '')) : loan.schedule
+    amounts = ordered.map((s) => s.amount)
   } else if ((loan.installments ?? 0) > 0 && (loan.total ?? 0) > 0) {
     const n = Math.round(loan.installments!)
     if (n <= 0) return null

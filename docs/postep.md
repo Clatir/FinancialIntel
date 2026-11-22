@@ -16,7 +16,7 @@ później” po 1.21.1, W0–W4, T558–T561).
 | --- | --- | --- | --- | --- | --- |
 | W0 | Kontrakt grupy 1.21.2, tabela, numery T (T558–T561) | `docs/postep.md` | Gemini 4 Argon · High | 10 min | ✅ 22.11 (2 min) |
 | W1 | Reguła tytułu, F12 i `categorizeRest` (T558) | `titleRules.ts`, `import/counts.ts`, `ImportPage.tsx` | Gemini 4 Argon · High (xhigh) | 25–35 min | ✅ 22.11 (6 min) |
-| W2 | Menu PPM, edytor (`MemberPickers`) i podpowiedź oprocentowania (T559) | `OperationsMenu.tsx`, `MemberPickers.tsx`, pożyczki | Gemini 4 Argon · Medium/High | 20–30 min | |
+| W2 | Menu PPM, edytor (`MemberPickers`) i podpowiedź oprocentowania (T559) | `OperationsMenu.tsx`, `MemberPickers.tsx`, pożyczki | Gemini 4 Argon · Medium/High | 20–30 min | ✅ 22.11 (8 min) |
 | W3 | Szybki wpis (IPC `show()`), ogrodzenie 9 E2E `quickWindow`, pierwszy render Mostku, import `store/ui` (T560) | `main/quick.ts`, `tests/e2e/*`, `inboxCount.ts`, `store/ui.ts` | Gemini 4 Argon · Medium/High | 20–30 min | |
 | W4 | Pełne testy + E2E, `/code-review`, CHANGELOG `## 1.21.2`, wersja, PR, CI, wydanie (T561) | zamknięcie grupy | Gemini 4 Argon · High | 25–35 min + CI | |
 
@@ -47,10 +47,8 @@ później” po 1.21.1, W0–W4, T558–T561).
 - **Odbiór zbiorczy 1.15.5–1.19.1:** maszyna wirtualna przez Cowork (48 punktów, `docs/audyt/maszyna.md`, wynik →
   `docs/audyt/raport/maszyna.md`) i sesje „Ty” (`docs/audyt/ty.md`); opisy punktów w `docs/audyt/punkty/`. Warianty
   „do potwierdzenia” z ciągów zaakceptowane 05.11.2026 – tabela w archiwum (Grep „Do potwierdzenia”).
-- **Rzeczy otwarte z grup** (archiwum, punkty „Otwarte” N1–R2): podpowiedź oprocentowania, pomiar Workera w maszynie
-  (IM.55), niestabilny `ap20.spec.ts:53`.
-- **Testy tylko lokalnie czerwone (15.11, CI zielone):** `tests/fs/bank-files.test.ts` (2) w głównym folderze repo
-  (w świeżym drzewie 4/4 – przyczyna nieznana) i `ictj.spec.ts:172` (ICTTJ zainstalowany na tym komputerze).
+- **Rzeczy otwarte z grup** (archiwum, punkty „Otwarte” N1–R2): pomiar Workera w maszynie (IM.55).
+- **Testy tylko lokalnie czerwone (15.11, CI zielone):** `ictj.spec.ts:172` (ICTTJ zainstalowany na tym komputerze).
 - **Node lokalnie:** systemowy 20.12 jest za stary (`check-node.mjs`) – na początek `PATH` folder
   `.tools\node-v24.21.0-win-x64` (łącze do `RegulatedDay\.tools`; Bash w piaskownicy przez łącze nie czyta – wtedy
   `/c/CC-Projekty/RegulatedDay/.tools/node-v24.21.0-win-x64`).

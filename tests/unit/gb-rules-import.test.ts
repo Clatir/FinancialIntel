@@ -134,6 +134,14 @@ describe('GB – Reguły, schemat, audyt i import (T504–T511)', () => {
     // Invalid / zero interest
     expect(impliedLoanRate({ amount: 100000, total: 100000, installments: 5 })).toBeNull()
     expect(impliedLoanRate({ amount: 0, total: 100000, installments: 5 })).toBeNull()
+
+    // Unsorted schedule with varying installments gives the same rate as sorted by date (T559)
+    const sorted = [
+      { date: '2026-02-10', amount: 40000 },
+      { date: '2026-03-10', amount: 70000 }
+    ]
+    const unsorted = [sorted[1]!, sorted[0]!]
+    expect(impliedLoanRate({ amount: 100000, schedule: unsorted })).toBe(impliedLoanRate({ amount: 100000, schedule: sorted }))
   })
 
   it('T510 – reorderConditionalRule zmienia kolejność reguł warunkowych', () => {

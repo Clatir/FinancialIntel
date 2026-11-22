@@ -24,15 +24,17 @@ import { previewBulk } from './bulkPreview'
 import { bulkApplies } from './bulkModel'
 import {
   buildMenu,
-  findLevel,
   hoverItem,
+  initialMouse,
   initialNav,
   monthGrid,
   navigate,
+  openLevels,
   placeAt,
   placeSub,
   realHover,
   whatOf,
+  withCategoryQuery,
   type MenuCommand,
   type MenuInput,
   type MenuKey,
@@ -48,17 +50,30 @@ import { applyBulk, bulkPlan, bulkTargets, categorizeTicked, financeTicked, prun
 
 // ------------------------------------------------------------------ the store: where the menu stands
 
-const useMenuAt = create<{ at: { x: number; y: number } | null }>(() => ({ at: null }))
+let pointerAt: { x: number; y: number } | null = null
+if (typeof window !== 'undefined') {
+  const rememberPointer = (e: MouseEvent) => {
+    pointerAt = { x: e.clientX, y: e.clientY }
+  }
+  window.addEventListener('mousemove', rememberPointer, { passive: true })
+  window.addEventListener('mousedown', rememberPointer, { capture: true, passive: true })
+}
+
+type MenuAt = { x: number; y: number; byKey?: boolean }
+
+const useMenuAt = create<{ at: MenuAt | null }>(() => ({ at: null }))
 
 export const closeOperationsMenu = (): void => useMenuAt.setState({ at: null })
 
 /**
- * The right button on a row: a row outside the ticked ones becomes the only one ticked (and the anchor of a range), then
- * the menu opens at the mouse.
+ * The right button (or the menu key, `byKey`) on a row: a row outside the ticked ones becomes the only one ticked (and
+ * the anchor of a range), then the menu opens at `(x, y)`.
  */
-export function openOperationsMenu(id: string, x: number, y: number): void {
+export function openOperationsMenu(id: string, x: number, y: number, opts?: { byKey?: boolean }): void {
   if (!useOperationsUi.getState().ticked[id]) useOperationsUi.setState({ ticked: { [id]: true }, tickAnchor: id })
-  useMenuAt.setState({ at: { x, y } })
+  const byKey = !!opts?.byKey
+  if (!byKey) pointerAt = { x, y }
+  useMenuAt.setState({ at: { x, y, ...(byKey ? { byKey: true } : {}) } })
 }
 
 // ------------------------------------------------------------------ the menu
@@ -76,7 +91,7 @@ export function OperationsMenu({ order }: { order: readonly string[] }) {
   return <MenuBody key={`${at.x}:${at.y}`} at={at} order={order} />
 }
 
-function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly string[] }) {
+function MenuBody({ at, order }: { at: MenuAt; order: readonly string[] }) {
   const ticked = useOperationsUi((s) => s.ticked)
   const transactions = useData((s) => s.records.transactions)
   const folderLocked = useFolderLocked()
@@ -117,7 +132,6 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       readOnly: folderLocked ? (lockedReason ?? 'Folder jest tylko do odczytu – zmiany nie są zapisywane.') : null,
       today: warsawNow().date,
       categories,
-      categoryQuery,
       accounts,
       members,
       tags,
@@ -125,8 +139,9 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
       goals: fleet?.goals ?? [],
       loans
     }
-  }, [transactions, ids, cats, categoryQuery, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason])
-  const root = useMemo(() => buildMenu(input), [input])
+  }, [transactions, ids, cats, accounts, members, tags, containers, loans, fleet, folderLocked, lockedReason])
+  const baseRoot = useMemo(() => buildMenu(input), [input])
+  const root = useMemo(() => (categoryQuery ? withCategoryQuery(baseRoot, input.categories, categoryQuery) : baseRoot), [baseRoot, input.categories, categoryQuery])
 
   // A switch of the menu has written (`afterSwitch`: the operations before it and the ones it touched): of these, the ones it
   // hid from the list are no longer ticked (D76) – once, when the list has followed the data. Nothing else prunes: not an edit
@@ -180,8 +195,9 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
   runRef.current = run
   const navRef = useRef(nav)
   navRef.current = nav
-  // Where the mouse last sat (starts at the menu's opening point): updated only after `realHover` checks a move.
-  const lastMouse = useRef<{ x: number; y: number } | null>({ x: at.x, y: at.y })
+  // Where the mouse last sat (starts at the click's opening point, or the last known pointer position when opened by
+  // keyboard): updated only after `realHover` checks a move.
+  const lastMouse = useRef<{ x: number; y: number } | null>(initialMouse(at, pointerAt))
   const rootRef = useRef(root)
   rootRef.current = root
 
@@ -245,7 +261,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
     target?.focus({ preventScroll: true })
   }, [nav])
 
-  const levels = [root, ...nav.path.map((_, i) => findLevel(root, nav.path.slice(0, i + 1)) ?? [])]
+  const levels = openLevels(root, nav.path)
   const render = (items: MenuNode[], depth: number): ReactNode =>
     items.map((node) => {
       if (node.type === 'sep') return <div key={node.id} className="my-1 border-t border-line" role="separator" />
@@ -281,8 +297,9 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
             node.type === 'leaf' && node.danger && 'text-down'
           )}
           // Only when the mouse itself moved (`realHover`): a list that shifts under a resting pointer enters its items at
-          // the same coordinates, and must not take the focus (nor the Enter) from the field typed in.
-          onMouseEnter={onPointer}
+          // the same coordinates, and must not take the focus (nor the Enter) from the field typed in. When opened by keyboard
+          // before any pointer move is known, an initial `mouseenter` from mounting under the cursor is ignored too.
+          onMouseEnter={at.byKey && !lastMouse.current ? undefined : onPointer}
           onMouseMove={onPointer}
           onClick={() => {
             if (node.type === 'sub') setNav((n) => hoverItem(root, n, depth, node.id))
@@ -304,8 +321,7 @@ function MenuBody({ at, order }: { at: { x: number; y: number }; order: readonly
 
   return createPortal(
     <div ref={box} data-operations-menu onContextMenu={(e) => e.preventDefault()}>
-      {levels.map((items, depth) => {
-        const parent = depth ? nav.path[depth - 1]! : null
+      {levels.map(({ parent, items }, depth) => {
         const wide = items.some((n) => n.type === 'calendar')
         return (
           <MenuBox
@@ -341,7 +357,7 @@ const tagLeaf = (tag: string): MenuLeaf => ({ type: 'leaf', id: 'tags-new', labe
 /** One box of the menu: at the mouse or beside its parent item, kept inside the window, scrolling when taller. */
 function MenuBox({ anchor, width, testId, children }: { anchor: { at: { x: number; y: number } } | { item: string }; width: number; testId: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [place, setPlace] = useState<Place | null>(null)
+  const [place, setPlace] = useState<Place | 'missing' | null>(null)
   // Measured from the layout before it is painted; again after every render (a switch can change what is inside).
   useLayoutEffect(() => {
     const el = ref.current
@@ -352,12 +368,16 @@ function MenuBox({ anchor, width, testId, children }: { anchor: { at: { x: numbe
     if ('at' in anchor) next = placeAt(anchor.at, size, win)
     else {
       const parent = document.querySelector(`[data-menu-item="${CSS.escape(anchor.item)}"]`)
-      if (!parent) return
+      if (!parent) {
+        setPlace((p) => (p === 'missing' ? p : 'missing'))
+        return
+      }
       const r = parent.getBoundingClientRect()
       next = placeSub({ left: r.left, top: r.top, width: r.width, height: r.height }, size, win)
     }
-    setPlace((p) => (p && p.left === next.left && p.top === next.top && p.maxHeight === next.maxHeight ? p : { left: next.left, top: next.top, maxHeight: next.maxHeight }))
+    setPlace((p) => (p && p !== 'missing' && p.left === next.left && p.top === next.top && p.maxHeight === next.maxHeight ? p : { left: next.left, top: next.top, maxHeight: next.maxHeight }))
   })
+  if (place === 'missing') return null
   return (
     <div
       ref={ref}

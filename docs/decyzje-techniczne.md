@@ -4025,3 +4025,9 @@ wynikami starego kodu na danych syntetycznych (wzorzec poza repozytorium), pomia
   „Cofnij” (także po „Zmień mimo to”), a gdy edycja reguły zastąpiła wcześniejsze czekające pytanie F12 tej samej
   operacji (`prevAsk`), „Cofnij” reguły je przywraca; `categorizeRest` pomija szkice (`!drafts[t.id]`) i korzysta z
   `useRecordList('transactions')`.
+- **T559** (1.21.2, W2) Menu PPM (`OperationsMenu.tsx`, `operationsMenuModel.ts`): otwarcie klawiszem (`byKey`,
+  `initialMouse`) porównuje `realHover` z ostatnią znaną pozycją kursora zamiast z narożnikiem wiersza (a bez wcześniejszego
+  ruchu pomija początkowe `mouseenter` montażu pod kursorem); `withCategoryQuery` podmienia przy szukaniu wyłącznie
+  podmenu kategorii bez przebudowy całego drzewa; `openLevels` i `MenuBox` odrzucają podmenu bez rodzica w drzewie albo
+  DOM; `FinancerSelect` w zwrocie towaru mówi „prezent dla: X (zwrot do osłon)” (`financerOptionLabel`); `impliedLoanRate`
+  sortuje harmonogram z datami chronologicznie.

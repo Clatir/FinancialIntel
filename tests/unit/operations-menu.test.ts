@@ -4,14 +4,17 @@ import {
   buildMenu,
   findLevel,
   hoverItem,
+  initialMouse,
   initialNav,
   monthGrid,
   navigate,
+  openLevels,
   placeAt,
   placeSub,
   realHover,
   skipReason,
   whatOf,
+  withCategoryQuery,
   type MenuInput,
   type MenuLeaf,
   type MenuNode,
@@ -467,5 +470,25 @@ describe('realHover: wejście myszy w pozycję', () => {
 
   it('ta sama pozycja – lista przesunęła się pod nieruchomym kursorem, to nie najechanie', () => {
     expect(realHover(last, 100, 50)).toBe(false)
+  })
+
+  it('W2 (T559): otwarcie klawiszem pod nieruchomym kursorem bierze ostatnią pozycję kursora, nie narożnik wiersza', () => {
+    expect(initialMouse({ x: 180, y: 220 }, { x: 400, y: 310 })).toEqual({ x: 180, y: 220 })
+    const start = initialMouse({ x: 180, y: 220, byKey: true }, { x: 400, y: 310 })
+    expect(start).toEqual({ x: 400, y: 310 })
+    expect(realHover(start, 400, 310)).toBe(false)
+    expect(realHover(start, 405, 310)).toBe(true)
+    expect(initialMouse({ x: 180, y: 220, byKey: true }, null)).toBeNull()
+  })
+
+  it('W2 (T559): withCategoryQuery podmienia tylko podmenu kategorii, reszta węzłów zachowuje referencje; openLevels ucina brakującego rodzica', () => {
+    const inp = input([tx()])
+    const base = buildMenu(inp)
+    const filtered = withCategoryQuery(base, inp.categories, 'zakup')
+    expect(filtered[0]).not.toBe(base[0])
+    for (let i = 1; i < base.length; i++) expect(filtered[i]).toBe(base[i])
+    expect(filtered[0]?.type === 'sub' ? filtered[0].items.map((n) => n.id) : []).toEqual(['category-search', 'category-sub1'])
+    expect(openLevels(base, ['kind', 'kind-transfer']).map((l) => l.parent)).toEqual([null, 'kind', 'kind-transfer'])
+    expect(openLevels(base, ['nie-ma', 'kind-transfer']).map((l) => l.parent)).toEqual([null])
   })
 })
