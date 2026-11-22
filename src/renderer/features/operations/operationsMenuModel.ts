@@ -370,17 +370,12 @@ export function navigate(root: MenuNode[], nav: MenuNav, key: MenuKey): { nav: M
   }
 }
 
-/** How long a mousemove counts as the same move as the mouseenter beside it (ms). */
-export const SAME_MOVE_MS = 50
-
 /**
- * Whether the mouse entering an item is the mouse's own move. The order of the move's events differs between systems
- * (the mousemove may come before the mouseenter of the same move), so a fresh mousemove (`last.t` within `SAME_MOVE_MS`
- * of the entry) is the same move whatever the order. A list that shifts under a resting pointer gives an entry at the
- * same position with no fresh move – no hover (an item coming under the pointer while one types in the field).
+ * Whether an event on an item is the mouse's own move (its position changed from `last`), not a list shifting under a
+ * resting pointer while one types in the search field.
  */
-export function realHover(last: { x: number; y: number; t: number } | null, x: number, y: number, t: number): boolean {
-  return !last || last.x !== x || last.y !== y || Math.abs(t - last.t) <= SAME_MOVE_MS
+export function realHover(last: { x: number; y: number } | null, x: number, y: number): boolean {
+  return !last || last.x !== x || last.y !== y
 }
 
 // ------------------------------------------------------------------ place on the screen

@@ -457,24 +457,15 @@ describe('miejsce na ekranie', () => {
 })
 
 describe('realHover: wejście myszy w pozycję', () => {
-  const last = { x: 100, y: 50, t: 1000 }
+  const last = { x: 100, y: 50 }
 
   it('inna pozycja niż ostatnio zapisana albo brak zapisu – najechanie', () => {
-    expect(realHover(last, 120, 50, 5000)).toBe(true)
-    expect(realHover(last, 100, 51, 5000)).toBe(true)
-    expect(realHover(null, 100, 50, 5000)).toBe(true)
+    expect(realHover(last, 120, 50)).toBe(true)
+    expect(realHover(last, 100, 51)).toBe(true)
+    expect(realHover(null, 100, 50)).toBe(true)
   })
 
-  it('ruch przed wejściem (ta sama pozycja, świeży czas – kolejność zdarzeń zależy od systemu) – najechanie', () => {
-    expect(realHover(last, 100, 50, 1000)).toBe(true)
-    expect(realHover(last, 100, 50, 1050)).toBe(true)
-    expect(realHover({ ...last, t: 1030 }, 100, 50, 1000)).toBe(true)
-  })
-
-  it('ta sama pozycja, stary czas – lista przesunęła się pod nieruchomym kursorem, to nie najechanie', () => {
-    expect(realHover(last, 100, 50, 1051)).toBe(false)
-    expect(realHover(last, 100, 50, 9000)).toBe(false)
-    // The menu's opening position is no move: it never counts as fresh.
-    expect(realHover({ x: 100, y: 50, t: -Infinity }, 100, 50, 0)).toBe(false)
+  it('ta sama pozycja – lista przesunęła się pod nieruchomym kursorem, to nie najechanie', () => {
+    expect(realHover(last, 100, 50)).toBe(false)
   })
 })

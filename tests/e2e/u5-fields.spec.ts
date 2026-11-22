@@ -120,6 +120,8 @@ test('menu pod prawym przyciskiem: najechana kategoria + Enter zapisuje najechan
     await expect(page.getByTestId('operations-menu-category-search')).toBeFocused()
     const leaf = await page.getByTestId(`operations-menu-category-${MEDS}`).boundingBox()
     await page.mouse.move(leaf!.x + 20, leaf!.y + leaf!.height / 2)
+    // The hover moves the focus to the item (a render later): Enter only then, as a hand would press it.
+    await expect(page.getByTestId(`operations-menu-category-${MEDS}`)).toBeFocused()
     await page.keyboard.press('Enter')
     await expect(page.getByTestId('operations-menu')).toHaveCount(0)
     await expect.poll(async () => (await records(dir, 'transactions'))[0]?.categoryId).toBe(MEDS)
